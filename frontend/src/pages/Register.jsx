@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 
 export default function Register() {
   const { register } = useAuthStore();
   const navigate = useNavigate();
+  const location = useLocation();
   const [form, setForm] = useState({ name: '', email: '', password: '', mobile: '', address: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -19,7 +20,7 @@ export default function Register() {
     setLoading(true);
     try {
       await register(form);
-      navigate('/passenger');
+      navigate(location.state?.from || '/passenger');
     } catch (err) {
       setError(err.response?.data?.error || 'Registration failed');
     } finally {
@@ -40,7 +41,7 @@ export default function Register() {
         {error && <p className="error-text">{error}</p>}
         <button className="btn" disabled={loading}>{loading ? 'Creating account...' : 'Sign up'}</button>
       </form>
-      <p className="muted">Already have an account? <Link to="/login">Log in</Link></p>
+      <p className="muted">Already have an account? <Link to="/login" state={location.state}>Log in</Link></p>
     </div>
   );
 }

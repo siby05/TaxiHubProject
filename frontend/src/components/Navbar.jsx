@@ -23,6 +23,7 @@ export default function Navbar() {
               <>
                 <Link to="/driver">Trips</Link>
                 <Link to="/driver/schedule">Schedule</Link>
+                <Link to="/driver/qr-code">My QR code</Link>
                 <Link to="/driver/complaints">Complaints</Link>
               </>
             )}

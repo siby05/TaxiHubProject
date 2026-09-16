@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../../api/client';
 
@@ -9,6 +9,7 @@ export default function AdminDashboard() {
   const [form, setForm] = useState({ name: '', email: '', mobile: '', licenseNumber: '', vehicleType: 'Economy', vehicleNumber: '', ratePerKm: 1.8 });
   const [createdInfo, setCreatedInfo] = useState(null);
   const [error, setError] = useState('');
+  const [qrFor, setQrFor] = useState(null);
 
   function load() {
     client.get('/admin/stats').then((r) => setStats(r.data));
@@ -39,6 +40,12 @@ export default function AdminDashboard() {
   async function reject(id) { await client.put(`/admin/drivers/${id}/reject`); load(); }
   async function deactivate(id) { await client.put(`/admin/drivers/${id}/deactivate`); load(); }
 
+  async function viewQr(id) {
+    if (qrFor?.id === id) { setQrFor(null); return; }
+    const { data } = await client.get(`/admin/drivers/${id}/qr-code`);
+    setQrFor({ id, ...data });
+  }
+
   return (
     <div className="container">
       <h1>Admin dashboard</h1>
@@ -67,19 +74,30 @@ export default function AdminDashboard() {
             <thead><tr><th>Driver</th><th>Vehicle</th><th>Rate/km</th><th>Status</th><th>Actions</th></tr></thead>
             <tbody>
               {drivers.map((d) => (
-                <tr key={d._id}>
-                  <td>{d.userId?.name}<div className="muted">{d.userId?.email}</div></td>
-                  <td>{d.vehicleType} · {d.vehicleNumber}</td>
-                  <td>${d.ratePerKm}</td>
-                  <td><span className={`badge ${d.status}`}>{d.status}</span></td>
-                  <td style={{ display: 'flex', gap: 6 }}>
-                    {d.status === 'pending' && <>
-                      <button className="btn" onClick={() => approve(d._id)}>Approve</button>
-                      <button className="btn danger" onClick={() => reject(d._id)}>Reject</button>
-                    </>}
-                    {d.status === 'approved' && <button className="btn secondary" onClick={() => deactivate(d._id)}>Deactivate</button>}
-                  </td>
-                </tr>
+                <Fragment key={d._id}>
+                  <tr>
+                    <td>{d.userId?.name}<div className="muted">{d.userId?.email}</div></td>
+                    <td>{d.vehicleType} · {d.vehicleNumber}</td>
+                    <td>${d.ratePerKm}</td>
+                    <td><span className={`badge ${d.status}`}>{d.status}</span></td>
+                    <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {d.status === 'pending' && <>
+                        <button className="btn" onClick={() => approve(d._id)}>Approve</button>
+                        <button className="btn danger" onClick={() => reject(d._id)}>Reject</button>
+                      </>}
+                      {d.status === 'approved' && <button className="btn secondary" onClick={() => deactivate(d._id)}>Deactivate</button>}
+                      <button className="btn secondary" onClick={() => viewQr(d._id)}>{qrFor?.id === d._id ? 'Hide QR' : 'View QR'}</button>
+                    </td>
+                  </tr>
+                  {qrFor?.id === d._id && (
+                    <tr>
+                      <td colSpan={5} style={{ textAlign: 'center', padding: 16 }}>
+                        <img src={qrFor.qrCodeImage} alt="Driver QR code" style={{ width: 180, height: 180 }} />
+                        <div className="muted" style={{ wordBreak: 'break-all' }}>{qrFor.qrCodeUrl}</div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </table>

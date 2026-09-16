@@ -12,7 +12,25 @@ function emitToUser(req, userId, event, payload) {
   if (io) io.to(String(userId)).emit(event, payload);
 }
 
-// POST /api/booking - passenger requests a ride
+// GET /api/booking/driver-info/:id - basic public-facing details for the QR
+// scan-to-book flow (passenger sees who they're booking before confirming).
+router.get('/driver-info/:id', auth, roleMiddleware(['passenger']), async (req, res) => {
+  const driver = await Driver.findById(req.params.id).populate('userId', 'name');
+  if (!driver || driver.status !== 'approved') return res.status(404).json({ error: 'Driver not available for booking' });
+  res.json({
+    _id: driver._id,
+    name: driver.userId?.name,
+    vehicleType: driver.vehicleType,
+    vehicleNumber: driver.vehicleNumber,
+    ratePerKm: driver.ratePerKm,
+    rating: driver.rating,
+  });
+});
+
+// POST /api/booking - passenger requests a ride (omit driverId to auto-match
+// any available driver; pass driverId to hail a specific driver, e.g. via
+// their QR code - that request goes through even if they haven't toggled
+// "available", same as flagging a cab in person).
 router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
   try {
     const { pickupAddress, pickupLat, pickupLng, dropAddress, dropLat, dropLng, driverId } = req.body;
@@ -23,6 +41,7 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
     let driver = null;
     if (driverId) {
       driver = await Driver.findById(driverId);
+      if (driver && driver.status !== 'approved') driver = null;
     } else {
       const available = await Driver.find({ isAvailable: true, status: 'approved' });
       driver = available[0] || null;

@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 
 export default function Login() {
   const { login } = useAuthStore();
   const navigate = useNavigate();
+  const location = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -17,7 +18,7 @@ export default function Login() {
     try {
       const user = await login(email, password);
       const home = user.role === 'admin' ? '/admin' : user.role === 'driver' ? '/driver' : '/passenger';
-      navigate(home);
+      navigate(location.state?.from || home);
     } catch (err) {
       setError(err.response?.data?.error || 'Login failed');
     } finally {
@@ -43,7 +44,7 @@ export default function Login() {
         {error && <p className="error-text">{error}</p>}
         <button className="btn" disabled={loading}>{loading ? 'Logging in...' : 'Log in'}</button>
       </form>
-      <p className="muted">No account? <Link to="/register">Sign up as a passenger</Link></p>
+      <p className="muted">No account? <Link to="/register" state={location.state}>Sign up as a passenger</Link></p>
     </div>
   );
 }

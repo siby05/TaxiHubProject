@@ -4,6 +4,7 @@ const User = require('../models/User');
 const Driver = require('../models/Driver');
 const Booking = require('../models/Booking');
 const { auth, roleMiddleware } = require('../middleware/auth');
+const { ensureDriverQrCode } = require('../utils/qrcode');
 
 async function getDriverProfile(userId) {
   return Driver.findOne({ userId }).populate('userId', 'name email mobile');
@@ -48,6 +49,14 @@ router.put('/schedule', auth, roleMiddleware(['driver']), async (req, res) => {
   if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
   const updated = await Driver.findByIdAndUpdate(driver._id, { availabilitySchedule: schedule });
   res.json(updated);
+});
+
+// GET /api/driver/qr-code - QR that deep-links passengers to book this driver directly
+router.get('/qr-code', auth, roleMiddleware(['driver']), async (req, res) => {
+  const driver = await Driver.findOne({ userId: req.user.id });
+  if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
+  const updated = await ensureDriverQrCode(driver);
+  res.json({ qrCodeImage: updated.qrCodeImage, qrCodeUrl: updated.qrCodeUrl });
 });
 
 // PUT /api/driver/rate - custom rate per km

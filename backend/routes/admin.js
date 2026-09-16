@@ -8,6 +8,7 @@ const Booking = require('../models/Booking');
 const Complaint = require('../models/Complaint');
 const { auth, roleMiddleware } = require('../middleware/auth');
 const { emailService } = require('../services/emailService');
+const { ensureDriverQrCode } = require('../utils/qrcode');
 
 router.use(auth, roleMiddleware(['admin']));
 
@@ -129,6 +130,14 @@ router.put('/drivers/:id/rate', async (req, res) => {
   const { ratePerKm } = req.body;
   const driver = await Driver.findByIdAndUpdate(req.params.id, { ratePerKm });
   res.json(driver);
+});
+
+// GET /api/admin/drivers/:id/qr-code - reprint a driver's QR (e.g. lost sticker)
+router.get('/drivers/:id/qr-code', async (req, res) => {
+  const driver = await Driver.findById(req.params.id);
+  if (!driver) return res.status(404).json({ error: 'Driver not found' });
+  const updated = await ensureDriverQrCode(driver);
+  res.json({ qrCodeImage: updated.qrCodeImage, qrCodeUrl: updated.qrCodeUrl });
 });
 
 // GET /api/admin/bookings

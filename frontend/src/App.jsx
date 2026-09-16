@@ -6,9 +6,11 @@ import Register from './pages/Register';
 import PassengerDashboard from './pages/passenger/PassengerDashboard';
 import LodgeComplaint from './pages/passenger/LodgeComplaint';
 import MyComplaints from './pages/passenger/MyComplaints';
+import BookDriver from './pages/passenger/BookDriver';
 import DriverDashboard from './pages/driver/DriverDashboard';
 import DriverComplaints from './pages/driver/DriverComplaints';
 import DriverSchedule from './pages/driver/DriverSchedule';
+import DriverQrCode from './pages/driver/DriverQrCode';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminComplaints from './pages/admin/AdminComplaints';
 import { useAuthStore } from './store/authStore';
@@ -28,9 +30,11 @@ export default function App() {
         <Route path="/passenger" element={<ProtectedRoute roles={['passenger']}><PassengerDashboard /></ProtectedRoute>} />
         <Route path="/passenger/complaints" element={<ProtectedRoute roles={['passenger']}><MyComplaints /></ProtectedRoute>} />
         <Route path="/passenger/complaints/new" element={<ProtectedRoute roles={['passenger']}><LodgeComplaint /></ProtectedRoute>} />
+        <Route path="/book/:driverId" element={<BookDriver />} />
 
         <Route path="/driver" element={<ProtectedRoute roles={['driver']}><DriverDashboard /></ProtectedRoute>} />
         <Route path="/driver/schedule" element={<ProtectedRoute roles={['driver']}><DriverSchedule /></ProtectedRoute>} />
+        <Route path="/driver/qr-code" element={<ProtectedRoute roles={['driver']}><DriverQrCode /></ProtectedRoute>} />
         <Route path="/driver/complaints" element={<ProtectedRoute roles={['driver']}><DriverComplaints /></ProtectedRoute>} />
 
         <Route path="/admin" element={<ProtectedRoute roles={['admin']}><AdminDashboard /></ProtectedRoute>} />
