@@ -12,6 +12,14 @@ function emitToUser(req, userId, event, payload) {
   if (io) io.to(String(userId)).emit(event, payload);
 }
 
+// GET /api/booking/driver-preview/:id - unauthenticated, minimal driver info
+// for the QR landing page shown before a scanning passenger has signed in.
+router.get('/driver-preview/:id', async (req, res) => {
+  const driver = await Driver.findById(req.params.id).populate('userId', 'name');
+  if (!driver || driver.status !== 'approved') return res.status(404).json({ error: 'Driver not available' });
+  res.json({ name: driver.userId?.name, vehicleType: driver.vehicleType, rating: driver.rating });
+});
+
 // GET /api/booking/driver-info/:id - basic public-facing details for the QR
 // scan-to-book flow (passenger sees who they're booking before confirming).
 router.get('/driver-info/:id', auth, roleMiddleware(['passenger']), async (req, res) => {
@@ -27,6 +35,35 @@ router.get('/driver-info/:id', auth, roleMiddleware(['passenger']), async (req, 
   });
 });
 
+// POST /api/booking/quote - preview distance/fare before confirming, so the
+// UI can show "Estimated fare: $X - Confirm booking?" without creating a
+// booking yet. Uses the same fare math as the real POST / below.
+router.post('/quote', auth, roleMiddleware(['passenger']), async (req, res) => {
+  try {
+    const { pickupLat, pickupLng, dropLat, dropLng, driverId } = req.body;
+    if (pickupLat == null || pickupLng == null || dropLat == null || dropLng == null) {
+      return res.status(400).json({ error: 'pickup and drop coordinates are required' });
+    }
+
+    let ratePerKm;
+    if (driverId) {
+      const driver = await Driver.findById(driverId);
+      if (!driver || driver.status !== 'approved') return res.status(404).json({ error: 'Driver not available' });
+      ratePerKm = driver.ratePerKm;
+    } else {
+      const available = await Driver.find({ isAvailable: true, status: 'approved' });
+      if (!available[0]) return res.status(404).json({ error: 'No available drivers right now' });
+      ratePerKm = available[0].ratePerKm;
+    }
+
+    const distanceKm = Math.round(haversineKm(pickupLat, pickupLng, dropLat, dropLng) * 100) / 100;
+    const estimatedFare = calculateFare(distanceKm, ratePerKm);
+    res.json({ distanceKm, estimatedFare });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/booking - passenger requests a ride (omit driverId to auto-match
 // any available driver; pass driverId to hail a specific driver, e.g. via
 // their QR code - that request goes through even if they haven't toggled
@@ -36,6 +73,11 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
     const { pickupAddress, pickupLat, pickupLng, dropAddress, dropLat, dropLng, driverId } = req.body;
     if (!pickupAddress || !dropAddress || pickupLat == null || dropLat == null) {
       return res.status(400).json({ error: 'pickupAddress, dropAddress and lat/lng for both are required' });
+    }
+
+    const requestingPassenger = await User.findById(req.user.id);
+    if (requestingPassenger?.bookingBlocked) {
+      return res.status(403).json({ error: 'Your account is restricted from making new bookings. Contact support.' });
     }
 
     let driver = null;

@@ -24,6 +24,7 @@ module.exports = async function seed() {
     vehicleType: 'Comfort',
     vehicleNumber: 'ABC123',
     ratePerKm: 1.8,
+    pendingRatePerKm: null,
     status: 'approved',
     isAvailable: true,
     rating: 4.8,

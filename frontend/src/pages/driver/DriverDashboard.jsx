@@ -9,6 +9,9 @@ export default function DriverDashboard() {
   const [earnings, setEarnings] = useState(null);
   const [fareInputs, setFareInputs] = useState({});
   const [alert, setAlert] = useState('');
+  const [availError, setAvailError] = useState('');
+  const [newRate, setNewRate] = useState('');
+  const [rateMsg, setRateMsg] = useState('');
 
   function load() {
     fetchDriverBookings();
@@ -26,8 +29,26 @@ export default function DriverDashboard() {
   });
 
   async function toggleAvailable() {
-    const { data } = await client.put('/driver/availability', { isAvailable: !profile.isAvailable });
-    setProfile(data);
+    setAvailError('');
+    try {
+      const { data } = await client.put('/driver/availability', { isAvailable: !profile.isAvailable });
+      setProfile(data);
+    } catch (err) {
+      setAvailError(err.response?.data?.error || 'Could not update availability');
+    }
+  }
+
+  async function requestRate(e) {
+    e.preventDefault();
+    setRateMsg('');
+    try {
+      const { data } = await client.put('/driver/rate', { ratePerKm: Number(newRate) });
+      setProfile(data.driver);
+      setRateMsg(data.message);
+      setNewRate('');
+    } catch (err) {
+      setRateMsg(err.response?.data?.error || 'Could not submit rate change');
+    }
   }
 
   async function accept(id) {
@@ -48,15 +69,28 @@ export default function DriverDashboard() {
 
       {profile && (
         <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
             <div>
               <strong>{profile.vehicleType}</strong> · {profile.vehicleNumber} · ${profile.ratePerKm}/km
               <div className="muted">Status: <span className={`badge ${profile.status}`}>{profile.status}</span></div>
+              {profile.pendingRatePerKm != null && (
+                <div className="muted">Rate change to ${profile.pendingRatePerKm}/km pending admin approval</div>
+              )}
             </div>
             <button className={`btn ${profile.isAvailable ? 'secondary' : ''}`} onClick={toggleAvailable} disabled={profile.status !== 'approved'}>
               {profile.isAvailable ? 'Go offline' : 'Go online'}
             </button>
           </div>
+          {availError && <p className="error-text" style={{ marginTop: 10 }}>{availError}</p>}
+
+          <form onSubmit={requestRate} style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginTop: 14, flexWrap: 'wrap' }}>
+            <div style={{ maxWidth: 160 }}>
+              <label>Request new rate ($/km)</label>
+              <input type="number" step="0.1" min="0.1" value={newRate} onChange={(e) => setNewRate(e.target.value)} required />
+            </div>
+            <button className="btn secondary">Submit for approval</button>
+          </form>
+          {rateMsg && <p className="muted" style={{ marginTop: 6 }}>{rateMsg}</p>}
         </div>
       )}
 

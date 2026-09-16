@@ -10,10 +10,18 @@ export default function AdminDashboard() {
   const [createdInfo, setCreatedInfo] = useState(null);
   const [error, setError] = useState('');
   const [qrFor, setQrFor] = useState(null);
+  const [editFor, setEditFor] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const [editError, setEditError] = useState('');
+  const [settings, setSettings] = useState(null);
+  const [settingsMsg, setSettingsMsg] = useState('');
+  const [passengers, setPassengers] = useState([]);
 
   function load() {
     client.get('/admin/stats').then((r) => setStats(r.data));
     client.get('/admin/drivers').then((r) => setDrivers(r.data));
+    client.get('/admin/settings').then((r) => setSettings(r.data));
+    client.get('/admin/passengers').then((r) => setPassengers(r.data));
   }
 
   useEffect(() => { load(); }, []);
@@ -39,11 +47,51 @@ export default function AdminDashboard() {
   async function approve(id) { await client.put(`/admin/drivers/${id}/approve`); load(); }
   async function reject(id) { await client.put(`/admin/drivers/${id}/reject`); load(); }
   async function deactivate(id) { await client.put(`/admin/drivers/${id}/deactivate`); load(); }
+  async function reactivate(id) { await client.put(`/admin/drivers/${id}/reactivate`); load(); }
+  async function approveRate(id) { await client.put(`/admin/drivers/${id}/rate/approve`); load(); }
+  async function rejectRate(id) { await client.put(`/admin/drivers/${id}/rate/reject`); load(); }
+
+  async function toggleBookingBlock(p) {
+    await client.put(`/admin/users/${p._id}/${p.bookingBlocked ? 'unblock-booking' : 'block-booking'}`);
+    load();
+  }
 
   async function viewQr(id) {
+    setEditFor(null);
     if (qrFor?.id === id) { setQrFor(null); return; }
     const { data } = await client.get(`/admin/drivers/${id}/qr-code`);
     setQrFor({ id, ...data });
+  }
+
+  function startEdit(d) {
+    setQrFor(null);
+    setEditError('');
+    if (editFor === d._id) { setEditFor(null); return; }
+    setEditFor(d._id);
+    setEditForm({ name: d.userId?.name || '', mobile: d.userId?.mobile || '', licenseNumber: d.licenseNumber, vehicleType: d.vehicleType, vehicleNumber: d.vehicleNumber });
+  }
+
+  async function saveEdit(id) {
+    setEditError('');
+    try {
+      await client.put(`/admin/drivers/${id}`, editForm);
+      setEditFor(null);
+      load();
+    } catch (err) {
+      setEditError(err.response?.data?.error || 'Could not save changes');
+    }
+  }
+
+  async function saveSettings(e) {
+    e.preventDefault();
+    setSettingsMsg('');
+    try {
+      const { data } = await client.put('/admin/settings', settings);
+      setSettings(data);
+      setSettingsMsg('Saved.');
+    } catch (err) {
+      setSettingsMsg(err.response?.data?.error || 'Could not save settings');
+    }
   }
 
   return (
@@ -66,6 +114,8 @@ export default function AdminDashboard() {
       <div className="tabs">
         <button className={tab === 'drivers' ? 'active' : ''} onClick={() => setTab('drivers')}>Drivers</button>
         <button className={tab === 'add' ? 'active' : ''} onClick={() => setTab('add')}>Add driver</button>
+        <button className={tab === 'passengers' ? 'active' : ''} onClick={() => setTab('passengers')}>Passengers</button>
+        <button className={tab === 'settings' ? 'active' : ''} onClick={() => setTab('settings')}>Platform fee settings</button>
       </div>
 
       {tab === 'drivers' && (
@@ -77,8 +127,19 @@ export default function AdminDashboard() {
                 <Fragment key={d._id}>
                   <tr>
                     <td>{d.userId?.name}<div className="muted">{d.userId?.email}</div></td>
-                    <td>{d.vehicleType} · {d.vehicleNumber}</td>
-                    <td>${d.ratePerKm}</td>
+                    <td>{d.vehicleType} · {d.vehicleNumber}<div className="muted">Lic: {d.licenseNumber}</div></td>
+                    <td>
+                      ${d.ratePerKm}
+                      {d.pendingRatePerKm != null && (
+                        <div className="muted">
+                          → ${d.pendingRatePerKm} requested
+                          <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+                            <button className="btn" style={{ padding: '4px 8px', fontSize: '0.8rem' }} onClick={() => approveRate(d._id)}>Approve</button>
+                            <button className="btn danger" style={{ padding: '4px 8px', fontSize: '0.8rem' }} onClick={() => rejectRate(d._id)}>Reject</button>
+                          </div>
+                        </div>
+                      )}
+                    </td>
                     <td><span className={`badge ${d.status}`}>{d.status}</span></td>
                     <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       {d.status === 'pending' && <>
@@ -86,7 +147,10 @@ export default function AdminDashboard() {
                         <button className="btn danger" onClick={() => reject(d._id)}>Reject</button>
                       </>}
                       {d.status === 'approved' && <button className="btn secondary" onClick={() => deactivate(d._id)}>Deactivate</button>}
+                      {d.status === 'rejected' && <button className="btn" onClick={() => reactivate(d._id)}>Reactivate</button>}
+                      <button className="btn secondary" onClick={() => startEdit(d)}>{editFor === d._id ? 'Cancel' : 'Edit'}</button>
                       <button className="btn secondary" onClick={() => viewQr(d._id)}>{qrFor?.id === d._id ? 'Hide QR' : 'View QR'}</button>
+                      <Link className="btn secondary" to={`/admin/drivers/${d._id}/report`}>Report</Link>
                     </td>
                   </tr>
                   {qrFor?.id === d._id && (
@@ -94,6 +158,26 @@ export default function AdminDashboard() {
                       <td colSpan={5} style={{ textAlign: 'center', padding: 16 }}>
                         <img src={qrFor.qrCodeImage} alt="Driver QR code" style={{ width: 180, height: 180 }} />
                         <div className="muted" style={{ wordBreak: 'break-all' }}>{qrFor.qrCodeUrl}</div>
+                      </td>
+                    </tr>
+                  )}
+                  {editFor === d._id && (
+                    <tr>
+                      <td colSpan={5} style={{ padding: 16 }}>
+                        <div className="grid cols-2">
+                          <div><label>Name</label><input value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} /></div>
+                          <div><label>Mobile</label><input value={editForm.mobile} onChange={(e) => setEditForm((f) => ({ ...f, mobile: e.target.value }))} /></div>
+                          <div><label>License number</label><input value={editForm.licenseNumber} onChange={(e) => setEditForm((f) => ({ ...f, licenseNumber: e.target.value }))} /></div>
+                          <div>
+                            <label>Vehicle type</label>
+                            <select value={editForm.vehicleType} onChange={(e) => setEditForm((f) => ({ ...f, vehicleType: e.target.value }))}>
+                              <option>Economy</option><option>Comfort</option><option>Premium</option>
+                            </select>
+                          </div>
+                          <div><label>Vehicle number</label><input value={editForm.vehicleNumber} onChange={(e) => setEditForm((f) => ({ ...f, vehicleNumber: e.target.value }))} /></div>
+                        </div>
+                        {editError && <p className="error-text">{editError}</p>}
+                        <button className="btn" style={{ marginTop: 8 }} onClick={() => saveEdit(d._id)}>Save changes</button>
                       </td>
                     </tr>
                   )}
@@ -129,6 +213,55 @@ export default function AdminDashboard() {
               <p className="muted">{createdInfo.note}</p>
             </div>
           )}
+        </div>
+      )}
+
+      {tab === 'passengers' && (
+        <div className="grid cols-2">
+          {passengers.map((p) => (
+            <div className="card" key={p._id}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <strong>{p.name}</strong>
+                  <div className="muted">{p.email}</div>
+                  {p.mobile && <div className="muted">{p.mobile}</div>}
+                </div>
+                {p.bookingBlocked && <span className="badge cancelled">booking blocked</span>}
+              </div>
+              <div className="muted" style={{ marginTop: 8 }}>{p.totalBookings} bookings · {p.completedTrips} completed</div>
+              <button
+                className={`btn ${p.bookingBlocked ? '' : 'danger'}`}
+                style={{ marginTop: 10 }}
+                onClick={() => toggleBookingBlock(p)}
+              >
+                {p.bookingBlocked ? 'Unblock booking' : 'Block from booking'}
+              </button>
+            </div>
+          ))}
+          {passengers.length === 0 && <p className="muted">No passengers yet.</p>}
+        </div>
+      )}
+
+      {tab === 'settings' && settings && (
+        <div className="card" style={{ maxWidth: 480 }}>
+          <h3>Booking fee / platform access fee</h3>
+          <p className="muted">Choose how drivers pay to use the platform: a % commission per completed trip, or a fixed weekly access fee.</p>
+          <form onSubmit={saveSettings}>
+            <div>
+              <label>Model</label>
+              <select value={settings.commissionType} onChange={(e) => setSettings((s) => ({ ...s, commissionType: e.target.value }))}>
+                <option value="per-trip-percent">% commission per trip (tallied weekly)</option>
+                <option value="weekly-flat">Fixed weekly access fee</option>
+              </select>
+            </div>
+            {settings.commissionType === 'per-trip-percent' ? (
+              <div><label>Commission (%)</label><input type="number" step="0.5" min="0" max="100" value={settings.commissionPercent} onChange={(e) => setSettings((s) => ({ ...s, commissionPercent: e.target.value }))} /></div>
+            ) : (
+              <div><label>Weekly fee ($)</label><input type="number" step="1" min="0" value={settings.weeklyFlatFee} onChange={(e) => setSettings((s) => ({ ...s, weeklyFlatFee: e.target.value }))} /></div>
+            )}
+            {settingsMsg && <p className="muted">{settingsMsg}</p>}
+            <button className="btn">Save</button>
+          </form>
         </div>
       )}
     </div>

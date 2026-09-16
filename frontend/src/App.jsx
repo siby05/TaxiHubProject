@@ -11,8 +11,10 @@ import DriverDashboard from './pages/driver/DriverDashboard';
 import DriverComplaints from './pages/driver/DriverComplaints';
 import DriverSchedule from './pages/driver/DriverSchedule';
 import DriverQrCode from './pages/driver/DriverQrCode';
+import DriverBilling from './pages/driver/DriverBilling';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminComplaints from './pages/admin/AdminComplaints';
+import AdminDriverReport from './pages/admin/AdminDriverReport';
 import { useAuthStore } from './store/authStore';
 
 export default function App() {
@@ -35,10 +37,12 @@ export default function App() {
         <Route path="/driver" element={<ProtectedRoute roles={['driver']}><DriverDashboard /></ProtectedRoute>} />
         <Route path="/driver/schedule" element={<ProtectedRoute roles={['driver']}><DriverSchedule /></ProtectedRoute>} />
         <Route path="/driver/qr-code" element={<ProtectedRoute roles={['driver']}><DriverQrCode /></ProtectedRoute>} />
+        <Route path="/driver/billing" element={<ProtectedRoute roles={['driver']}><DriverBilling /></ProtectedRoute>} />
         <Route path="/driver/complaints" element={<ProtectedRoute roles={['driver']}><DriverComplaints /></ProtectedRoute>} />
 
         <Route path="/admin" element={<ProtectedRoute roles={['admin']}><AdminDashboard /></ProtectedRoute>} />
         <Route path="/admin/complaints" element={<ProtectedRoute roles={['admin']}><AdminComplaints /></ProtectedRoute>} />
+        <Route path="/admin/drivers/:driverId/report" element={<ProtectedRoute roles={['admin']}><AdminDriverReport /></ProtectedRoute>} />
 
         <Route path="*" element={<Navigate to={home} replace />} />
       </Routes>

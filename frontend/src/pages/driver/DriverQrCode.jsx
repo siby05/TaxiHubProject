@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react';
 import client from '../../api/client';
+import PrintableQrCard from '../../components/PrintableQrCard';
 
 export default function DriverQrCode() {
   const [qr, setQr] = useState(null);
+  const [profile, setProfile] = useState(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
     client.get('/driver/qr-code').then((r) => setQr(r.data)).catch((err) => setError(err.response?.data?.error || 'Could not load QR code'));
+    client.get('/driver/profile').then((r) => setProfile(r.data));
   }, []);
 
   return (
@@ -23,11 +26,19 @@ export default function DriverQrCode() {
           <>
             <img src={qr.qrCodeImage} alt="Driver booking QR code" style={{ width: 260, height: 260, margin: '12px auto' }} />
             <p className="muted" style={{ wordBreak: 'break-all' }}>{qr.qrCodeUrl}</p>
-            <a className="btn" href={qr.qrCodeImage} target="_blank" rel="noreferrer">Open full size to print</a>
+            <button className="btn" onClick={() => window.print()}>Print A6 card</button>
           </>
         )}
         {!qr && !error && <p className="muted">Loading...</p>}
       </div>
+
+      {qr && (
+        <PrintableQrCard
+          qrCodeImage={qr.qrCodeImage}
+          driverName={profile?.userId?.name}
+          vehicleLabel={profile ? `${profile.vehicleType} · ${profile.vehicleNumber}` : ''}
+        />
+      )}
     </div>
   );
 }

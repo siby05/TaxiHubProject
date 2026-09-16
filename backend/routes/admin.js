@@ -9,12 +9,20 @@ const Complaint = require('../models/Complaint');
 const { auth, roleMiddleware } = require('../middleware/auth');
 const { emailService } = require('../services/emailService');
 const { ensureDriverQrCode } = require('../utils/qrcode');
+const { getDriverBilling } = require('../utils/billing');
+const WeeklyPayment = require('../models/WeeklyPayment');
+const { getSettings, updateSettings } = require('../config/platformSettings');
 
 router.use(auth, roleMiddleware(['admin']));
 
 function publicUser(user) {
   const { password, ...rest } = user;
   return rest;
+}
+
+async function isLicenseTaken(licenseNumber, excludeDriverId) {
+  const drivers = await Driver.find({});
+  return drivers.some((d) => d._id !== excludeDriverId && d.licenseNumber?.toLowerCase() === licenseNumber.toLowerCase());
 }
 
 // GET /api/admin/stats - dashboard summary
@@ -56,6 +64,32 @@ router.put('/users/:id/activate', async (req, res) => {
   res.json(publicUser(user));
 });
 
+// GET /api/admin/passengers - passenger roster with booking stats, for the grid view
+router.get('/passengers', async (req, res) => {
+  const [users, bookings] = await Promise.all([User.find({ role: 'passenger' }), Booking.find({})]);
+  const result = users.map((u) => {
+    const own = bookings.filter((b) => String(b.passengerId) === String(u._id));
+    return {
+      ...publicUser(u),
+      totalBookings: own.length,
+      completedTrips: own.filter((b) => b.status === 'completed').length,
+    };
+  });
+  res.json(result);
+});
+
+// PUT /api/admin/users/:id/block-booking - passenger keeps login/account access but can't request new rides
+router.put('/users/:id/block-booking', async (req, res) => {
+  const user = await User.findByIdAndUpdate(req.params.id, { bookingBlocked: true });
+  res.json(publicUser(user));
+});
+
+// PUT /api/admin/users/:id/unblock-booking
+router.put('/users/:id/unblock-booking', async (req, res) => {
+  const user = await User.findByIdAndUpdate(req.params.id, { bookingBlocked: false });
+  res.json(publicUser(user));
+});
+
 // POST /api/admin/drivers - admin-managed driver creation (no public driver signup)
 router.post('/drivers', async (req, res) => {
   try {
@@ -65,6 +99,10 @@ router.post('/drivers', async (req, res) => {
     }
     const existing = await User.findOne({ email: email.toLowerCase() });
     if (existing) return res.status(409).json({ error: 'An account with this email already exists' });
+
+    if (await isLicenseTaken(licenseNumber)) {
+      return res.status(409).json({ error: 'This license number is already registered to another driver' });
+    }
 
     const tempPassword = crypto.randomBytes(4).toString('hex');
     const hashed = await bcrypt.hash(tempPassword, 10);
@@ -85,6 +123,7 @@ router.post('/drivers', async (req, res) => {
       vehicleType: vehicleType || 'Economy',
       vehicleNumber,
       ratePerKm: ratePerKm || Number(process.env.DEFAULT_RATE_PER_KM) || 1.8,
+      pendingRatePerKm: null,
       status: 'pending',
       isAvailable: false,
       rating: 0,
@@ -106,6 +145,32 @@ router.get('/drivers', async (req, res) => {
   res.json(drivers);
 });
 
+// PUT /api/admin/drivers/:id - edit driver/vehicle details
+router.put('/drivers/:id', async (req, res) => {
+  const { name, mobile, licenseNumber, vehicleType, vehicleNumber } = req.body;
+  const driver = await Driver.findById(req.params.id);
+  if (!driver) return res.status(404).json({ error: 'Driver not found' });
+
+  if (licenseNumber && await isLicenseTaken(licenseNumber, driver._id)) {
+    return res.status(409).json({ error: 'This license number is already registered to another driver' });
+  }
+
+  if (name || mobile) {
+    await User.findByIdAndUpdate(driver.userId, {
+      ...(name && { name }),
+      ...(mobile && { mobile }),
+    });
+  }
+
+  const updated = await Driver.findByIdAndUpdate(driver._id, {
+    ...(licenseNumber && { licenseNumber }),
+    ...(vehicleType && { vehicleType }),
+    ...(vehicleNumber && { vehicleNumber }),
+  }).populate('userId', 'name email mobile isActive');
+
+  res.json(updated);
+});
+
 // PUT /api/admin/drivers/:id/approve
 router.put('/drivers/:id/approve', async (req, res) => {
   const driver = await Driver.findByIdAndUpdate(req.params.id, { status: 'approved' });
@@ -125,11 +190,78 @@ router.put('/drivers/:id/deactivate', async (req, res) => {
   res.json(driver);
 });
 
-// PUT /api/admin/drivers/:id/rate
+// PUT /api/admin/drivers/:id/reactivate - bring a rejected/deactivated driver back to approved
+router.put('/drivers/:id/reactivate', async (req, res) => {
+  const driver = await Driver.findByIdAndUpdate(req.params.id, { status: 'approved', rejectionReason: null });
+  res.json(driver);
+});
+
+// PUT /api/admin/drivers/:id/rate - admin can still set a rate directly at any time
 router.put('/drivers/:id/rate', async (req, res) => {
   const { ratePerKm } = req.body;
-  const driver = await Driver.findByIdAndUpdate(req.params.id, { ratePerKm });
+  const driver = await Driver.findByIdAndUpdate(req.params.id, { ratePerKm, pendingRatePerKm: null });
   res.json(driver);
+});
+
+// PUT /api/admin/drivers/:id/rate/approve - apply a driver-requested rate change
+router.put('/drivers/:id/rate/approve', async (req, res) => {
+  const driver = await Driver.findById(req.params.id);
+  if (!driver) return res.status(404).json({ error: 'Driver not found' });
+  if (driver.pendingRatePerKm == null) return res.status(400).json({ error: 'No pending rate change to approve' });
+  const updated = await Driver.findByIdAndUpdate(driver._id, { ratePerKm: driver.pendingRatePerKm, pendingRatePerKm: null });
+  res.json(updated);
+});
+
+// PUT /api/admin/drivers/:id/rate/reject - discard a driver-requested rate change
+router.put('/drivers/:id/rate/reject', async (req, res) => {
+  const updated = await Driver.findByIdAndUpdate(req.params.id, { pendingRatePerKm: null });
+  res.json(updated);
+});
+
+// GET /api/admin/drivers/:id/billing - weekly commission/fee ledger for one driver
+router.get('/drivers/:id/billing', async (req, res) => {
+  const driver = await Driver.findById(req.params.id);
+  if (!driver) return res.status(404).json({ error: 'Driver not found' });
+  res.json(await getDriverBilling(driver));
+});
+
+// POST /api/admin/drivers/:id/billing/pay - record a (typically offline) payment for a given week
+router.post('/drivers/:id/billing/pay', async (req, res) => {
+  const { weekStart, amount, note } = req.body;
+  if (!weekStart || !amount || amount <= 0) return res.status(400).json({ error: 'weekStart and a positive amount are required' });
+  const driver = await Driver.findById(req.params.id);
+  if (!driver) return res.status(404).json({ error: 'Driver not found' });
+
+  await WeeklyPayment.create({ driverId: driver._id, weekStart, amountPaid: Number(amount), note });
+  res.json(await getDriverBilling(driver));
+});
+
+// GET /api/admin/drivers/:id/trips - trip history report for one driver
+router.get('/drivers/:id/trips', async (req, res) => {
+  const driver = await Driver.findById(req.params.id);
+  if (!driver) return res.status(404).json({ error: 'Driver not found' });
+  const trips = await Booking.find({ driverId: driver._id }).populate('passengerId', 'name email').sort({ createdAt: -1 });
+  res.json(trips);
+});
+
+// GET /api/admin/settings - current commission/fee policy
+router.get('/settings', async (req, res) => {
+  res.json(getSettings());
+});
+
+// PUT /api/admin/settings - update commission/fee policy
+router.put('/settings', async (req, res) => {
+  const { commissionType, commissionPercent, weeklyFlatFee } = req.body;
+  try {
+    const updated = updateSettings({
+      ...(commissionType && { commissionType }),
+      ...(commissionPercent != null && { commissionPercent: Number(commissionPercent) }),
+      ...(weeklyFlatFee != null && { weeklyFlatFee: Number(weeklyFlatFee) }),
+    });
+    res.json(updated);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 // GET /api/admin/drivers/:id/qr-code - reprint a driver's QR (e.g. lost sticker)

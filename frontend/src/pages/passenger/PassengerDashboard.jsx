@@ -3,13 +3,16 @@ import { Link } from 'react-router-dom';
 import client from '../../api/client';
 import { useBookingStore } from '../../store/bookingStore';
 import { useSocket } from '../../hooks/useSocket';
+import AddressAutocomplete from '../../components/AddressAutocomplete';
 
 export default function PassengerDashboard() {
   const { bookings, fetchMine, createBooking } = useBookingStore();
   const [stats, setStats] = useState(null);
-  const [form, setForm] = useState({
-    pickupAddress: '', pickupLat: '', pickupLng: '', dropAddress: '', dropLat: '', dropLng: '',
-  });
+  const [pickup, setPickup] = useState(null);
+  const [drop, setDrop] = useState(null);
+  const [formKey, setFormKey] = useState(0); // bump to reset the autocomplete inputs after booking
+  const [quote, setQuote] = useState(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState('');
@@ -28,28 +31,36 @@ export default function PassengerDashboard() {
     'booking:cancelled': () => { setNotice('A booking was cancelled.'); refresh(); },
   });
 
-  async function onBook(e) {
-    e.preventDefault();
+  useEffect(() => {
+    setQuote(null);
+    setError('');
+    if (!pickup || !drop) return;
+    let cancelled = false;
+    setQuoteLoading(true);
+    client.post('/booking/quote', { pickupLat: pickup.lat, pickupLng: pickup.lng, dropLat: drop.lat, dropLng: drop.lng })
+      .then((r) => { if (!cancelled) setQuote(r.data); })
+      .catch((err) => { if (!cancelled) setError(err.response?.data?.error || 'Could not calculate fare'); })
+      .finally(() => { if (!cancelled) setQuoteLoading(false); });
+    return () => { cancelled = true; };
+  }, [pickup, drop]);
+
+  async function confirmBooking() {
     setError('');
     setLoading(true);
     try {
       await createBooking({
-        ...form,
-        pickupLat: Number(form.pickupLat),
-        pickupLng: Number(form.pickupLng),
-        dropLat: Number(form.dropLat),
-        dropLng: Number(form.dropLng),
+        pickupAddress: pickup.label, pickupLat: pickup.lat, pickupLng: pickup.lng,
+        dropAddress: drop.label, dropLat: drop.lat, dropLng: drop.lng,
       });
-      setForm({ pickupAddress: '', pickupLat: '', pickupLng: '', dropAddress: '', dropLat: '', dropLng: '' });
+      setPickup(null);
+      setDrop(null);
+      setQuote(null);
+      setFormKey((k) => k + 1);
     } catch (err) {
       setError(err.response?.data?.error || 'Could not create booking');
     } finally {
       setLoading(false);
     }
-  }
-
-  function update(field, value) {
-    setForm((f) => ({ ...f, [field]: value }));
   }
 
   return (
@@ -68,21 +79,25 @@ export default function PassengerDashboard() {
       <div className="grid cols-2">
         <div className="card">
           <h3>Book a ride</h3>
-          <p className="muted">Enter approximate coordinates for pickup/drop (e.g. from Google Maps "copy coordinates").</p>
-          <form onSubmit={onBook}>
-            <div><label>Pickup address</label><input value={form.pickupAddress} onChange={(e) => update('pickupAddress', e.target.value)} required /></div>
-            <div className="grid cols-2">
-              <div><label>Pickup latitude</label><input type="number" step="any" value={form.pickupLat} onChange={(e) => update('pickupLat', e.target.value)} required /></div>
-              <div><label>Pickup longitude</label><input type="number" step="any" value={form.pickupLng} onChange={(e) => update('pickupLng', e.target.value)} required /></div>
-            </div>
-            <div><label>Drop address</label><input value={form.dropAddress} onChange={(e) => update('dropAddress', e.target.value)} required /></div>
-            <div className="grid cols-2">
-              <div><label>Drop latitude</label><input type="number" step="any" value={form.dropLat} onChange={(e) => update('dropLat', e.target.value)} required /></div>
-              <div><label>Drop longitude</label><input type="number" step="any" value={form.dropLng} onChange={(e) => update('dropLng', e.target.value)} required /></div>
-            </div>
-            {error && <p className="error-text">{error}</p>}
-            <button className="btn" disabled={loading}>{loading ? 'Booking...' : 'Request ride'}</button>
-          </form>
+          <div key={formKey} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <AddressAutocomplete label="Pickup address" onSelect={setPickup} required />
+            <AddressAutocomplete label="Drop address" onSelect={setDrop} required />
+
+            {quoteLoading && <p className="muted">Calculating fare...</p>}
+
+            {quote && !quoteLoading && (
+              <div className="card fare-confirm">
+                <strong>Estimated fare: ${quote.estimatedFare.toFixed(2)}</strong>
+                <div className="muted">{quote.distanceKm} km</div>
+                {error && <p className="error-text">{error}</p>}
+                <button className="btn" style={{ marginTop: 8 }} onClick={confirmBooking} disabled={loading}>
+                  {loading ? 'Booking...' : 'Confirm & request ride'}
+                </button>
+              </div>
+            )}
+
+            {!quote && !quoteLoading && error && <p className="error-text">{error}</p>}
+          </div>
         </div>
 
         <div className="card">

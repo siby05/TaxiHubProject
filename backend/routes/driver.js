@@ -5,6 +5,7 @@ const Driver = require('../models/Driver');
 const Booking = require('../models/Booking');
 const { auth, roleMiddleware } = require('../middleware/auth');
 const { ensureDriverQrCode } = require('../utils/qrcode');
+const { getDriverBilling } = require('../utils/billing');
 
 async function getDriverProfile(userId) {
   return Driver.findOne({ userId }).populate('userId', 'name email mobile');
@@ -22,6 +23,17 @@ router.put('/availability', auth, roleMiddleware(['driver']), async (req, res) =
   const { isAvailable } = req.body;
   const driver = await Driver.findOne({ userId: req.user.id });
   if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
+
+  if (isAvailable) {
+    const billing = await getDriverBilling(driver);
+    if (billing.hasOverdue) {
+      return res.status(402).json({
+        error: `You have overdue platform fees ($${billing.totalPending.toFixed(2)}). Settle payment with the admin to go online again.`,
+        billing,
+      });
+    }
+  }
+
   const updated = await Driver.findByIdAndUpdate(driver._id, { isAvailable: !!isAvailable });
   res.json(updated);
 });
@@ -59,14 +71,22 @@ router.get('/qr-code', auth, roleMiddleware(['driver']), async (req, res) => {
   res.json({ qrCodeImage: updated.qrCodeImage, qrCodeUrl: updated.qrCodeUrl });
 });
 
-// PUT /api/driver/rate - custom rate per km
+// PUT /api/driver/rate - request a new rate per km; takes effect only once
+// an admin approves it (see PUT /api/admin/drivers/:id/rate/approve).
 router.put('/rate', auth, roleMiddleware(['driver']), async (req, res) => {
   const { ratePerKm } = req.body;
   if (!ratePerKm || ratePerKm <= 0) return res.status(400).json({ error: 'ratePerKm must be a positive number' });
   const driver = await Driver.findOne({ userId: req.user.id });
   if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
-  const updated = await Driver.findByIdAndUpdate(driver._id, { ratePerKm });
-  res.json(updated);
+  const updated = await Driver.findByIdAndUpdate(driver._id, { pendingRatePerKm: ratePerKm });
+  res.json({ message: 'Rate change submitted - awaiting admin approval before it goes live.', driver: updated });
+});
+
+// GET /api/driver/billing - own weekly commission/fee ledger
+router.get('/billing', auth, roleMiddleware(['driver']), async (req, res) => {
+  const driver = await Driver.findOne({ userId: req.user.id });
+  if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
+  res.json(await getDriverBilling(driver));
 });
 
 // GET /api/driver/earnings

@@ -2,16 +2,25 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import client from '../../api/client';
 import { useAuthStore } from '../../store/authStore';
+import AddressAutocomplete from '../../components/AddressAutocomplete';
 
 export default function BookDriver() {
   const { driverId } = useParams();
   const { user } = useAuthStore();
   const navigate = useNavigate();
   const [driver, setDriver] = useState(null);
+  const [preview, setPreview] = useState(null);
   const [notFound, setNotFound] = useState(false);
-  const [form, setForm] = useState({ pickupAddress: '', pickupLat: '', pickupLng: '', dropAddress: '', dropLat: '', dropLng: '' });
+  const [pickup, setPickup] = useState(null);
+  const [drop, setDrop] = useState(null);
+  const [quote, setQuote] = useState(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    client.get(`/booking/driver-preview/${driverId}`).then((r) => setPreview(r.data)).catch(() => {});
+  }, [driverId]);
 
   useEffect(() => {
     if (!user || user.role !== 'passenger') return;
@@ -20,22 +29,27 @@ export default function BookDriver() {
       .catch(() => setNotFound(true));
   }, [user, driverId]);
 
-  function update(field, value) {
-    setForm((f) => ({ ...f, [field]: value }));
-  }
+  useEffect(() => {
+    setQuote(null);
+    setError('');
+    if (!pickup || !drop) return;
+    let cancelled = false;
+    setQuoteLoading(true);
+    client.post('/booking/quote', { driverId, pickupLat: pickup.lat, pickupLng: pickup.lng, dropLat: drop.lat, dropLng: drop.lng })
+      .then((r) => { if (!cancelled) setQuote(r.data); })
+      .catch((err) => { if (!cancelled) setError(err.response?.data?.error || 'Could not calculate fare'); })
+      .finally(() => { if (!cancelled) setQuoteLoading(false); });
+    return () => { cancelled = true; };
+  }, [pickup, drop, driverId]);
 
-  async function onSubmit(e) {
-    e.preventDefault();
+  async function confirmBooking() {
     setError('');
     setLoading(true);
     try {
       await client.post('/booking', {
-        ...form,
         driverId,
-        pickupLat: Number(form.pickupLat),
-        pickupLng: Number(form.pickupLng),
-        dropLat: Number(form.dropLat),
-        dropLng: Number(form.dropLng),
+        pickupAddress: pickup.label, pickupLat: pickup.lat, pickupLng: pickup.lng,
+        dropAddress: drop.label, dropLat: drop.lat, dropLng: drop.lng,
       });
       navigate('/passenger');
     } catch (err) {
@@ -48,12 +62,27 @@ export default function BookDriver() {
   if (!user) {
     return (
       <div className="container">
-        <div className="card" style={{ maxWidth: 420 }}>
-          <h2>Book this driver</h2>
-          <p className="muted">You scanned a driver's QR code. Log in or sign up to continue - you'll land right back here.</p>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <Link className="btn" to="/login" state={{ from: `/book/${driverId}` }}>Log in</Link>
-            <Link className="btn secondary" to="/register" state={{ from: `/book/${driverId}` }}>Sign up</Link>
+        <div className="hero">
+          <div className="eyebrow">You scanned a TaxiHub driver</div>
+          <h1>Your ride, on your terms.</h1>
+          <p className="tagline">Upfront fares, direct booking with the driver in front of you, and live updates the moment they accept.</p>
+
+          {preview && (
+            <div className="driver-chip">
+              🚖 <strong>{preview.name}</strong> · {preview.vehicleType} · ⭐ {preview.rating || 'new'}
+            </div>
+          )}
+
+          <ul className="feature-list">
+            <li>✅ See your fare before you confirm</li>
+            <li>✅ Book this exact driver directly</li>
+            <li>✅ NZ Transport Agency compliant</li>
+            <li>✅ Live trip status the moment they accept</li>
+          </ul>
+
+          <div className="cta-row">
+            <Link className="btn" to="/register" state={{ from: `/book/${driverId}` }}>Create free account</Link>
+            <Link className="btn secondary" to="/login" state={{ from: `/book/${driverId}` }}>Log in to book</Link>
           </div>
         </div>
       </div>
@@ -76,20 +105,25 @@ export default function BookDriver() {
           <p className="muted">{driver.name} · {driver.vehicleType} · {driver.vehicleNumber} · ${driver.ratePerKm}/km · ⭐ {driver.rating || 'new'}</p>
         ) : <p className="muted">Loading driver details...</p>}
 
-        <form onSubmit={onSubmit}>
-          <div><label>Pickup address</label><input value={form.pickupAddress} onChange={(e) => update('pickupAddress', e.target.value)} required /></div>
-          <div className="grid cols-2">
-            <div><label>Pickup latitude</label><input type="number" step="any" value={form.pickupLat} onChange={(e) => update('pickupLat', e.target.value)} required /></div>
-            <div><label>Pickup longitude</label><input type="number" step="any" value={form.pickupLng} onChange={(e) => update('pickupLng', e.target.value)} required /></div>
-          </div>
-          <div><label>Drop address</label><input value={form.dropAddress} onChange={(e) => update('dropAddress', e.target.value)} required /></div>
-          <div className="grid cols-2">
-            <div><label>Drop latitude</label><input type="number" step="any" value={form.dropLat} onChange={(e) => update('dropLat', e.target.value)} required /></div>
-            <div><label>Drop longitude</label><input type="number" step="any" value={form.dropLng} onChange={(e) => update('dropLng', e.target.value)} required /></div>
-          </div>
-          {error && <p className="error-text">{error}</p>}
-          <button className="btn" disabled={loading || !driver}>{loading ? 'Requesting...' : 'Request this driver'}</button>
-        </form>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <AddressAutocomplete label="Pickup address" onSelect={setPickup} required />
+          <AddressAutocomplete label="Drop address" onSelect={setDrop} required />
+
+          {quoteLoading && <p className="muted">Calculating fare...</p>}
+
+          {quote && !quoteLoading && (
+            <div className="card fare-confirm">
+              <strong>Estimated fare: ${quote.estimatedFare.toFixed(2)}</strong>
+              <div className="muted">{quote.distanceKm} km</div>
+              {error && <p className="error-text">{error}</p>}
+              <button className="btn" style={{ marginTop: 8 }} onClick={confirmBooking} disabled={loading || !driver}>
+                {loading ? 'Requesting...' : 'Confirm & request this driver'}
+              </button>
+            </div>
+          )}
+
+          {!quote && !quoteLoading && error && <p className="error-text">{error}</p>}
+        </div>
       </div>
     </div>
   );

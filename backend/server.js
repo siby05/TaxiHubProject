@@ -16,6 +16,7 @@ const bookingRoutes = require('./routes/booking');
 const paymentRoutes = require('./routes/payment');
 const adminRoutes = require('./routes/admin');
 const complaintRoutes = require('./routes/complaints');
+const geocodeRoutes = require('./routes/geocode');
 
 const app = express();
 const server = http.createServer(app);
@@ -36,6 +37,7 @@ app.use('/api/booking', bookingRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/complaints', complaintRoutes);
+app.use('/api/geocode', geocodeRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

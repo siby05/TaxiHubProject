@@ -124,3 +124,77 @@ th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--bor
 @media (max-width: 400px) {
   .grid.cols-4 { grid-template-columns: 1fr; }
 }
+
+.autocomplete-wrap { position: relative; }
+.autocomplete-list {
+  position: absolute;
+  z-index: 20;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-top: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+.autocomplete-item { padding: 8px 12px; cursor: pointer; font-size: 0.9rem; }
+.autocomplete-item:hover { background: #fff7ed; }
+
+.fare-confirm { background: #fff7ed; border: 1px solid var(--primary); }
+
+.hero {
+  max-width: 640px;
+  margin: 0 auto;
+  text-align: center;
+}
+.hero .eyebrow { color: var(--primary); font-weight: 700; text-transform: uppercase; font-size: 0.8rem; letter-spacing: 0.06em; }
+.hero h1 { font-size: 2rem; margin: 6px 0 8px; }
+.hero .tagline { color: var(--muted); font-size: 1.05rem; margin-bottom: 18px; }
+.driver-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff7ed;
+  border: 1px solid var(--primary);
+  border-radius: 999px;
+  padding: 8px 16px;
+  margin-bottom: 20px;
+  font-size: 0.9rem;
+}
+.feature-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 24px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  text-align: left;
+}
+.feature-list li { font-size: 0.92rem; }
+.hero .cta-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+@media (max-width: 480px) {
+  .feature-list { grid-template-columns: 1fr; }
+  .hero h1 { font-size: 1.5rem; }
+}
+
+/* A6 printable QR card: hidden on screen, shown only when printing */
+.printable-qr-card { display: none; }
+
+@media print {
+  body * { visibility: hidden; }
+  .printable-qr-card, .printable-qr-card * { visibility: visible; }
+  .printable-qr-card {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 12px;
+  }
+  @page { size: A6; margin: 8mm; }
+}
