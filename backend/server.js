@@ -17,12 +17,15 @@ const paymentRoutes = require('./routes/payment');
 const adminRoutes = require('./routes/admin');
 const complaintRoutes = require('./routes/complaints');
 const geocodeRoutes = require('./routes/geocode');
+const notificationRoutes = require('./routes/notifications');
+const { setIo } = require('./utils/notify');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: process.env.FRONTEND_URL || '*' } });
 
 app.set('io', io);
+setIo(io);
 
 app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
 app.use(express.json());
@@ -38,6 +41,7 @@ app.use('/api/payment', paymentRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/complaints', complaintRoutes);
 app.use('/api/geocode', geocodeRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

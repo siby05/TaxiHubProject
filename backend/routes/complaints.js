@@ -6,6 +6,7 @@ const User = require('../models/User');
 const Driver = require('../models/Driver');
 const { auth, roleMiddleware } = require('../middleware/auth');
 const { emailService } = require('../services/emailService');
+const { notifyUser, notifyAdmins } = require('../utils/notify');
 const multer = require('multer');
 
 /**
@@ -75,6 +76,12 @@ router.post('/', auth, roleMiddleware(['passenger']), upload.array('attachments'
 
     const io = req.app.get('io');
     if (io) io.to('admins').emit('complaint:new', complaint);
+    await notifyAdmins({
+      type: complaint.isSerious ? 'complaint-serious' : 'complaint-new',
+      title: complaint.isSerious ? 'SERIOUS complaint lodged' : 'New complaint lodged',
+      message: `${complaint.complaintId} - ${complaint.complaintType.replace(/-/g, ' ')} vs ${complaint.driverName}`,
+      link: '/admin/complaints',
+    });
 
     res.status(201).json({ message: 'Complaint logged successfully', complaintId: complaint.complaintId, complaint });
   } catch (err) {
@@ -97,6 +104,35 @@ router.get('/passenger/:complaintId', auth, roleMiddleware(['passenger']), async
     .populate('driverComments.commentedBy', 'name');
   if (!complaint) return res.status(404).json({ error: 'Complaint not found' });
   res.json(complaint);
+});
+
+// PUT /api/complaints/passenger/:complaintId/reopen - if the passenger
+// isn't satisfied with a resolved/closed outcome
+router.put('/passenger/:complaintId/reopen', auth, roleMiddleware(['passenger']), async (req, res) => {
+  const { reason } = req.body;
+  if (!reason || !reason.trim()) return res.status(400).json({ error: 'A reason is required to reopen a complaint' });
+
+  const complaint = await Complaint.findOne({ _id: req.params.complaintId, complainantId: req.user.id });
+  if (!complaint) return res.status(404).json({ error: 'Complaint not found' });
+  if (!['resolved', 'closed'].includes(complaint.status)) {
+    return res.status(400).json({ error: 'Only a resolved or closed complaint can be reopened' });
+  }
+
+  const passenger = await User.findById(req.user.id);
+  const updated = await Complaint.findByIdAndUpdate(req.params.complaintId, {
+    status: 'investigating',
+    $push: { adminNotes: { note: `Passenger reopened this complaint: ${reason}`, noteBy: req.user.id, noteByName: passenger.name, noteAt: new Date() } },
+  });
+
+  await notifyAdmins({
+    type: 'complaint-reopened',
+    title: 'Complaint reopened by passenger',
+    message: `${complaint.complaintId} - ${reason}`,
+    link: '/admin/complaints',
+  });
+  await emailService.sendReopenedConfirmation(passenger.email, complaint);
+
+  res.json({ message: 'Complaint reopened', complaint: updated });
 });
 
 /** DRIVER ROUTES */
@@ -147,7 +183,15 @@ router.post('/:complaintId/driver-comment', auth, roleMiddleware(['driver']), as
     if (!complaint) return res.status(404).json({ error: 'Complaint not found' });
 
     const passenger = await User.findById(complaint.complainantId);
-    if (passenger) await emailService.sendDriverResponseNotification(passenger.email, complaint);
+    if (passenger) {
+      await emailService.sendDriverResponseNotification(passenger.email, complaint);
+      await notifyUser(passenger._id, {
+        type: 'complaint-driver-response',
+        title: 'Driver responded to your complaint',
+        message: complaint.complaintId,
+        link: '/passenger/complaints',
+      });
+    }
 
     res.json({ message: 'Comment added successfully', complaint });
   } catch (err) {
@@ -223,15 +267,25 @@ router.put('/admin/:complaintId/status', auth, roleMiddleware(['admin']), async 
   let complaint = await Complaint.findByIdAndUpdate(req.params.complaintId, update);
   if (!complaint) return res.status(404).json({ error: 'Complaint not found' });
 
-  if (status === 'resolved' || status === 'closed') {
-    const passenger = await User.findById(complaint.complainantId);
-    if (passenger) await emailService.sendComplaintResolution(passenger.email, complaint);
-    complaint = await Complaint.findByIdAndUpdate(req.params.complaintId, {
-      complainantNotified: true,
-      complainantNotifiedDate: new Date(),
-      complainantNotifiedMethod: 'email',
+  const passenger = await User.findById(complaint.complainantId);
+  if (passenger) {
+    if (status === 'resolved' || status === 'closed') {
+      await emailService.sendComplaintResolution(passenger.email, complaint);
+    } else {
+      await emailService.sendComplaintStatusChanged(passenger.email, complaint);
+    }
+    await notifyUser(passenger._id, {
+      type: 'complaint-status',
+      title: `Complaint ${status}`,
+      message: complaint.complaintId,
+      link: '/passenger/complaints',
     });
   }
+  complaint = await Complaint.findByIdAndUpdate(req.params.complaintId, {
+    complainantNotified: true,
+    complainantNotifiedDate: new Date(),
+    complainantNotifiedMethod: 'email',
+  });
 
   res.json({ message: 'Complaint status updated', complaint });
 });
@@ -267,6 +321,12 @@ router.put('/admin/:complaintId/escalate', auth, roleMiddleware(['admin']), asyn
   if (!complaint) return res.status(404).json({ error: 'Complaint not found' });
 
   await emailService.sendEscalationAlert(complaint);
+  await notifyAdmins({
+    type: 'complaint-escalated',
+    title: 'Complaint escalated',
+    message: complaint.complaintId,
+    link: '/admin/complaints',
+  });
   res.json({ message: 'Complaint escalated successfully', complaint });
 });
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import client from '../../api/client';
 import { useBookingStore } from '../../store/bookingStore';
 import { useSocket } from '../../hooks/useSocket';
+import StarRating from '../../components/StarRating';
 
 export default function DriverDashboard() {
   const { bookings, fetchDriverBookings } = useBookingStore();
@@ -62,6 +63,11 @@ export default function DriverDashboard() {
     load();
   }
 
+  async function ratePassenger(id, rating, review) {
+    await client.put(`/booking/${id}/rate-passenger`, { rating, review });
+    load();
+  }
+
   return (
     <div className="container">
       <h1>Driver dashboard</h1>
@@ -113,6 +119,10 @@ export default function DriverDashboard() {
                 <td>
                   <div>{b.pickupAddress} → {b.dropAddress}</div>
                   <div className="muted">{b.passengerId?.name} · {b.distanceKm} km · est. ${b.estimatedFare}</div>
+                  {b.status === 'completed' && !b.passengerRating && (
+                    <StarRating label="Rate this passenger" submitLabel="Rate" onSubmit={(rating, review) => ratePassenger(b._id, rating, review)} />
+                  )}
+                  {b.passengerRating && <div className="muted">You rated: {'★'.repeat(b.passengerRating)}{'☆'.repeat(5 - b.passengerRating)}</div>}
                 </td>
                 <td><span className={`badge ${b.status}`}>{b.status}</span></td>
                 <td>

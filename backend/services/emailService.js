@@ -57,6 +57,12 @@ const emailService = {
   sendComplaintResolution: (to, complaint) =>
     send(to, `Complaint resolved (${complaint.complaintId})`, `Your complaint has been ${complaint.status}. Summary: ${complaint.resolutionSummary || 'See app for details.'}`),
 
+  sendComplaintStatusChanged: (to, complaint) =>
+    send(to, `Complaint update (${complaint.complaintId})`, `Your complaint is now marked "${complaint.status}". Log in to view details.`),
+
+  sendReopenedConfirmation: (to, complaint) =>
+    send(to, `Complaint reopened (${complaint.complaintId})`, `We've reopened your complaint and will review it again.`),
+
   sendEscalationAlert: (complaint) =>
     send(process.env.EMAIL_FROM || 'admin@taxihub.local', `ESCALATED: ${complaint.complaintId}`, `Complaint ${complaint.complaintId} has been escalated to authorities.`),
 };

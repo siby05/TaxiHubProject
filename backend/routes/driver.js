@@ -10,6 +10,7 @@ const { ensureDriverQrCode } = require('../utils/qrcode');
 const { getDriverBilling } = require('../utils/billing');
 const { haversineKm, calculateFare } = require('../utils/distance');
 const { emailService } = require('../services/emailService');
+const { notifyUser, notifyAdmins } = require('../utils/notify');
 
 async function getDriverProfile(userId) {
   return Driver.findOne({ userId }).populate('userId', 'name email mobile');
@@ -83,6 +84,15 @@ router.put('/rate', auth, roleMiddleware(['driver']), async (req, res) => {
   const driver = await Driver.findOne({ userId: req.user.id });
   if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
   const updated = await Driver.findByIdAndUpdate(driver._id, { pendingRatePerKm: ratePerKm });
+
+  const driverUser = await User.findById(req.user.id);
+  await notifyAdmins({
+    type: 'rate-request',
+    title: 'Driver requested a rate change',
+    message: `${driverUser?.name || 'A driver'} requested $${ratePerKm}/km (currently $${driver.ratePerKm}/km)`,
+    link: '/admin',
+  });
+
   res.json({ message: 'Rate change submitted - awaiting admin approval before it goes live.', driver: updated });
 });
 
@@ -185,7 +195,23 @@ router.post('/bookings', auth, roleMiddleware(['driver']), async (req, res) => {
       bookedByDriver: true,
     });
 
-    if (passenger.emailVerified) await emailService.sendBookingConfirmation(passenger.email, booking);
+    if (passenger.emailVerified) {
+      await emailService.sendBookingConfirmation(passenger.email, booking);
+      await notifyUser(passenger._id, {
+        type: 'booking-accepted',
+        title: 'A driver booked a ride for you',
+        message: `${booking.pickupAddress} → ${booking.dropAddress} - $${booking.estimatedFare}`,
+        link: '/passenger',
+      });
+    }
+
+    const driverUser = await User.findById(req.user.id);
+    await notifyAdmins({
+      type: 'driver-action',
+      title: 'Driver booked a trip for a passenger',
+      message: `${driverUser?.name || 'A driver'} booked for ${passenger.name}`,
+      link: '/admin',
+    });
 
     res.status(201).json({ booking, passenger: { _id: passenger._id, name: passenger.name, mobile: passenger.mobile } });
   } catch (err) {

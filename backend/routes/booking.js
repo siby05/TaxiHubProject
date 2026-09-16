@@ -6,6 +6,15 @@ const User = require('../models/User');
 const { auth, roleMiddleware } = require('../middleware/auth');
 const { emailService } = require('../services/emailService');
 const { haversineKm, calculateFare } = require('../utils/distance');
+const { notifyUser, notifyAdmins } = require('../utils/notify');
+
+// Passengers should never see the rating a driver gave them (they can only
+// see driver ratings) - strip it before sending any booking list/detail
+// back to a passenger.
+function hidePassengerRating(booking) {
+  const { passengerRating, passengerReview, ...rest } = booking;
+  return rest;
+}
 
 function emitToUser(req, userId, event, payload) {
   const io = req.app.get('io');
@@ -156,6 +165,14 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
     if (driverUser) await emailService.sendDriverBookingAlert(driverUser.email, booking);
 
     emitToUser(req, driver.userId, 'booking:new', booking);
+    if (driverUser) {
+      await notifyUser(driverUser._id, {
+        type: 'booking-new',
+        title: 'New ride request',
+        message: `${booking.pickupAddress} → ${booking.dropAddress} - $${booking.estimatedFare}`,
+        link: '/driver',
+      });
+    }
 
     res.status(201).json({ ...booking, usedFallback, requestedUnavailable, requestedName });
   } catch (err) {
@@ -168,7 +185,7 @@ router.get('/mine', auth, roleMiddleware(['passenger']), async (req, res) => {
   const bookings = await Booking.find({ passengerId: req.user.id })
     .populate('driverId')
     .sort({ createdAt: -1 });
-  res.json(bookings);
+  res.json(bookings.map(hidePassengerRating));
 });
 
 // GET /api/booking/driver - bookings assigned to the logged-in driver
@@ -191,6 +208,21 @@ router.put('/:id/accept', auth, roleMiddleware(['driver']), async (req, res) => 
   const passenger = await User.findById(booking.passengerId);
   await emailService.sendBookingAccepted(passenger.email, updated);
   emitToUser(req, booking.passengerId, 'booking:accepted', updated);
+  await notifyUser(booking.passengerId, {
+    type: 'booking-accepted',
+    title: 'A driver accepted your ride',
+    message: `${updated.pickupAddress} → ${updated.dropAddress}`,
+    link: '/passenger',
+  });
+
+  const driver = await Driver.findById(booking.driverId).populate('userId', 'name');
+  await notifyAdmins({
+    type: 'driver-action',
+    title: 'Driver accepted a trip',
+    message: `${driver?.userId?.name || 'A driver'} accepted booking ${updated._id}`,
+    link: '/admin',
+  });
+
   res.json(updated);
 });
 
@@ -222,6 +254,21 @@ router.put('/:id/complete', auth, roleMiddleware(['driver']), async (req, res) =
   const passenger = await User.findById(booking.passengerId);
   await emailService.sendBookingCompleted(passenger.email, updated);
   emitToUser(req, booking.passengerId, 'booking:completed', updated);
+  await notifyUser(booking.passengerId, {
+    type: 'booking-completed',
+    title: 'Trip completed',
+    message: `Final fare: $${updated.actualFare}`,
+    link: '/passenger',
+  });
+
+  const driverUser = await User.findById(driver.userId);
+  await notifyAdmins({
+    type: 'driver-action',
+    title: 'Driver completed a trip',
+    message: `${driverUser?.name || 'A driver'} completed booking ${updated._id} - $${updated.actualFare}`,
+    link: '/admin',
+  });
+
   res.json(updated);
 });
 
@@ -240,14 +287,58 @@ router.put('/:id/cancel', auth, roleMiddleware(['passenger', 'driver']), async (
   });
   const notifyId = req.user.role === 'passenger' ? booking.driverId : booking.passengerId;
   emitToUser(req, notifyId, 'booking:cancelled', updated);
+  await notifyUser(notifyId, {
+    type: 'booking-cancelled',
+    title: 'A booking was cancelled',
+    message: `${updated.pickupAddress} → ${updated.dropAddress}${reason ? ` - ${reason}` : ''}`,
+    link: req.user.role === 'passenger' ? '/driver' : '/passenger',
+  });
+
+  if (req.user.role === 'driver') {
+    const driverUser = await User.findById(req.user.id);
+    await notifyAdmins({
+      type: 'driver-action',
+      title: 'Driver cancelled a trip',
+      message: `${driverUser?.name || 'A driver'} cancelled booking ${updated._id}${reason ? ` - ${reason}` : ''}`,
+      link: '/admin',
+    });
+  }
+
   res.json(updated);
 });
 
-// PUT /api/booking/:id/rate - passenger rates a completed trip
+// PUT /api/booking/:id/rate - passenger rates a completed trip (rates the driver)
 router.put('/:id/rate', auth, roleMiddleware(['passenger']), async (req, res) => {
   const { rating, review } = req.body;
   if (!rating || rating < 1 || rating > 5) return res.status(400).json({ error: 'rating must be 1-5' });
+  const booking = await Booking.findById(req.params.id);
+  if (!booking) return res.status(404).json({ error: 'Booking not found' });
+  if (String(booking.passengerId) !== String(req.user.id)) return res.status(403).json({ error: 'Not your booking' });
+  if (booking.status !== 'completed') return res.status(400).json({ error: 'Only completed trips can be rated' });
+
   const updated = await Booking.findByIdAndUpdate(req.params.id, { rating, review });
+
+  const rated = await Booking.find({ driverId: booking.driverId, rating: { $gte: 1 } });
+  const avg = rated.reduce((sum, b) => sum + b.rating, 0) / rated.length;
+  await Driver.findByIdAndUpdate(booking.driverId, { rating: Math.round(avg * 10) / 10 });
+
+  res.json(hidePassengerRating(updated));
+});
+
+// PUT /api/booking/:id/rate-passenger - driver rates the passenger after a
+// completed trip. Passengers never see this (see hidePassengerRating) -
+// only the driver who gave it and admins can.
+router.put('/:id/rate-passenger', auth, roleMiddleware(['driver']), async (req, res) => {
+  const { rating, review } = req.body;
+  if (!rating || rating < 1 || rating > 5) return res.status(400).json({ error: 'rating must be 1-5' });
+  const booking = await Booking.findById(req.params.id);
+  if (!booking) return res.status(404).json({ error: 'Booking not found' });
+
+  const driver = await Driver.findOne({ userId: req.user.id });
+  if (!driver || String(booking.driverId) !== String(driver._id)) return res.status(403).json({ error: 'Not your trip' });
+  if (booking.status !== 'completed') return res.status(400).json({ error: 'Only completed trips can be rated' });
+
+  const updated = await Booking.findByIdAndUpdate(req.params.id, { passengerRating: rating, passengerReview: review });
   res.json(updated);
 });
 

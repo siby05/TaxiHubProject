@@ -1,5 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import NotificationBell from './NotificationBell';
 
 export default function Navbar() {
   const { user, logout } = useAuthStore();
@@ -35,6 +36,7 @@ export default function Navbar() {
                 <Link to="/admin/complaints">Complaints</Link>
               </>
             )}
+            <NotificationBell />
             <span className="muted" style={{ color: '#cbd5e1' }}>{user.name} · {user.role}</span>
             <button onClick={() => { logout(); navigate('/login'); }}>Log out</button>
           </>

@@ -16,12 +16,15 @@ export default function AdminDashboard() {
   const [settings, setSettings] = useState(null);
   const [settingsMsg, setSettingsMsg] = useState('');
   const [passengers, setPassengers] = useState([]);
+  const [trips, setTrips] = useState([]);
+  const [tripFilter, setTripFilter] = useState('');
 
   function load() {
     client.get('/admin/stats').then((r) => setStats(r.data));
     client.get('/admin/drivers').then((r) => setDrivers(r.data));
     client.get('/admin/settings').then((r) => setSettings(r.data));
     client.get('/admin/passengers').then((r) => setPassengers(r.data));
+    client.get('/admin/bookings').then((r) => setTrips(r.data));
   }
 
   useEffect(() => { load(); }, []);
@@ -115,6 +118,7 @@ export default function AdminDashboard() {
         <button className={tab === 'drivers' ? 'active' : ''} onClick={() => setTab('drivers')}>Drivers</button>
         <button className={tab === 'add' ? 'active' : ''} onClick={() => setTab('add')}>Add driver</button>
         <button className={tab === 'passengers' ? 'active' : ''} onClick={() => setTab('passengers')}>Passengers</button>
+        <button className={tab === 'trips' ? 'active' : ''} onClick={() => setTab('trips')}>Trips</button>
         <button className={tab === 'settings' ? 'active' : ''} onClick={() => setTab('settings')}>Platform fee settings</button>
       </div>
 
@@ -239,6 +243,36 @@ export default function AdminDashboard() {
             </div>
           ))}
           {passengers.length === 0 && <p className="muted">No passengers yet.</p>}
+        </div>
+      )}
+
+      {tab === 'trips' && (
+        <div>
+          <div className="tabs">
+            {['', 'pending', 'accepted', 'in-progress', 'completed', 'cancelled'].map((s) => (
+              <button key={s || 'all'} className={tripFilter === s ? 'active' : ''} onClick={() => setTripFilter(s)}>{s || 'All'}</button>
+            ))}
+          </div>
+          <div className="card">
+            <table>
+              <thead><tr><th>Route</th><th>Passenger</th><th>Driver</th><th>Fare</th><th>Status</th><th>When</th></tr></thead>
+              <tbody>
+                {trips.filter((t) => !tripFilter || t.status === tripFilter).map((t) => (
+                  <tr key={t._id}>
+                    <td>{t.pickupAddress} → {t.dropAddress}{t.scheduledFor && <div className="muted">Scheduled: {new Date(t.scheduledFor).toLocaleString()}</div>}</td>
+                    <td>{t.passengerId?.name}</td>
+                    <td>{t.driverId?.userId?.name || '-'}</td>
+                    <td>${t.actualFare ?? t.estimatedFare}{t.rating && <div className="muted">⭐ {t.rating}</div>}</td>
+                    <td><span className={`badge ${t.status}`}>{t.status}</span></td>
+                    <td className="muted">{new Date(t.createdAt).toLocaleString()}</td>
+                  </tr>
+                ))}
+                {trips.filter((t) => !tripFilter || t.status === tripFilter).length === 0 && (
+                  <tr><td colSpan={6} className="muted">No trips match this filter.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

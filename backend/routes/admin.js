@@ -313,7 +313,17 @@ router.get('/bookings', async (req, res) => {
     .populate('passengerId', 'name email')
     .populate('driverId')
     .sort({ createdAt: -1 });
-  res.json(bookings);
+
+  // populate('driverId') only resolves the Driver doc, not its own
+  // userId ref (the store's populate is single-level) - enrich with the
+  // driver's name in a second pass so the trips table can show it.
+  const driverUsers = await User.find({ role: 'driver' });
+  const nameByUserId = new Map(driverUsers.map((u) => [String(u._id), u.name]));
+  const enriched = bookings.map((b) => (
+    b.driverId ? { ...b, driverId: { ...b.driverId, userId: { _id: b.driverId.userId, name: nameByUserId.get(String(b.driverId.userId)) } } } : b
+  ));
+
+  res.json(enriched);
 });
 
 module.exports = router;

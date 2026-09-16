@@ -8,8 +8,12 @@ const Driver = require('./Driver');
 // | 'cancelled' | 'expired'), requestedAt, scheduledFor (optional - a
 // future date/time the passenger asked for instead of "now"), acceptedAt,
 // completedAt, cancelledAt, cancelReason, paymentStatus, paymentIntentId,
-// rating, review, bookedByDriver (true when a driver created this on a
-// passenger's behalf - see routes/driver.js POST /bookings).
+// rating/review (passenger's rating of the driver - public, feeds the
+// driver's aggregate Driver.rating), passengerRating/passengerReview
+// (driver's rating of the passenger - never shown to the passenger, see
+// hidePassengerRating() in routes/booking.js), bookedByDriver (true when a
+// driver created this on a passenger's behalf - see routes/driver.js POST
+// /bookings).
 const Booking = createModel('Booking', {
   passengerId: () => User.collection,
   driverId: () => Driver.collection,

@@ -5,6 +5,7 @@ import { useBookingStore } from '../../store/bookingStore';
 import { useSocket } from '../../hooks/useSocket';
 import AddressAutocomplete from '../../components/AddressAutocomplete';
 import ScheduleField from '../../components/ScheduleField';
+import StarRating from '../../components/StarRating';
 
 export default function PassengerDashboard() {
   const { bookings, fetchMine, createBooking } = useBookingStore();
@@ -45,6 +46,11 @@ export default function PassengerDashboard() {
       .finally(() => { if (!cancelled) setQuoteLoading(false); });
     return () => { cancelled = true; };
   }, [pickup, drop]);
+
+  async function rateDriver(bookingId, rating, review) {
+    await client.put(`/booking/${bookingId}/rate`, { rating, review });
+    refresh();
+  }
 
   async function confirmBooking() {
     setError('');
@@ -116,6 +122,10 @@ export default function PassengerDashboard() {
                     <div>{b.pickupAddress} → {b.dropAddress}</div>
                     <div className="muted">{b.distanceKm} km · ${b.actualFare ?? b.estimatedFare}</div>
                     {b.scheduledFor && <div className="muted">Scheduled: {new Date(b.scheduledFor).toLocaleString()}</div>}
+                    {b.status === 'completed' && !b.rating && (
+                      <StarRating label="Rate this driver" submitLabel="Rate" onSubmit={(rating, review) => rateDriver(b._id, rating, review)} />
+                    )}
+                    {b.rating && <div className="muted">You rated: {'★'.repeat(b.rating)}{'☆'.repeat(5 - b.rating)}</div>}
                   </td>
                   <td><span className={`badge ${b.status}`}>{b.status}</span></td>
                   <td>{b.status === 'completed' && <Link to="/passenger/complaints/new" state={{ bookingId: b._id, driverName: b.driverId?.userId?.name }}>Lodge complaint</Link>}</td>

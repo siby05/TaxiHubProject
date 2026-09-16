@@ -89,13 +89,37 @@ export default function BookDriver() {
           <ul className="feature-list">
             <li>✅ See your fare before you confirm</li>
             <li>✅ Book this exact driver directly</li>
-            <li>✅ NZ Transport Agency compliant</li>
+            <li>✅ Admin-vetted, licensed drivers</li>
             <li>✅ Live trip status the moment they accept</li>
           </ul>
 
           <div className="cta-row">
             <Link className="btn" to="/register" state={{ from: `/book/${driverId}` }}>Create free account</Link>
             <Link className="btn secondary" to="/login" state={{ from: `/book/${driverId}` }}>Log in to book</Link>
+          </div>
+
+          <div className="grid cols-2" style={{ marginTop: 32, textAlign: 'left' }}>
+            <div className="card">
+              <h3 style={{ marginTop: 0 }}>About TaxiHub</h3>
+              <p className="muted">
+                TaxiHub connects you directly with a driver by scanning the QR code in their vehicle - like flagging
+                a cab, but with an upfront price and a booking record. Every driver on the platform is added and
+                approved by an admin, holds a registered license and vehicle, and has a rating built from real
+                completed trips. If a driver isn't taking bookings right now, we match you with another available
+                one automatically instead of leaving you stuck.
+              </p>
+            </div>
+            <div className="card">
+              <h3 style={{ marginTop: 0 }}>How fares work</h3>
+              <p className="muted">
+                Every fare is a small base fare plus a per-kilometre rate set by the driver - no surge pricing, and
+                you always see the total before you confirm. What you pay is exactly what the driver charges; any
+                platform fee is billed to the driver separately and never added to your fare.
+              </p>
+              {preview && preview.available && (
+                <p className="muted">This driver: {preview.vehicleType} · ⭐ {preview.rating || 'new (no ratings yet)'}</p>
+              )}
+            </div>
           </div>
         </div>
       </div>
