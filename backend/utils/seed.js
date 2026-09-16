@@ -29,6 +29,13 @@ module.exports = async function seed() {
     rating: 4.8,
     totalTrips: 0,
     totalEarnings: 0,
+    // Mon-Fri 08:00-18:00, weekends off - demo data for the availability calendar.
+    availabilitySchedule: [0, 1, 2, 3, 4, 5, 6].map((dayOfWeek) => ({
+      dayOfWeek,
+      enabled: dayOfWeek >= 1 && dayOfWeek <= 5,
+      startTime: '08:00',
+      endTime: '18:00',
+    })),
   });
 
   await User.create({

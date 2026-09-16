@@ -25,6 +25,31 @@ router.put('/availability', auth, roleMiddleware(['driver']), async (req, res) =
   res.json(updated);
 });
 
+// PUT /api/driver/schedule - weekly availability calendar (day + time slot per day)
+router.put('/schedule', auth, roleMiddleware(['driver']), async (req, res) => {
+  const { schedule } = req.body;
+  if (!Array.isArray(schedule) || schedule.length !== 7) {
+    return res.status(400).json({ error: 'schedule must be an array of 7 entries (Sunday-Saturday)' });
+  }
+  const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
+  for (const slot of schedule) {
+    if (slot.dayOfWeek == null || slot.dayOfWeek < 0 || slot.dayOfWeek > 6) {
+      return res.status(400).json({ error: 'each slot needs a dayOfWeek 0-6' });
+    }
+    if (slot.enabled && (!timePattern.test(slot.startTime) || !timePattern.test(slot.endTime))) {
+      return res.status(400).json({ error: `day ${slot.dayOfWeek}: startTime/endTime must be HH:MM` });
+    }
+    if (slot.enabled && slot.startTime >= slot.endTime) {
+      return res.status(400).json({ error: `day ${slot.dayOfWeek}: startTime must be before endTime` });
+    }
+  }
+
+  const driver = await Driver.findOne({ userId: req.user.id });
+  if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
+  const updated = await Driver.findByIdAndUpdate(driver._id, { availabilitySchedule: schedule });
+  res.json(updated);
+});
+
 // PUT /api/driver/rate - custom rate per km
 router.put('/rate', auth, roleMiddleware(['driver']), async (req, res) => {
   const { ratePerKm } = req.body;

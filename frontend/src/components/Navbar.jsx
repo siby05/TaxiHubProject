@@ -22,6 +22,7 @@ export default function Navbar() {
             {user.role === 'driver' && (
               <>
                 <Link to="/driver">Trips</Link>
+                <Link to="/driver/schedule">Schedule</Link>
                 <Link to="/driver/complaints">Complaints</Link>
               </>
             )}

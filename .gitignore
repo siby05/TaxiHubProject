@@ -7,3 +7,4 @@ backend/uploads/complaints/*
 !backend/uploads/complaints/.gitkeep
 *.log
 .DS_Store
+.claude/
