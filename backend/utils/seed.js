@@ -30,6 +30,12 @@ module.exports = async function seed() {
     rating: 4.8,
     totalTrips: 0,
     totalEarnings: 0,
+    // NZTA compliance demo data (Private Hire category - no security camera required).
+    serviceCategory: 'private-hire',
+    hasSecurityCamera: false,
+    passengerEndorsementNumber: 'PEND-000001',
+    passengerEndorsementExpiry: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+    vehicleCofExpiry: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString(),
     // Mon-Fri 08:00-18:00, weekends off - demo data for the availability calendar.
     availabilitySchedule: [0, 1, 2, 3, 4, 5, 6].map((dayOfWeek) => ({
       dayOfWeek,

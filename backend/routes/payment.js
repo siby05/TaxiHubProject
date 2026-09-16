@@ -17,6 +17,8 @@ router.post('/create-intent', auth, roleMiddleware(['passenger']), async (req, r
     const booking = await Booking.findById(bookingId);
     if (!booking) return res.status(404).json({ error: 'Booking not found' });
     if (String(booking.passengerId) !== String(req.user.id)) return res.status(403).json({ error: 'Not your booking' });
+    if (booking.paymentMethod === 'cash') return res.status(400).json({ error: 'This booking is set to pay by cash' });
+    if (booking.paymentStatus === 'paid') return res.status(400).json({ error: 'This booking is already paid' });
 
     const amount = Math.round((booking.actualFare || booking.estimatedFare) * 100);
 

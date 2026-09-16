@@ -13,7 +13,10 @@ export default function PassengerDashboard() {
   const [pickup, setPickup] = useState(null);
   const [drop, setDrop] = useState(null);
   const [scheduledFor, setScheduledFor] = useState(null);
+  const [paymentMethod, setPaymentMethod] = useState('cash');
   const [formKey, setFormKey] = useState(0); // bump to reset the autocomplete inputs after booking
+  const [payingId, setPayingId] = useState(null);
+  const [payError, setPayError] = useState('');
   const [quote, setQuote] = useState(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [error, setError] = useState('');
@@ -60,6 +63,7 @@ export default function PassengerDashboard() {
         pickupAddress: pickup.label, pickupLat: pickup.lat, pickupLng: pickup.lng,
         dropAddress: drop.label, dropLat: drop.lat, dropLng: drop.lng,
         scheduledFor,
+        paymentMethod,
       });
       setPickup(null);
       setDrop(null);
@@ -70,6 +74,22 @@ export default function PassengerDashboard() {
       setError(err.response?.data?.error || 'Could not create booking');
     } finally {
       setLoading(false);
+    }
+  }
+
+  // Card bookings can be paid as soon as they exist (immediate) or only
+  // once the driver has accepted (scheduled-for-later) - matches "later
+  // bookings pay online after confirmation".
+  async function payNow(booking) {
+    setPayError('');
+    setPayingId(booking._id);
+    try {
+      await client.post('/payment/create-intent', { bookingId: booking._id });
+      refresh();
+    } catch (err) {
+      setPayError(err.response?.data?.error || 'Payment failed');
+    } finally {
+      setPayingId(null);
     }
   }
 
@@ -94,6 +114,21 @@ export default function PassengerDashboard() {
             <AddressAutocomplete label="Drop address" onSelect={setDrop} required />
             <ScheduleField onChange={setScheduledFor} />
 
+            <div>
+              <label>Payment</label>
+              <div style={{ display: 'flex', gap: 16 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input type="radio" style={{ width: 'auto' }} checked={paymentMethod === 'cash'} onChange={() => setPaymentMethod('cash')} /> Cash to driver
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input type="radio" style={{ width: 'auto' }} checked={paymentMethod === 'card'} onChange={() => setPaymentMethod('card')} /> Pay online
+                </label>
+              </div>
+              {paymentMethod === 'card' && scheduledFor && (
+                <p className="muted">You'll be able to pay once the driver accepts.</p>
+              )}
+            </div>
+
             {quoteLoading && <p className="muted">Calculating fare...</p>}
 
             {quote && !quoteLoading && (
@@ -113,6 +148,7 @@ export default function PassengerDashboard() {
 
         <div className="card">
           <h3>My bookings</h3>
+          {payError && <p className="error-text">{payError}</p>}
           {bookings.length === 0 && <p className="muted">No bookings yet.</p>}
           <table>
             <tbody>
@@ -120,8 +156,15 @@ export default function PassengerDashboard() {
                 <tr key={b._id}>
                   <td>
                     <div>{b.pickupAddress} → {b.dropAddress}</div>
-                    <div className="muted">{b.distanceKm} km · ${b.actualFare ?? b.estimatedFare}</div>
+                    <div className="muted">
+                      {b.distanceKm} km · ${b.actualFare ?? b.estimatedFare} · {b.paymentMethod === 'card' ? (b.paymentStatus === 'paid' ? 'paid online' : 'unpaid (online)') : 'cash'}
+                    </div>
                     {b.scheduledFor && <div className="muted">Scheduled: {new Date(b.scheduledFor).toLocaleString()}</div>}
+                    {b.paymentMethod === 'card' && b.paymentStatus !== 'paid' && (!b.scheduledFor || b.status !== 'pending') && !['cancelled'].includes(b.status) && (
+                      <button className="btn secondary" style={{ marginTop: 4 }} onClick={() => payNow(b)} disabled={payingId === b._id}>
+                        {payingId === b._id ? 'Paying...' : 'Pay now'}
+                      </button>
+                    )}
                     {b.status === 'completed' && !b.rating && (
                       <StarRating label="Rate this driver" submitLabel="Rate" onSubmit={(rating, review) => rateDriver(b._id, rating, review)} />
                     )}

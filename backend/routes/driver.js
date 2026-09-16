@@ -11,6 +11,7 @@ const { getDriverBilling } = require('../utils/billing');
 const { haversineKm, calculateFare } = require('../utils/distance');
 const { emailService } = require('../services/emailService');
 const { notifyUser, notifyAdmins } = require('../utils/notify');
+const { checkDriverCompliance } = require('../utils/compliance');
 
 async function getDriverProfile(userId) {
   return Driver.findOne({ userId }).populate('userId', 'name email mobile');
@@ -20,7 +21,7 @@ async function getDriverProfile(userId) {
 router.get('/profile', auth, roleMiddleware(['driver']), async (req, res) => {
   const driver = await getDriverProfile(req.user.id);
   if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
-  res.json(driver);
+  res.json({ ...driver, compliance: checkDriverCompliance(driver) });
 });
 
 // PUT /api/driver/availability - toggle available for bookings
@@ -35,6 +36,14 @@ router.put('/availability', auth, roleMiddleware(['driver']), async (req, res) =
       return res.status(402).json({
         error: `You have overdue platform fees ($${billing.totalPending.toFixed(2)}). Settle payment with the admin to go online again.`,
         billing,
+      });
+    }
+
+    const compliance = checkDriverCompliance(driver);
+    if (!compliance.compliant) {
+      return res.status(403).json({
+        error: `Compliance details are incomplete: ${compliance.issues.join('; ')}. Ask an admin to update your record before going online.`,
+        compliance,
       });
     }
   }
@@ -124,18 +133,22 @@ router.get('/passengers/search', auth, roleMiddleware(['driver']), async (req, r
 //
 // Pass an existing passengerId to book for an already-registered (and
 // therefore already-verified) passenger. Omit it and pass
-// passengerName/passengerMobile instead to register a brand-new passenger
-// on the spot - that account is created without any email verification or
-// login step (the driver's own auth is what authorizes the booking); if
-// that person later wants to log in themselves, an admin can help them set
-// a password. This only applies to genuinely new people - an existing
-// mobile/email match is rejected so the driver picks the real account
-// instead of creating a duplicate.
+// passengerName/passengerMobile/passengerAddress instead to register a
+// brand-new passenger on the spot - that account is created without any
+// email verification or login step (the driver's own auth is what
+// authorizes the booking); if that person later wants to log in
+// themselves, an admin can help them set a password. This only applies to
+// genuinely new people - an existing mobile/email match is rejected so the
+// driver picks the real account instead of creating a duplicate.
+//
+// passengerAddress is required for a new passenger - NZTA small passenger
+// service record-keeping expects a way to identify who travelled, and this
+// is the only point in the walk-up flow where that's captured.
 router.post('/bookings', auth, roleMiddleware(['driver']), async (req, res) => {
   try {
     const {
-      passengerId, passengerName, passengerMobile, passengerEmail,
-      pickupAddress, pickupLat, pickupLng, dropAddress, dropLat, dropLng, scheduledFor,
+      passengerId, passengerName, passengerMobile, passengerEmail, passengerAddress,
+      pickupAddress, pickupLat, pickupLng, dropAddress, dropLat, dropLng, scheduledFor, paymentMethod,
     } = req.body;
 
     if (!pickupAddress || !dropAddress || pickupLat == null || dropLat == null) {
@@ -143,6 +156,9 @@ router.post('/bookings', auth, roleMiddleware(['driver']), async (req, res) => {
     }
     if (scheduledFor && new Date(scheduledFor) <= new Date()) {
       return res.status(400).json({ error: 'scheduledFor must be a time in the future' });
+    }
+    if (paymentMethod && !['cash', 'card'].includes(paymentMethod)) {
+      return res.status(400).json({ error: 'paymentMethod must be "cash" or "card"' });
     }
 
     const driver = await Driver.findOne({ userId: req.user.id });
@@ -153,8 +169,8 @@ router.post('/bookings', auth, roleMiddleware(['driver']), async (req, res) => {
       passenger = await User.findById(passengerId);
       if (!passenger || passenger.role !== 'passenger') return res.status(404).json({ error: 'Passenger not found' });
     } else {
-      if (!passengerName || !passengerMobile) {
-        return res.status(400).json({ error: 'passengerId, or passengerName + passengerMobile to register a new passenger, is required' });
+      if (!passengerName || !passengerMobile || !passengerAddress) {
+        return res.status(400).json({ error: 'passengerId, or passengerName + passengerMobile + passengerAddress to register a new passenger, is required' });
       }
       const existing = await User.find({ role: 'passenger' });
       const dupe = existing.find((u) => u.mobile === passengerMobile || (passengerEmail && u.email === passengerEmail.toLowerCase()));
@@ -166,6 +182,7 @@ router.post('/bookings', auth, roleMiddleware(['driver']), async (req, res) => {
         email: passengerEmail ? passengerEmail.toLowerCase() : `walkup-${crypto.randomBytes(4).toString('hex')}@no-email.taxihub.local`,
         password: placeholderPassword,
         mobile: passengerMobile,
+        address: passengerAddress,
         role: 'passenger',
         isActive: true,
         emailVerified: false,
@@ -188,6 +205,7 @@ router.post('/bookings', auth, roleMiddleware(['driver']), async (req, res) => {
       distanceKm,
       estimatedFare,
       status: 'accepted',
+      paymentMethod: paymentMethod || 'cash',
       paymentStatus: 'unpaid',
       requestedAt: new Date(),
       acceptedAt: new Date(),

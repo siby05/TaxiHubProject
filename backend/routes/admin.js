@@ -12,6 +12,11 @@ const { ensureDriverQrCode } = require('../utils/qrcode');
 const { getDriverBilling } = require('../utils/billing');
 const WeeklyPayment = require('../models/WeeklyPayment');
 const { getSettings, updateSettings } = require('../config/platformSettings');
+const { checkDriverCompliance } = require('../utils/compliance');
+
+function withCompliance(driver) {
+  return { ...driver, compliance: checkDriverCompliance(driver) };
+}
 
 router.use(auth, roleMiddleware(['admin']));
 
@@ -93,7 +98,10 @@ router.put('/users/:id/unblock-booking', async (req, res) => {
 // POST /api/admin/drivers - admin-managed driver creation (no public driver signup)
 router.post('/drivers', async (req, res) => {
   try {
-    const { name, email, mobile, licenseNumber, vehicleType, vehicleNumber, ratePerKm } = req.body;
+    const {
+      name, email, mobile, licenseNumber, vehicleType, vehicleNumber, ratePerKm,
+      serviceCategory, hasSecurityCamera, passengerEndorsementNumber, passengerEndorsementExpiry, vehicleCofExpiry,
+    } = req.body;
     if (!name || !email || !licenseNumber || !vehicleNumber) {
       return res.status(400).json({ error: 'name, email, licenseNumber and vehicleNumber are required' });
     }
@@ -130,6 +138,11 @@ router.post('/drivers', async (req, res) => {
       rating: 0,
       totalTrips: 0,
       totalEarnings: 0,
+      serviceCategory: serviceCategory === 'taxi' ? 'taxi' : 'private-hire',
+      hasSecurityCamera: !!hasSecurityCamera,
+      passengerEndorsementNumber: passengerEndorsementNumber || null,
+      passengerEndorsementExpiry: passengerEndorsementExpiry || null,
+      vehicleCofExpiry: vehicleCofExpiry || null,
     });
 
     await emailService.sendVerificationEmail(user.email, user.name);
@@ -143,14 +156,14 @@ router.post('/drivers', async (req, res) => {
 // GET /api/admin/drivers
 router.get('/drivers', async (req, res) => {
   const drivers = await Driver.find({}).populate('userId', 'name email mobile isActive');
-  res.json(drivers);
+  res.json(drivers.map(withCompliance));
 });
 
 // GET /api/admin/drivers/:id - single driver (for the report/fee-override pages)
 router.get('/drivers/:id', async (req, res) => {
   const driver = await Driver.findById(req.params.id).populate('userId', 'name email mobile isActive');
   if (!driver) return res.status(404).json({ error: 'Driver not found' });
-  res.json(driver);
+  res.json(withCompliance(driver));
 });
 
 // PUT /api/admin/drivers/:id/fee-settings - override the platform-wide
@@ -178,9 +191,12 @@ router.delete('/drivers/:id/fee-settings', async (req, res) => {
   res.json(updated);
 });
 
-// PUT /api/admin/drivers/:id - edit driver/vehicle details
+// PUT /api/admin/drivers/:id - edit driver/vehicle/NZTA compliance details
 router.put('/drivers/:id', async (req, res) => {
-  const { name, mobile, licenseNumber, vehicleType, vehicleNumber } = req.body;
+  const {
+    name, mobile, licenseNumber, vehicleType, vehicleNumber,
+    serviceCategory, hasSecurityCamera, passengerEndorsementNumber, passengerEndorsementExpiry, vehicleCofExpiry,
+  } = req.body;
   const driver = await Driver.findById(req.params.id);
   if (!driver) return res.status(404).json({ error: 'Driver not found' });
 
@@ -199,9 +215,14 @@ router.put('/drivers/:id', async (req, res) => {
     ...(licenseNumber && { licenseNumber }),
     ...(vehicleType && { vehicleType }),
     ...(vehicleNumber && { vehicleNumber }),
+    ...(serviceCategory && { serviceCategory: serviceCategory === 'taxi' ? 'taxi' : 'private-hire' }),
+    ...(hasSecurityCamera != null && { hasSecurityCamera: !!hasSecurityCamera }),
+    ...(passengerEndorsementNumber !== undefined && { passengerEndorsementNumber }),
+    ...(passengerEndorsementExpiry !== undefined && { passengerEndorsementExpiry }),
+    ...(vehicleCofExpiry !== undefined && { vehicleCofExpiry }),
   }).populate('userId', 'name email mobile isActive');
 
-  res.json(updated);
+  res.json(withCompliance(updated));
 });
 
 // PUT /api/admin/drivers/:id/approve

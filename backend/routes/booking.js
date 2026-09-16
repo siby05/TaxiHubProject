@@ -123,12 +123,15 @@ router.post('/quote', auth, roleMiddleware(['passenger', 'driver']), async (req,
 // failing outright - see resolveDriver above.
 router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
   try {
-    const { pickupAddress, pickupLat, pickupLng, dropAddress, dropLat, dropLng, driverId, scheduledFor } = req.body;
+    const { pickupAddress, pickupLat, pickupLng, dropAddress, dropLat, dropLng, driverId, scheduledFor, paymentMethod } = req.body;
     if (!pickupAddress || !dropAddress || pickupLat == null || dropLat == null) {
       return res.status(400).json({ error: 'pickupAddress, dropAddress and lat/lng for both are required' });
     }
     if (scheduledFor && new Date(scheduledFor) <= new Date()) {
       return res.status(400).json({ error: 'scheduledFor must be a time in the future' });
+    }
+    if (paymentMethod && !['cash', 'card'].includes(paymentMethod)) {
+      return res.status(400).json({ error: 'paymentMethod must be "cash" or "card"' });
     }
 
     const requestingPassenger = await User.findById(req.user.id);
@@ -154,6 +157,7 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
       distanceKm,
       estimatedFare,
       status: 'pending',
+      paymentMethod: paymentMethod || 'cash',
       paymentStatus: 'unpaid',
       requestedAt: new Date(),
       scheduledFor: scheduledFor ? new Date(scheduledFor) : null,
@@ -188,11 +192,19 @@ router.get('/mine', auth, roleMiddleware(['passenger']), async (req, res) => {
   res.json(bookings.map(hidePassengerRating));
 });
 
-// GET /api/booking/driver - bookings assigned to the logged-in driver
+// GET /api/booking/driver - bookings assigned to the logged-in driver.
+// Defaults to the last 30 days of trip history; pass ?all=true to see
+// everything (nothing is ever deleted - this is just the default view).
 router.get('/driver', auth, roleMiddleware(['driver']), async (req, res) => {
   const driver = await Driver.findOne({ userId: req.user.id });
   if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
-  const bookings = await Booking.find({ driverId: driver._id })
+
+  const filter = { driverId: driver._id };
+  if (req.query.all !== 'true') {
+    filter.createdAt = { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) };
+  }
+
+  const bookings = await Booking.find(filter)
     .populate('passengerId', 'name mobile')
     .sort({ createdAt: -1 });
   res.json(bookings);
@@ -243,6 +255,9 @@ router.put('/:id/complete', auth, roleMiddleware(['driver']), async (req, res) =
     status: 'completed',
     actualFare: actualFare || booking.estimatedFare,
     completedAt: new Date(),
+    // Cash is collected in person at trip end; card bookings only become
+    // "paid" once the passenger actually pays via /api/payment.
+    ...(booking.paymentMethod !== 'card' && { paymentStatus: 'paid' }),
   });
 
   const driver = await Driver.findById(booking.driverId);

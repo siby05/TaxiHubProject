@@ -12,9 +12,9 @@ export const useBookingStore = create((set, get) => ({
     return data;
   },
 
-  fetchDriverBookings: async () => {
+  fetchDriverBookings: async (params) => {
     set({ loading: true });
-    const { data } = await client.get('/booking/driver');
+    const { data } = await client.get('/booking/driver', { params });
     set({ bookings: data, loading: false });
     return data;
   },

@@ -10,12 +10,13 @@ export default function DriverBookForPassenger() {
   const [query, setQuery] = useState('');
   const [matches, setMatches] = useState([]);
   const [selected, setSelected] = useState(null);
-  const [newPassenger, setNewPassenger] = useState({ name: '', mobile: '', email: '' });
+  const [newPassenger, setNewPassenger] = useState({ name: '', mobile: '', email: '', address: '' });
   const timer = useRef(null);
 
   const [pickup, setPickup] = useState(null);
   const [drop, setDrop] = useState(null);
   const [scheduledFor, setScheduledFor] = useState(null);
+  const [paymentMethod, setPaymentMethod] = useState('cash');
   const [quote, setQuote] = useState(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [error, setError] = useState('');
@@ -46,7 +47,7 @@ export default function DriverBookForPassenger() {
     return () => { cancelled = true; };
   }, [pickup, drop]);
 
-  const passengerReady = mode === 'search' ? !!selected : !!(newPassenger.name && newPassenger.mobile);
+  const passengerReady = mode === 'search' ? !!selected : !!(newPassenger.name && newPassenger.mobile && newPassenger.address);
 
   async function confirmBooking() {
     setError('');
@@ -55,10 +56,16 @@ export default function DriverBookForPassenger() {
       const { data } = await client.post('/driver/bookings', {
         ...(mode === 'search'
           ? { passengerId: selected._id }
-          : { passengerName: newPassenger.name, passengerMobile: newPassenger.mobile, passengerEmail: newPassenger.email || undefined }),
+          : {
+            passengerName: newPassenger.name,
+            passengerMobile: newPassenger.mobile,
+            passengerAddress: newPassenger.address,
+            passengerEmail: newPassenger.email || undefined,
+          }),
         pickupAddress: pickup.label, pickupLat: pickup.lat, pickupLng: pickup.lng,
         dropAddress: drop.label, dropLat: drop.lat, dropLng: drop.lng,
         scheduledFor,
+        paymentMethod,
       });
       setSuccess(data);
     } catch (err) {
@@ -113,6 +120,7 @@ export default function DriverBookForPassenger() {
             <p className="muted">This creates a new passenger account on the spot - no email verification or password needed to book right now.</p>
             <div><label>Full name</label><input value={newPassenger.name} onChange={(e) => setNewPassenger((p) => ({ ...p, name: e.target.value }))} required /></div>
             <div><label>Mobile</label><input value={newPassenger.mobile} onChange={(e) => setNewPassenger((p) => ({ ...p, mobile: e.target.value }))} required /></div>
+            <div><label>Address</label><input value={newPassenger.address} onChange={(e) => setNewPassenger((p) => ({ ...p, address: e.target.value }))} required placeholder="For trip records" /></div>
             <div><label>Email (optional)</label><input type="email" value={newPassenger.email} onChange={(e) => setNewPassenger((p) => ({ ...p, email: e.target.value }))} /></div>
           </div>
         )}
@@ -121,6 +129,18 @@ export default function DriverBookForPassenger() {
           <AddressAutocomplete label="Pickup address" onSelect={setPickup} required allowLocate />
           <AddressAutocomplete label="Drop address" onSelect={setDrop} required />
           <ScheduleField onChange={setScheduledFor} />
+
+          <div>
+            <label>Payment</label>
+            <div style={{ display: 'flex', gap: 16 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input type="radio" style={{ width: 'auto' }} checked={paymentMethod === 'cash'} onChange={() => setPaymentMethod('cash')} /> Cash
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input type="radio" style={{ width: 'auto' }} checked={paymentMethod === 'card'} onChange={() => setPaymentMethod('card')} /> Passenger pays online
+              </label>
+            </div>
+          </div>
 
           {quoteLoading && <p className="muted">Calculating fare...</p>}
 

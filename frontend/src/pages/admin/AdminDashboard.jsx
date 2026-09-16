@@ -6,7 +6,10 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
   const [drivers, setDrivers] = useState([]);
   const [tab, setTab] = useState('drivers');
-  const [form, setForm] = useState({ name: '', email: '', mobile: '', licenseNumber: '', vehicleType: 'Economy', vehicleNumber: '', ratePerKm: 1.8 });
+  const [form, setForm] = useState({
+    name: '', email: '', mobile: '', licenseNumber: '', vehicleType: 'Economy', vehicleNumber: '', ratePerKm: 1.8,
+    serviceCategory: 'private-hire', hasSecurityCamera: false, passengerEndorsementNumber: '', passengerEndorsementExpiry: '', vehicleCofExpiry: '',
+  });
   const [createdInfo, setCreatedInfo] = useState(null);
   const [error, setError] = useState('');
   const [qrFor, setQrFor] = useState(null);
@@ -40,7 +43,10 @@ export default function AdminDashboard() {
     try {
       const { data } = await client.post('/admin/drivers', form);
       setCreatedInfo(data);
-      setForm({ name: '', email: '', mobile: '', licenseNumber: '', vehicleType: 'Economy', vehicleNumber: '', ratePerKm: 1.8 });
+      setForm({
+        name: '', email: '', mobile: '', licenseNumber: '', vehicleType: 'Economy', vehicleNumber: '', ratePerKm: 1.8,
+        serviceCategory: 'private-hire', hasSecurityCamera: false, passengerEndorsementNumber: '', passengerEndorsementExpiry: '', vehicleCofExpiry: '',
+      });
       load();
     } catch (err) {
       setError(err.response?.data?.error || 'Could not add driver');
@@ -71,7 +77,14 @@ export default function AdminDashboard() {
     setEditError('');
     if (editFor === d._id) { setEditFor(null); return; }
     setEditFor(d._id);
-    setEditForm({ name: d.userId?.name || '', mobile: d.userId?.mobile || '', licenseNumber: d.licenseNumber, vehicleType: d.vehicleType, vehicleNumber: d.vehicleNumber });
+    setEditForm({
+      name: d.userId?.name || '', mobile: d.userId?.mobile || '', licenseNumber: d.licenseNumber, vehicleType: d.vehicleType, vehicleNumber: d.vehicleNumber,
+      serviceCategory: d.serviceCategory || 'private-hire',
+      hasSecurityCamera: !!d.hasSecurityCamera,
+      passengerEndorsementNumber: d.passengerEndorsementNumber || '',
+      passengerEndorsementExpiry: d.passengerEndorsementExpiry ? d.passengerEndorsementExpiry.slice(0, 10) : '',
+      vehicleCofExpiry: d.vehicleCofExpiry ? d.vehicleCofExpiry.slice(0, 10) : '',
+    });
   }
 
   async function saveEdit(id) {
@@ -144,7 +157,12 @@ export default function AdminDashboard() {
                         </div>
                       )}
                     </td>
-                    <td><span className={`badge ${d.status}`}>{d.status}</span></td>
+                    <td>
+                      <span className={`badge ${d.status}`}>{d.status}</span>
+                      {d.compliance && !d.compliance.compliant && (
+                        <div className="muted" title={d.compliance.issues.join('; ')}><span className="badge cancelled">NZTA: incomplete</span></div>
+                      )}
+                    </td>
                     <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       {d.status === 'pending' && <>
                         <button className="btn" onClick={() => approve(d._id)}>Approve</button>
@@ -180,6 +198,26 @@ export default function AdminDashboard() {
                           </div>
                           <div><label>Vehicle number</label><input value={editForm.vehicleNumber} onChange={(e) => setEditForm((f) => ({ ...f, vehicleNumber: e.target.value }))} /></div>
                         </div>
+                        <h4 style={{ marginBottom: 4 }}>NZTA compliance (SPSV)</h4>
+                        <p className="muted" style={{ marginTop: 0 }}>Private Hire needs no in-vehicle camera; Taxi category does.</p>
+                        <div className="grid cols-2">
+                          <div>
+                            <label>Service category</label>
+                            <select value={editForm.serviceCategory} onChange={(e) => setEditForm((f) => ({ ...f, serviceCategory: e.target.value }))}>
+                              <option value="private-hire">Private Hire (no camera)</option>
+                              <option value="taxi">Taxi (camera required)</option>
+                            </select>
+                          </div>
+                          {editForm.serviceCategory === 'taxi' && (
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 20 }}>
+                              <input type="checkbox" style={{ width: 'auto' }} checked={editForm.hasSecurityCamera} onChange={(e) => setEditForm((f) => ({ ...f, hasSecurityCamera: e.target.checked }))} />
+                              Has approved security camera
+                            </label>
+                          )}
+                          <div><label>Passenger (P) endorsement #</label><input value={editForm.passengerEndorsementNumber} onChange={(e) => setEditForm((f) => ({ ...f, passengerEndorsementNumber: e.target.value }))} /></div>
+                          <div><label>Endorsement expiry</label><input type="date" value={editForm.passengerEndorsementExpiry} onChange={(e) => setEditForm((f) => ({ ...f, passengerEndorsementExpiry: e.target.value }))} /></div>
+                          <div><label>Vehicle CoF expiry</label><input type="date" value={editForm.vehicleCofExpiry} onChange={(e) => setEditForm((f) => ({ ...f, vehicleCofExpiry: e.target.value }))} /></div>
+                        </div>
                         {editError && <p className="error-text">{editError}</p>}
                         <button className="btn" style={{ marginTop: 8 }} onClick={() => saveEdit(d._id)}>Save changes</button>
                       </td>
@@ -208,6 +246,26 @@ export default function AdminDashboard() {
             </div>
             <div><label>Vehicle number</label><input value={form.vehicleNumber} onChange={(e) => update('vehicleNumber', e.target.value)} required /></div>
             <div><label>Rate per km ($)</label><input type="number" step="0.1" value={form.ratePerKm} onChange={(e) => update('ratePerKm', e.target.value)} /></div>
+
+            <h4 style={{ marginBottom: 4 }}>NZTA compliance (SPSV)</h4>
+            <p className="muted" style={{ marginTop: 0 }}>Private Hire needs no in-vehicle camera; Taxi category does.</p>
+            <div>
+              <label>Service category</label>
+              <select value={form.serviceCategory} onChange={(e) => update('serviceCategory', e.target.value)}>
+                <option value="private-hire">Private Hire (no camera)</option>
+                <option value="taxi">Taxi (camera required)</option>
+              </select>
+            </div>
+            {form.serviceCategory === 'taxi' && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input type="checkbox" style={{ width: 'auto' }} checked={form.hasSecurityCamera} onChange={(e) => update('hasSecurityCamera', e.target.checked)} />
+                Has approved security camera
+              </label>
+            )}
+            <div><label>Passenger (P) endorsement #</label><input value={form.passengerEndorsementNumber} onChange={(e) => update('passengerEndorsementNumber', e.target.value)} /></div>
+            <div><label>Endorsement expiry</label><input type="date" value={form.passengerEndorsementExpiry} onChange={(e) => update('passengerEndorsementExpiry', e.target.value)} /></div>
+            <div><label>Vehicle CoF expiry</label><input type="date" value={form.vehicleCofExpiry} onChange={(e) => update('vehicleCofExpiry', e.target.value)} /></div>
+
             {error && <p className="error-text">{error}</p>}
             <button className="btn">Add driver</button>
           </form>

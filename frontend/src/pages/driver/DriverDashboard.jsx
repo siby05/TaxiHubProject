@@ -13,14 +13,15 @@ export default function DriverDashboard() {
   const [availError, setAvailError] = useState('');
   const [newRate, setNewRate] = useState('');
   const [rateMsg, setRateMsg] = useState('');
+  const [showAllTrips, setShowAllTrips] = useState(false);
 
   function load() {
-    fetchDriverBookings();
+    fetchDriverBookings(showAllTrips ? { all: true } : undefined);
     client.get('/driver/profile').then((r) => setProfile(r.data));
     client.get('/driver/earnings').then((r) => setEarnings(r.data));
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [showAllTrips]);
 
   useSocket({
     'booking:new': (booking) => {
@@ -72,6 +73,11 @@ export default function DriverDashboard() {
     <div className="container">
       <h1>Driver dashboard</h1>
       {alert && <div className="card" style={{ background: '#fef3c7' }}>{alert} <button className="btn secondary" onClick={() => setAlert('')}>Dismiss</button></div>}
+      {profile?.compliance && !profile.compliance.compliant && (
+        <div className="card" style={{ background: '#fef3c7' }}>
+          ⚠️ <strong>NZTA compliance incomplete:</strong> {profile.compliance.issues.join('; ')}. Contact an admin to update your record - this blocks going online.
+        </div>
+      )}
 
       {profile && (
         <div className="card">
@@ -110,7 +116,10 @@ export default function DriverDashboard() {
       )}
 
       <div className="card">
-        <h3>Bookings</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 style={{ margin: 0 }}>Bookings {!showAllTrips && <span className="muted" style={{ fontWeight: 400 }}>(last 30 days)</span>}</h3>
+          <button className="btn secondary" onClick={() => setShowAllTrips((v) => !v)}>{showAllTrips ? 'Show last 30 days' : 'Show all history'}</button>
+        </div>
         {bookings.length === 0 && <p className="muted">No bookings yet.</p>}
         <table>
           <tbody>
@@ -118,7 +127,9 @@ export default function DriverDashboard() {
               <tr key={b._id}>
                 <td>
                   <div>{b.pickupAddress} → {b.dropAddress}</div>
-                  <div className="muted">{b.passengerId?.name} · {b.distanceKm} km · est. ${b.estimatedFare}</div>
+                  <div className="muted">
+                    {b.passengerId?.name} · {b.distanceKm} km · est. ${b.estimatedFare} · {b.paymentMethod === 'card' ? (b.paymentStatus === 'paid' ? 'paid online' : 'awaiting online payment') : 'cash'}
+                  </div>
                   {b.status === 'completed' && !b.passengerRating && (
                     <StarRating label="Rate this passenger" submitLabel="Rate" onSubmit={(rating, review) => ratePassenger(b._id, rating, review)} />
                   )}

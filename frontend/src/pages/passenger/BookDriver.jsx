@@ -15,6 +15,7 @@ export default function BookDriver() {
   const [pickup, setPickup] = useState(null);
   const [drop, setDrop] = useState(null);
   const [scheduledFor, setScheduledFor] = useState(null);
+  const [paymentMethod, setPaymentMethod] = useState('cash');
   const [quote, setQuote] = useState(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [error, setError] = useState('');
@@ -58,6 +59,7 @@ export default function BookDriver() {
         pickupAddress: pickup.label, pickupLat: pickup.lat, pickupLng: pickup.lng,
         dropAddress: drop.label, dropLat: drop.lat, dropLng: drop.lng,
         scheduledFor,
+        paymentMethod,
       });
       navigate('/passenger');
     } catch (err) {
@@ -156,6 +158,20 @@ export default function BookDriver() {
           <AddressAutocomplete label="Pickup address" onSelect={setPickup} required allowLocate />
           <AddressAutocomplete label="Drop address" onSelect={setDrop} required />
           <ScheduleField onChange={setScheduledFor} />
+
+          <div>
+            <label>Payment</label>
+            <div style={{ display: 'flex', gap: 16 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input type="radio" style={{ width: 'auto' }} checked={paymentMethod === 'cash'} onChange={() => setPaymentMethod('cash')} /> Cash to driver
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input type="radio" style={{ width: 'auto' }} checked={paymentMethod === 'card'} onChange={() => setPaymentMethod('card')} /> Pay online
+              </label>
+            </div>
+            {paymentMethod === 'card' && scheduledFor && <p className="muted">You'll be able to pay once the driver accepts.</p>}
+            {paymentMethod === 'card' && !scheduledFor && <p className="muted">You'll get a "Pay now" option right after booking.</p>}
+          </div>
 
           {quoteLoading && <p className="muted">Calculating fare...</p>}
 
