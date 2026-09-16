@@ -1,0 +1,126 @@
+:root {
+  --bg: #0f172a;
+  --surface: #ffffff;
+  --text: #1e293b;
+  --muted: #64748b;
+  --primary: #ea580c;
+  --primary-dark: #c2410c;
+  --border: #e2e8f0;
+  --success: #16a34a;
+  --danger: #dc2626;
+  --warning: #d97706;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: #f8fafc;
+  color: var(--text);
+}
+
+a { color: var(--primary); text-decoration: none; }
+
+.container { max-width: 1080px; margin: 0 auto; padding: 24px 16px; }
+
+.navbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+  background: var(--bg);
+  color: white;
+}
+.navbar .brand { font-weight: 700; font-size: 1.15rem; color: white; }
+.navbar nav { display: flex; gap: 16px; align-items: center; }
+.navbar nav a, .navbar nav button {
+  color: #e2e8f0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+}
+.navbar nav a.active, .navbar nav a:hover, .navbar nav button:hover { color: var(--primary); }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.grid { display: grid; gap: 16px; }
+.grid.cols-2 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.grid.cols-4 { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+
+.stat { text-align: center; }
+.stat .value { font-size: 1.8rem; font-weight: 700; color: var(--primary); }
+.stat .label { color: var(--muted); font-size: 0.85rem; }
+
+form { display: flex; flex-direction: column; gap: 12px; }
+label { font-size: 0.85rem; color: var(--muted); font-weight: 600; }
+input, select, textarea {
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+  width: 100%;
+}
+textarea { resize: vertical; min-height: 80px; }
+
+button.btn {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  background: var(--primary);
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+}
+button.btn:hover { background: var(--primary-dark); }
+button.btn.secondary { background: #e2e8f0; color: var(--text); }
+button.btn.danger { background: var(--danger); }
+button.btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+.badge.pending, .badge.open { background: #fef3c7; color: var(--warning); }
+.badge.accepted, .badge.investigating { background: #dbeafe; color: #1d4ed8; }
+.badge.in-progress { background: #ede9fe; color: #6d28d9; }
+.badge.completed, .badge.resolved, .badge.approved { background: #dcfce7; color: var(--success); }
+.badge.cancelled, .badge.rejected, .badge.escalated { background: #fee2e2; color: var(--danger); }
+.badge.closed { background: #e2e8f0; color: var(--muted); }
+.badge.critical { background: #fee2e2; color: var(--danger); }
+
+.error-text { color: var(--danger); font-size: 0.9rem; }
+.muted { color: var(--muted); font-size: 0.9rem; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+.auth-shell { max-width: 380px; margin: 60px auto; }
+.tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.tabs button { padding: 8px 14px; border-radius: 6px; border: 1px solid var(--border); background: white; cursor: pointer; }
+.tabs button.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+/* Responsive: phones and small tablets */
+@media (max-width: 640px) {
+  .navbar { flex-wrap: wrap; gap: 8px; padding: 10px 14px; }
+  .navbar nav { flex-wrap: wrap; gap: 10px; font-size: 0.85rem; }
+  .container { padding: 16px 12px; }
+  .grid.cols-4 { grid-template-columns: repeat(2, 1fr); }
+  .auth-shell { margin: 24px auto; max-width: 100%; }
+  table { display: block; overflow-x: auto; white-space: nowrap; }
+  .card { padding: 14px; }
+  h1 { font-size: 1.4rem; }
+}
+
+@media (max-width: 400px) {
+  .grid.cols-4 { grid-template-columns: 1fr; }
+}

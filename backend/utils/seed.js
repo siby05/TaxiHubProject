@@ -1,0 +1,42 @@
+const bcrypt = require('bcryptjs');
+const User = require('../models/User');
+const Driver = require('../models/Driver');
+
+// Seeds one admin, one approved driver and one passenger so every role can
+// be tested immediately without a registration flow for driver/admin
+// (matches the "admin-managed driver accounts, no public driver signup" spec).
+module.exports = async function seed() {
+  const existing = await User.findOne({ email: 'admin@taxihub.local' });
+  if (existing) return;
+
+  const password = await bcrypt.hash('password123', 10);
+
+  await User.create({
+    name: 'Admin', email: 'admin@taxihub.local', password, role: 'admin', isActive: true, emailVerified: true,
+  });
+
+  const driverUser = await User.create({
+    name: 'Demo Driver', email: 'driver@taxihub.local', password, mobile: '0210000000', role: 'driver', isActive: true, emailVerified: true,
+  });
+  await Driver.create({
+    userId: driverUser._id,
+    licenseNumber: 'NZ-DL-12345',
+    vehicleType: 'Comfort',
+    vehicleNumber: 'ABC123',
+    ratePerKm: 1.8,
+    status: 'approved',
+    isAvailable: true,
+    rating: 4.8,
+    totalTrips: 0,
+    totalEarnings: 0,
+  });
+
+  await User.create({
+    name: 'Demo Passenger', email: 'passenger@taxihub.local', password, mobile: '0210000001', role: 'passenger', isActive: true, emailVerified: true,
+  });
+
+  console.log('[seed] demo accounts ready (password for all: "password123"):');
+  console.log('  admin@taxihub.local     (admin)');
+  console.log('  driver@taxihub.local    (driver, approved & available)');
+  console.log('  passenger@taxihub.local (passenger)');
+};

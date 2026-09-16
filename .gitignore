@@ -1,0 +1,9 @@
+node_modules/
+dist/
+build/
+.env
+!*.env.example
+backend/uploads/complaints/*
+!backend/uploads/complaints/.gitkeep
+*.log
+.DS_Store
