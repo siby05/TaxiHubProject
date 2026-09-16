@@ -26,8 +26,13 @@ export default function BookDriver() {
     if (!user || user.role !== 'passenger') return;
     client.get(`/booking/driver-info/${driverId}`)
       .then((r) => setDriver(r.data))
-      .catch(() => setNotFound(true));
+      .catch((err) => { if (err.response?.status === 404) setNotFound(true); });
   }, [user, driverId]);
+
+  // Only hail the specific driver when they're still approved; otherwise
+  // send no driverId at all so the backend auto-matches any available
+  // driver (same fallback the backend also applies defensively itself).
+  const effectiveDriverId = driver?.available ? driverId : undefined;
 
   useEffect(() => {
     setQuote(null);
@@ -35,19 +40,19 @@ export default function BookDriver() {
     if (!pickup || !drop) return;
     let cancelled = false;
     setQuoteLoading(true);
-    client.post('/booking/quote', { driverId, pickupLat: pickup.lat, pickupLng: pickup.lng, dropLat: drop.lat, dropLng: drop.lng })
+    client.post('/booking/quote', { driverId: effectiveDriverId, pickupLat: pickup.lat, pickupLng: pickup.lng, dropLat: drop.lat, dropLng: drop.lng })
       .then((r) => { if (!cancelled) setQuote(r.data); })
       .catch((err) => { if (!cancelled) setError(err.response?.data?.error || 'Could not calculate fare'); })
       .finally(() => { if (!cancelled) setQuoteLoading(false); });
     return () => { cancelled = true; };
-  }, [pickup, drop, driverId]);
+  }, [pickup, drop, effectiveDriverId]);
 
   async function confirmBooking() {
     setError('');
     setLoading(true);
     try {
       await client.post('/booking', {
-        driverId,
+        driverId: effectiveDriverId,
         pickupAddress: pickup.label, pickupLat: pickup.lat, pickupLng: pickup.lng,
         dropAddress: drop.label, dropLat: drop.lat, dropLng: drop.lng,
       });
@@ -67,9 +72,14 @@ export default function BookDriver() {
           <h1>Your ride, on your terms.</h1>
           <p className="tagline">Upfront fares, direct booking with the driver in front of you, and live updates the moment they accept.</p>
 
-          {preview && (
+          {preview && preview.available && (
             <div className="driver-chip">
               🚖 <strong>{preview.name}</strong> · {preview.vehicleType} · ⭐ {preview.rating || 'new'}
+            </div>
+          )}
+          {preview && !preview.available && (
+            <div className="card" style={{ background: '#fef3c7', maxWidth: 420, margin: '0 auto 20px', textAlign: 'left' }}>
+              ⚠️ <strong>{preview.name || 'This driver'}</strong> isn't currently taking bookings. Sign up or log in and we'll match you with an available driver instead.
             </div>
           )}
 
@@ -100,10 +110,20 @@ export default function BookDriver() {
   return (
     <div className="container">
       <div className="card" style={{ maxWidth: 480 }}>
-        <h2>Book this driver</h2>
-        {driver ? (
+        <h2>{driver?.available === false ? 'Book a ride' : 'Book this driver'}</h2>
+
+        {!driver && <p className="muted">Loading driver details...</p>}
+
+        {driver?.available && (
           <p className="muted">{driver.name} · {driver.vehicleType} · {driver.vehicleNumber} · ${driver.ratePerKm}/km · ⭐ {driver.rating || 'new'}</p>
-        ) : <p className="muted">Loading driver details...</p>}
+        )}
+
+        {driver && driver.available === false && (
+          <div className="card" style={{ background: '#fef3c7' }}>
+            ⚠️ <strong>{driver.requestedName || 'This driver'}</strong> isn't currently taking bookings ({driver.vehicleType} · {driver.vehicleNumber}).
+            We'll match you with the next available driver instead.
+          </div>
+        )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <AddressAutocomplete label="Pickup address" onSelect={setPickup} required />
@@ -117,7 +137,7 @@ export default function BookDriver() {
               <div className="muted">{quote.distanceKm} km</div>
               {error && <p className="error-text">{error}</p>}
               <button className="btn" style={{ marginTop: 8 }} onClick={confirmBooking} disabled={loading || !driver}>
-                {loading ? 'Requesting...' : 'Confirm & request this driver'}
+                {loading ? 'Requesting...' : effectiveDriverId ? 'Confirm & request this driver' : 'Confirm & request ride'}
               </button>
             </div>
           )}

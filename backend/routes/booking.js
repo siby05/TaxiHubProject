@@ -12,20 +12,58 @@ function emitToUser(req, userId, event, payload) {
   if (io) io.to(String(userId)).emit(event, payload);
 }
 
+// Resolves who a booking/quote should go to: the requested driver if
+// they're still approved, otherwise falls back to any available approved
+// driver (same as a QR code for a driver who's since been rejected or
+// deactivated - the passenger still gets a ride, just not that specific
+// driver). requestedUnavailable/requestedName let the caller show a
+// warning; a null driver with requestedUnavailable true means the
+// fallback itself came up empty ("no drivers available").
+async function resolveDriver(driverId) {
+  let requestedUnavailable = false;
+  let requestedName = null;
+
+  if (driverId) {
+    const requested = await Driver.findById(driverId).populate('userId', 'name');
+    if (requested && requested.status === 'approved') {
+      return { driver: requested, usedFallback: false, requestedUnavailable: false, requestedName: null };
+    }
+    if (requested) {
+      requestedUnavailable = true;
+      requestedName = requested.userId?.name || null;
+    }
+  }
+
+  const available = await Driver.find({ isAvailable: true, status: 'approved' });
+  return { driver: available[0] || null, usedFallback: !!driverId, requestedUnavailable, requestedName };
+}
+
+function noDriverError(requestedUnavailable, requestedName) {
+  return requestedUnavailable
+    ? `${requestedName || 'That driver'} isn't currently active, and no other drivers are available right now. Please try again shortly.`
+    : 'No drivers are available right now. Please try again shortly.';
+}
+
 // GET /api/booking/driver-preview/:id - unauthenticated, minimal driver info
 // for the QR landing page shown before a scanning passenger has signed in.
 router.get('/driver-preview/:id', async (req, res) => {
   const driver = await Driver.findById(req.params.id).populate('userId', 'name');
-  if (!driver || driver.status !== 'approved') return res.status(404).json({ error: 'Driver not available' });
-  res.json({ name: driver.userId?.name, vehicleType: driver.vehicleType, rating: driver.rating });
+  if (!driver) return res.status(404).json({ error: 'Driver not found' });
+  res.json({ available: driver.status === 'approved', name: driver.userId?.name, vehicleType: driver.vehicleType, rating: driver.rating });
 });
 
 // GET /api/booking/driver-info/:id - basic public-facing details for the QR
 // scan-to-book flow (passenger sees who they're booking before confirming).
+// available:false (driver exists but isn't approved) is not a 404 - the
+// frontend uses it to show a warning and fall back to auto-matching.
 router.get('/driver-info/:id', auth, roleMiddleware(['passenger']), async (req, res) => {
   const driver = await Driver.findById(req.params.id).populate('userId', 'name');
-  if (!driver || driver.status !== 'approved') return res.status(404).json({ error: 'Driver not available for booking' });
+  if (!driver) return res.status(404).json({ error: 'Driver not found' });
+  if (driver.status !== 'approved') {
+    return res.json({ available: false, requestedName: driver.userId?.name, vehicleType: driver.vehicleType, vehicleNumber: driver.vehicleNumber });
+  }
   res.json({
+    available: true,
     _id: driver._id,
     name: driver.userId?.name,
     vehicleType: driver.vehicleType,
@@ -37,7 +75,7 @@ router.get('/driver-info/:id', auth, roleMiddleware(['passenger']), async (req, 
 
 // POST /api/booking/quote - preview distance/fare before confirming, so the
 // UI can show "Estimated fare: $X - Confirm booking?" without creating a
-// booking yet. Uses the same fare math as the real POST / below.
+// booking yet. Uses the same fare math and driver-fallback as POST / below.
 router.post('/quote', auth, roleMiddleware(['passenger']), async (req, res) => {
   try {
     const { pickupLat, pickupLng, dropLat, dropLng, driverId } = req.body;
@@ -45,20 +83,12 @@ router.post('/quote', auth, roleMiddleware(['passenger']), async (req, res) => {
       return res.status(400).json({ error: 'pickup and drop coordinates are required' });
     }
 
-    let ratePerKm;
-    if (driverId) {
-      const driver = await Driver.findById(driverId);
-      if (!driver || driver.status !== 'approved') return res.status(404).json({ error: 'Driver not available' });
-      ratePerKm = driver.ratePerKm;
-    } else {
-      const available = await Driver.find({ isAvailable: true, status: 'approved' });
-      if (!available[0]) return res.status(404).json({ error: 'No available drivers right now' });
-      ratePerKm = available[0].ratePerKm;
-    }
+    const { driver, usedFallback, requestedUnavailable, requestedName } = await resolveDriver(driverId);
+    if (!driver) return res.status(404).json({ error: noDriverError(requestedUnavailable, requestedName), requestedUnavailable });
 
     const distanceKm = Math.round(haversineKm(pickupLat, pickupLng, dropLat, dropLng) * 100) / 100;
-    const estimatedFare = calculateFare(distanceKm, ratePerKm);
-    res.json({ distanceKm, estimatedFare });
+    const estimatedFare = calculateFare(distanceKm, driver.ratePerKm);
+    res.json({ distanceKm, estimatedFare, usedFallback, requestedUnavailable, requestedName });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -67,7 +97,9 @@ router.post('/quote', auth, roleMiddleware(['passenger']), async (req, res) => {
 // POST /api/booking - passenger requests a ride (omit driverId to auto-match
 // any available driver; pass driverId to hail a specific driver, e.g. via
 // their QR code - that request goes through even if they haven't toggled
-// "available", same as flagging a cab in person).
+// "available", same as flagging a cab in person). If the requested driver
+// is no longer approved, falls back to any available driver instead of
+// failing outright - see resolveDriver above.
 router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
   try {
     const { pickupAddress, pickupLat, pickupLng, dropAddress, dropLat, dropLng, driverId } = req.body;
@@ -80,15 +112,8 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
       return res.status(403).json({ error: 'Your account is restricted from making new bookings. Contact support.' });
     }
 
-    let driver = null;
-    if (driverId) {
-      driver = await Driver.findById(driverId);
-      if (driver && driver.status !== 'approved') driver = null;
-    } else {
-      const available = await Driver.find({ isAvailable: true, status: 'approved' });
-      driver = available[0] || null;
-    }
-    if (!driver) return res.status(404).json({ error: 'No available drivers right now' });
+    const { driver, usedFallback, requestedUnavailable, requestedName } = await resolveDriver(driverId);
+    if (!driver) return res.status(404).json({ error: noDriverError(requestedUnavailable, requestedName), requestedUnavailable });
 
     const distanceKm = Math.round(haversineKm(pickupLat, pickupLng, dropLat, dropLng) * 100) / 100;
     const estimatedFare = calculateFare(distanceKm, driver.ratePerKm);
@@ -116,7 +141,7 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
 
     emitToUser(req, driver.userId, 'booking:new', booking);
 
-    res.status(201).json(booking);
+    res.status(201).json({ ...booking, usedFallback, requestedUnavailable, requestedName });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
