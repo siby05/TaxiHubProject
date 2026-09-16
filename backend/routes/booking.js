@@ -76,15 +76,27 @@ router.get('/driver-info/:id', auth, roleMiddleware(['passenger']), async (req, 
 // POST /api/booking/quote - preview distance/fare before confirming, so the
 // UI can show "Estimated fare: $X - Confirm booking?" without creating a
 // booking yet. Uses the same fare math and driver-fallback as POST / below.
-router.post('/quote', auth, roleMiddleware(['passenger']), async (req, res) => {
+// A driver caller (booking for a passenger) always quotes against their own
+// rate rather than auto-matching/falling back.
+router.post('/quote', auth, roleMiddleware(['passenger', 'driver']), async (req, res) => {
   try {
     const { pickupLat, pickupLng, dropLat, dropLng, driverId } = req.body;
     if (pickupLat == null || pickupLng == null || dropLat == null || dropLng == null) {
       return res.status(400).json({ error: 'pickup and drop coordinates are required' });
     }
 
-    const { driver, usedFallback, requestedUnavailable, requestedName } = await resolveDriver(driverId);
-    if (!driver) return res.status(404).json({ error: noDriverError(requestedUnavailable, requestedName), requestedUnavailable });
+    let driver;
+    let usedFallback = false;
+    let requestedUnavailable = false;
+    let requestedName = null;
+
+    if (req.user.role === 'driver') {
+      driver = await Driver.findOne({ userId: req.user.id });
+      if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
+    } else {
+      ({ driver, usedFallback, requestedUnavailable, requestedName } = await resolveDriver(driverId));
+      if (!driver) return res.status(404).json({ error: noDriverError(requestedUnavailable, requestedName), requestedUnavailable });
+    }
 
     const distanceKm = Math.round(haversineKm(pickupLat, pickupLng, dropLat, dropLng) * 100) / 100;
     const estimatedFare = calculateFare(distanceKm, driver.ratePerKm);
@@ -102,9 +114,12 @@ router.post('/quote', auth, roleMiddleware(['passenger']), async (req, res) => {
 // failing outright - see resolveDriver above.
 router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
   try {
-    const { pickupAddress, pickupLat, pickupLng, dropAddress, dropLat, dropLng, driverId } = req.body;
+    const { pickupAddress, pickupLat, pickupLng, dropAddress, dropLat, dropLng, driverId, scheduledFor } = req.body;
     if (!pickupAddress || !dropAddress || pickupLat == null || dropLat == null) {
       return res.status(400).json({ error: 'pickupAddress, dropAddress and lat/lng for both are required' });
+    }
+    if (scheduledFor && new Date(scheduledFor) <= new Date()) {
+      return res.status(400).json({ error: 'scheduledFor must be a time in the future' });
     }
 
     const requestingPassenger = await User.findById(req.user.id);
@@ -132,6 +147,7 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
       status: 'pending',
       paymentStatus: 'unpaid',
       requestedAt: new Date(),
+      scheduledFor: scheduledFor ? new Date(scheduledFor) : null,
     });
 
     const passenger = await User.findById(req.user.id);

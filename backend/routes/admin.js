@@ -124,6 +124,7 @@ router.post('/drivers', async (req, res) => {
       vehicleNumber,
       ratePerKm: ratePerKm || Number(process.env.DEFAULT_RATE_PER_KM) || 1.8,
       pendingRatePerKm: null,
+      feeOverride: null,
       status: 'pending',
       isAvailable: false,
       rating: 0,
@@ -143,6 +144,38 @@ router.post('/drivers', async (req, res) => {
 router.get('/drivers', async (req, res) => {
   const drivers = await Driver.find({}).populate('userId', 'name email mobile isActive');
   res.json(drivers);
+});
+
+// GET /api/admin/drivers/:id - single driver (for the report/fee-override pages)
+router.get('/drivers/:id', async (req, res) => {
+  const driver = await Driver.findById(req.params.id).populate('userId', 'name email mobile isActive');
+  if (!driver) return res.status(404).json({ error: 'Driver not found' });
+  res.json(driver);
+});
+
+// PUT /api/admin/drivers/:id/fee-settings - override the platform-wide
+// commission policy for just this driver (e.g. a negotiated lower rate).
+router.put('/drivers/:id/fee-settings', async (req, res) => {
+  const { commissionType, commissionPercent, weeklyFlatFee } = req.body;
+  if (commissionType && !['per-trip-percent', 'weekly-flat'].includes(commissionType)) {
+    return res.status(400).json({ error: 'commissionType must be "per-trip-percent" or "weekly-flat"' });
+  }
+  const driver = await Driver.findById(req.params.id);
+  if (!driver) return res.status(404).json({ error: 'Driver not found' });
+
+  const feeOverride = {
+    ...(commissionType && { commissionType }),
+    ...(commissionPercent != null && { commissionPercent: Number(commissionPercent) }),
+    ...(weeklyFlatFee != null && { weeklyFlatFee: Number(weeklyFlatFee) }),
+  };
+  const updated = await Driver.findByIdAndUpdate(driver._id, { feeOverride });
+  res.json(updated);
+});
+
+// DELETE /api/admin/drivers/:id/fee-settings - revert this driver to the platform default
+router.delete('/drivers/:id/fee-settings', async (req, res) => {
+  const updated = await Driver.findByIdAndUpdate(req.params.id, { feeOverride: null });
+  res.json(updated);
 });
 
 // PUT /api/admin/drivers/:id - edit driver/vehicle details

@@ -28,7 +28,10 @@ function addDays(date, n) {
  * (per routes/driver.js) blocks the driver from going available again.
  */
 async function getDriverBilling(driver) {
-  const settings = getSettings();
+  // A per-driver feeOverride only needs to carry the fields that differ -
+  // merge over the platform default so a partial override (e.g. just a
+  // different commissionPercent) still gets a valid commissionType/fee.
+  const settings = driver.feeOverride ? { ...getSettings(), ...driver.feeOverride } : getSettings();
   const trips = await Booking.find({ driverId: driver._id, status: 'completed' });
   const payments = await WeeklyPayment.find({ driverId: driver._id });
 

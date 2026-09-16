@@ -4,12 +4,14 @@ import client from '../../api/client';
 import { useBookingStore } from '../../store/bookingStore';
 import { useSocket } from '../../hooks/useSocket';
 import AddressAutocomplete from '../../components/AddressAutocomplete';
+import ScheduleField from '../../components/ScheduleField';
 
 export default function PassengerDashboard() {
   const { bookings, fetchMine, createBooking } = useBookingStore();
   const [stats, setStats] = useState(null);
   const [pickup, setPickup] = useState(null);
   const [drop, setDrop] = useState(null);
+  const [scheduledFor, setScheduledFor] = useState(null);
   const [formKey, setFormKey] = useState(0); // bump to reset the autocomplete inputs after booking
   const [quote, setQuote] = useState(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
@@ -51,9 +53,11 @@ export default function PassengerDashboard() {
       await createBooking({
         pickupAddress: pickup.label, pickupLat: pickup.lat, pickupLng: pickup.lng,
         dropAddress: drop.label, dropLat: drop.lat, dropLng: drop.lng,
+        scheduledFor,
       });
       setPickup(null);
       setDrop(null);
+      setScheduledFor(null);
       setQuote(null);
       setFormKey((k) => k + 1);
     } catch (err) {
@@ -80,15 +84,16 @@ export default function PassengerDashboard() {
         <div className="card">
           <h3>Book a ride</h3>
           <div key={formKey} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <AddressAutocomplete label="Pickup address" onSelect={setPickup} required />
+            <AddressAutocomplete label="Pickup address" onSelect={setPickup} required allowLocate />
             <AddressAutocomplete label="Drop address" onSelect={setDrop} required />
+            <ScheduleField onChange={setScheduledFor} />
 
             {quoteLoading && <p className="muted">Calculating fare...</p>}
 
             {quote && !quoteLoading && (
               <div className="card fare-confirm">
                 <strong>Estimated fare: ${quote.estimatedFare.toFixed(2)}</strong>
-                <div className="muted">{quote.distanceKm} km</div>
+                <div className="muted">{quote.distanceKm} km{scheduledFor && ` · scheduled for ${new Date(scheduledFor).toLocaleString()}`}</div>
                 {error && <p className="error-text">{error}</p>}
                 <button className="btn" style={{ marginTop: 8 }} onClick={confirmBooking} disabled={loading}>
                   {loading ? 'Booking...' : 'Confirm & request ride'}
@@ -110,6 +115,7 @@ export default function PassengerDashboard() {
                   <td>
                     <div>{b.pickupAddress} → {b.dropAddress}</div>
                     <div className="muted">{b.distanceKm} km · ${b.actualFare ?? b.estimatedFare}</div>
+                    {b.scheduledFor && <div className="muted">Scheduled: {new Date(b.scheduledFor).toLocaleString()}</div>}
                   </td>
                   <td><span className={`badge ${b.status}`}>{b.status}</span></td>
                   <td>{b.status === 'completed' && <Link to="/passenger/complaints/new" state={{ bookingId: b._id, driverName: b.driverId?.userId?.name }}>Lodge complaint</Link>}</td>

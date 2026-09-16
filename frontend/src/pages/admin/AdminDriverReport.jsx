@@ -6,12 +6,21 @@ export default function AdminDriverReport() {
   const { driverId } = useParams();
   const [trips, setTrips] = useState([]);
   const [billing, setBilling] = useState(null);
+  const [driver, setDriver] = useState(null);
   const [payForm, setPayForm] = useState({ weekStart: '', amount: '', note: '' });
   const [error, setError] = useState('');
+  const [feeOverrideOn, setFeeOverrideOn] = useState(false);
+  const [feeForm, setFeeForm] = useState({ commissionType: 'per-trip-percent', commissionPercent: 15, weeklyFlatFee: 50 });
+  const [feeMsg, setFeeMsg] = useState('');
 
   function load() {
     client.get(`/admin/drivers/${driverId}/trips`).then((r) => setTrips(r.data));
     client.get(`/admin/drivers/${driverId}/billing`).then((r) => setBilling(r.data));
+    client.get(`/admin/drivers/${driverId}`).then((r) => {
+      setDriver(r.data);
+      setFeeOverrideOn(!!r.data.feeOverride);
+      if (r.data.feeOverride) setFeeForm((f) => ({ ...f, ...r.data.feeOverride }));
+    });
   }
 
   useEffect(() => { load(); }, [driverId]);
@@ -28,12 +37,28 @@ export default function AdminDriverReport() {
     }
   }
 
+  async function saveFeeOverride(e) {
+    e.preventDefault();
+    setFeeMsg('');
+    try {
+      if (feeOverrideOn) {
+        await client.put(`/admin/drivers/${driverId}/fee-settings`, feeForm);
+      } else {
+        await client.delete(`/admin/drivers/${driverId}/fee-settings`);
+      }
+      setFeeMsg('Saved.');
+      load();
+    } catch (err) {
+      setFeeMsg(err.response?.data?.error || 'Could not save');
+    }
+  }
+
   const completedTrips = trips.filter((t) => t.status === 'completed');
 
   return (
     <div className="container">
       <Link to="/admin">← Back to dashboard</Link>
-      <h1>Driver report</h1>
+      <h1>Driver report{driver ? `: ${driver.userId?.name}` : ''}</h1>
 
       {billing && (
         <div className="grid cols-4">
@@ -43,6 +68,35 @@ export default function AdminDriverReport() {
           <div className="card stat"><div className="value">${billing.totalPending.toFixed(2)}</div><div className="label">Outstanding</div></div>
         </div>
       )}
+
+      <div className="card" style={{ maxWidth: 420 }}>
+        <h3>Fee override for this driver</h3>
+        <p className="muted">Currently using: {billing?.commissionType === 'weekly-flat' ? 'fixed weekly fee' : '% commission per trip'} {driver?.feeOverride ? '(custom for this driver)' : '(platform default)'}</p>
+        <form onSubmit={saveFeeOverride}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type="checkbox" style={{ width: 'auto' }} checked={feeOverrideOn} onChange={(e) => setFeeOverrideOn(e.target.checked)} />
+            Use a custom fee for this driver
+          </label>
+          {feeOverrideOn && (
+            <>
+              <div>
+                <label>Model</label>
+                <select value={feeForm.commissionType} onChange={(e) => setFeeForm((f) => ({ ...f, commissionType: e.target.value }))}>
+                  <option value="per-trip-percent">% commission per trip</option>
+                  <option value="weekly-flat">Fixed weekly access fee</option>
+                </select>
+              </div>
+              {feeForm.commissionType === 'per-trip-percent' ? (
+                <div><label>Commission (%)</label><input type="number" step="0.5" min="0" max="100" value={feeForm.commissionPercent} onChange={(e) => setFeeForm((f) => ({ ...f, commissionPercent: e.target.value }))} /></div>
+              ) : (
+                <div><label>Weekly fee ($)</label><input type="number" step="1" min="0" value={feeForm.weeklyFlatFee} onChange={(e) => setFeeForm((f) => ({ ...f, weeklyFlatFee: e.target.value }))} /></div>
+              )}
+            </>
+          )}
+          {feeMsg && <p className="muted">{feeMsg}</p>}
+          <button className="btn">Save</button>
+        </form>
+      </div>
 
       <div className="grid cols-2">
         <div className="card">

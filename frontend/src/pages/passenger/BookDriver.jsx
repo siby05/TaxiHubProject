@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import client from '../../api/client';
 import { useAuthStore } from '../../store/authStore';
 import AddressAutocomplete from '../../components/AddressAutocomplete';
+import ScheduleField from '../../components/ScheduleField';
 
 export default function BookDriver() {
   const { driverId } = useParams();
@@ -13,6 +14,7 @@ export default function BookDriver() {
   const [notFound, setNotFound] = useState(false);
   const [pickup, setPickup] = useState(null);
   const [drop, setDrop] = useState(null);
+  const [scheduledFor, setScheduledFor] = useState(null);
   const [quote, setQuote] = useState(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [error, setError] = useState('');
@@ -55,6 +57,7 @@ export default function BookDriver() {
         driverId: effectiveDriverId,
         pickupAddress: pickup.label, pickupLat: pickup.lat, pickupLng: pickup.lng,
         dropAddress: drop.label, dropLat: drop.lat, dropLng: drop.lng,
+        scheduledFor,
       });
       navigate('/passenger');
     } catch (err) {
@@ -126,15 +129,16 @@ export default function BookDriver() {
         )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <AddressAutocomplete label="Pickup address" onSelect={setPickup} required />
+          <AddressAutocomplete label="Pickup address" onSelect={setPickup} required allowLocate />
           <AddressAutocomplete label="Drop address" onSelect={setDrop} required />
+          <ScheduleField onChange={setScheduledFor} />
 
           {quoteLoading && <p className="muted">Calculating fare...</p>}
 
           {quote && !quoteLoading && (
             <div className="card fare-confirm">
               <strong>Estimated fare: ${quote.estimatedFare.toFixed(2)}</strong>
-              <div className="muted">{quote.distanceKm} km</div>
+              <div className="muted">{quote.distanceKm} km{scheduledFor && ` · scheduled for ${new Date(scheduledFor).toLocaleString()}`}</div>
               {error && <p className="error-text">{error}</p>}
               <button className="btn" style={{ marginTop: 8 }} onClick={confirmBooking} disabled={loading || !driver}>
                 {loading ? 'Requesting...' : effectiveDriverId ? 'Confirm & request this driver' : 'Confirm & request ride'}
