@@ -17,6 +17,13 @@ function addDays(date, n) {
   return d;
 }
 
+// Same feeOverride-merge logic getDriverBilling uses, exposed standalone
+// for callers (Stripe Connect destination charges) that just need the
+// commission rate for one trip rather than the full weekly ledger.
+function getEffectiveCommissionSettings(driver) {
+  return driver.feeOverride ? { ...getSettings(), ...driver.feeOverride } : getSettings();
+}
+
 /**
  * Builds the driver's weekly commission/fee ledger:
  * - 'per-trip-percent': one row per week that had >=1 completed trip.
@@ -107,4 +114,4 @@ async function getDriverBilling(driver) {
   };
 }
 
-module.exports = { getDriverBilling, getWeekStart, addDays };
+module.exports = { getDriverBilling, getWeekStart, addDays, getEffectiveCommissionSettings };

@@ -1,7 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const Booking = require('../models/Booking');
+const Driver = require('../models/Driver');
 const { auth, roleMiddleware } = require('../middleware/auth');
+const { getEffectiveCommissionSettings } = require('../utils/billing');
 
 let stripe = null;
 if (process.env.STRIPE_SECRET_KEY) {
@@ -10,7 +12,12 @@ if (process.env.STRIPE_SECRET_KEY) {
 
 // POST /api/payment/create-intent
 // Uses real Stripe when STRIPE_SECRET_KEY is set; otherwise returns a mock
-// intent so the booking flow can be tested end-to-end without a Stripe account.
+// intent so the booking flow can be tested end-to-end without a Stripe
+// account. When the trip's driver has completed Stripe Connect onboarding
+// (see routes/stripeConnect.js), the charge is created as a destination
+// charge straight to their connected account, with the platform's
+// commission withheld as application_fee_amount - so the fare goes to the
+// driver, not the platform's pooled account, automatically net of the fee.
 router.post('/create-intent', auth, roleMiddleware(['passenger']), async (req, res) => {
   try {
     const { bookingId } = req.body;
@@ -23,7 +30,17 @@ router.post('/create-intent', auth, roleMiddleware(['passenger']), async (req, r
     const amount = Math.round((booking.actualFare || booking.estimatedFare) * 100);
 
     if (stripe) {
-      const intent = await stripe.paymentIntents.create({ amount, currency: 'nzd', metadata: { bookingId } });
+      const intentOptions = { amount, currency: 'nzd', metadata: { bookingId }, automatic_payment_methods: { enabled: true } };
+
+      const driver = await Driver.findById(booking.driverId);
+      if (driver?.stripeAccountId && driver.stripeChargesEnabled) {
+        const settings = getEffectiveCommissionSettings(driver);
+        const feePercent = settings.commissionType === 'per-trip-percent' ? settings.commissionPercent : 0;
+        intentOptions.application_fee_amount = Math.round(amount * (feePercent / 100));
+        intentOptions.transfer_data = { destination: driver.stripeAccountId };
+      }
+
+      const intent = await stripe.paymentIntents.create(intentOptions);
       await Booking.findByIdAndUpdate(bookingId, { paymentIntentId: intent.id });
       return res.json({ clientSecret: intent.client_secret, mock: false });
     }

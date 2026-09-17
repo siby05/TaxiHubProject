@@ -1,18 +1,68 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import client from '../../api/client';
 
 export default function DriverBilling() {
   const [billing, setBilling] = useState(null);
+  const [stripeStatus, setStripeStatus] = useState(null);
+  const [onboarding, setOnboarding] = useState(false);
+  const [stripeError, setStripeError] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  function loadStripeStatus() {
+    client.get('/driver/stripe/status').then((r) => setStripeStatus(r.data)).catch(() => {});
+  }
 
   useEffect(() => {
     client.get('/driver/billing').then((r) => setBilling(r.data));
+    loadStripeStatus();
+    if (searchParams.get('stripe')) {
+      setSearchParams({}, { replace: true });
+    }
   }, []);
+
+  async function startOnboarding() {
+    setStripeError('');
+    setOnboarding(true);
+    try {
+      const { data } = await client.post('/driver/stripe/onboard');
+      window.location.href = data.url;
+    } catch (err) {
+      setStripeError(err.response?.data?.error || 'Could not start Stripe onboarding');
+      setOnboarding(false);
+    }
+  }
 
   if (!billing) return <div className="container"><p className="muted">Loading...</p></div>;
 
   return (
     <div className="container">
       <h1>Platform fees</h1>
+
+      {stripeStatus?.configured && (
+        <div className="card" style={{ maxWidth: 480 }}>
+          <h3 style={{ marginTop: 0 }}>Get paid directly (Stripe)</h3>
+          {stripeStatus.chargesEnabled ? (
+            <p className="muted" style={{ color: 'var(--success)' }}>
+              ✅ Connected - online payments for your trips go straight to your bank account, with the platform fee
+              deducted automatically.
+            </p>
+          ) : (
+            <>
+              <p className="muted">
+                {stripeStatus.connected
+                  ? "You've started Stripe onboarding but it's not finished yet - Stripe still needs a few details before you can receive payouts."
+                  : 'Set up your own Stripe account so online trip payments pay out straight to you (minus the platform fee), instead of the platform holding the funds.'}
+              </p>
+              {stripeError && <p className="error-text">{stripeError}</p>}
+              <button className="btn" onClick={startOnboarding} disabled={onboarding}>
+                {onboarding ? 'Redirecting...' : stripeStatus.connected ? 'Continue Stripe setup' : 'Set up Stripe payouts'}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       <p className="muted">
         {billing.commissionType === 'weekly-flat'
           ? 'A fixed weekly fee keeps your account able to go online.'

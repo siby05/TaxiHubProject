@@ -17,6 +17,9 @@ const User = require('./User');
 // vehicleCofExpiry. Driver signup documents (see routes/driverSignup.js):
 // licenseDocUrl, tslDocUrl, cofDocUrl, regoDocUrl, documentsSubmitted
 // (bool), termsAcceptedAt (Date the driver accepted the T&Cs at signup).
+// Stripe Connect (see routes/stripeConnect.js): stripeAccountId (Express
+// connected account id, null until onboarding starts), stripeChargesEnabled
+// (bool - true once Stripe has verified them enough to receive payouts).
 const Driver = createModel('Driver', {
   userId: () => User.collection,
 });

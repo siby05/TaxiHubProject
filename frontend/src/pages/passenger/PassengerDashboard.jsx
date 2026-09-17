@@ -6,6 +6,7 @@ import { useSocket } from '../../hooks/useSocket';
 import AddressAutocomplete from '../../components/AddressAutocomplete';
 import ScheduleField from '../../components/ScheduleField';
 import StarRating from '../../components/StarRating';
+import StripePaymentModal from '../../components/StripePaymentModal';
 
 export default function PassengerDashboard() {
   const { bookings, fetchMine, createBooking } = useBookingStore();
@@ -17,6 +18,7 @@ export default function PassengerDashboard() {
   const [formKey, setFormKey] = useState(0); // bump to reset the autocomplete inputs after booking
   const [payingId, setPayingId] = useState(null);
   const [payError, setPayError] = useState('');
+  const [payModal, setPayModal] = useState(null);
   const [quote, setQuote] = useState(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [error, setError] = useState('');
@@ -79,13 +81,19 @@ export default function PassengerDashboard() {
 
   // Card bookings can be paid as soon as they exist (immediate) or only
   // once the driver has accepted (scheduled-for-later) - matches "later
-  // bookings pay online after confirmation".
+  // bookings pay online after confirmation". A real Stripe key configured
+  // opens an actual card-entry form (mock:false); without one, the backend
+  // auto-marks it paid immediately so the flow still works for testing.
   async function payNow(booking) {
     setPayError('');
     setPayingId(booking._id);
     try {
-      await client.post('/payment/create-intent', { bookingId: booking._id });
-      refresh();
+      const { data } = await client.post('/payment/create-intent', { bookingId: booking._id });
+      if (data.mock === false) {
+        setPayModal({ bookingId: booking._id, clientSecret: data.clientSecret });
+      } else {
+        refresh();
+      }
     } catch (err) {
       setPayError(err.response?.data?.error || 'Payment failed');
     } finally {
@@ -179,6 +187,15 @@ export default function PassengerDashboard() {
           </table>
         </div>
       </div>
+
+      {payModal && (
+        <StripePaymentModal
+          bookingId={payModal.bookingId}
+          clientSecret={payModal.clientSecret}
+          onClose={() => setPayModal(null)}
+          onSuccess={() => { setPayModal(null); refresh(); }}
+        />
+      )}
     </div>
   );
 }
