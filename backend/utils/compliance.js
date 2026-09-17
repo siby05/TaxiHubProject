@@ -1,17 +1,27 @@
 /**
- * Modelled on Waka Kotahi NZTA's Small Passenger Service Vehicle (SPSV)
- * rules as generally understood - NOT verified legal advice. Two relevant
- * SPSV categories: "Taxi" (must run an approved in-vehicle security
- * camera, use a taxi meter, display roof sign) and "Private Hire Service"
- * (no camera/meter/roof-sign requirement, but still needs a driver
- * Passenger (P) endorsement and a vehicle Certificate of Fitness, same as
- * Taxi). Since this operator has no security camera, driver.serviceCategory
- * defaults to 'private-hire' - confirm current requirements with NZTA
- * directly before relying on this for compliance.
+ * Modelled on Waka Kotahi NZTA's Small Passenger Service (SPSV) rules,
+ * researched from nzta.govt.nz - summarized for this app, NOT verified
+ * legal advice; confirm current requirements with NZTA directly:
+ *   https://www.nzta.govt.nz/commercial-driving/transport-service-licences/small-passenger-service
+ *   https://www.nzta.govt.nz/driver-licences/getting-an-endorsement/getting-an-endorsement-pv/applying-for-a-passenger-p-endorsement
+ *
+ * Every paid small passenger service driver needs: a Transport Service
+ * Licence (TSL, ~$98.87/yr per vehicle via rego) covering the vehicle, a
+ * passenger (P) endorsement on their licence (full Class 1 held 2+ years,
+ * medical check, police vet), and the vehicle needs a current Certificate
+ * of Fitness (CoF), not just a WoF. Separately, some regions require an
+ * approved in-vehicle security camera UNLESS the service only carries
+ * registered/pre-booked passengers - since every TaxiHub trip requires a
+ * signed-in passenger account, driver.serviceCategory defaults to
+ * 'private-hire' (no camera) on that basis.
  */
 function checkDriverCompliance(driver) {
   const issues = [];
   const now = new Date();
+
+  if (!driver.tslNumber) {
+    issues.push('Missing Transport Service Licence (TSL) number');
+  }
 
   if (!driver.passengerEndorsementNumber) {
     issues.push('Missing driver passenger (P) endorsement number');

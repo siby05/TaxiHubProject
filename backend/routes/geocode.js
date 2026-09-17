@@ -1,20 +1,31 @@
 const express = require('express');
 const router = express.Router();
-const { auth, roleMiddleware } = require('../middleware/auth');
 
 const NOMINATIM_HEADERS = { 'User-Agent': 'TaxiHub/1.0 (demo project)' };
 
 // Nominatim's display_name is the full administrative chain (e.g. "50,
 // Karamea Street, Whalers Gate, New Plymouth, New Plymouth District,
-// Taranaki, 4310, New Zealand / Aotearoa") - too long for a booking list.
-// Build a short "123 Street, Suburb/City" label from the structured
-// address instead, falling back to display_name if that's missing.
+// Taranaki, 4310, New Zealand / Aotearoa") - too long for a booking list,
+// but a bare street name isn't enough to identify an address either. Build
+// "123 Street, Suburb, City 1234" from the structured address - enough
+// detail to be unambiguous without the district/region/country tail. When
+// the result is a named place (a business/POI like "KFC" searched as
+// "kfc new plymouth"), Nominatim returns a top-level `name` - lead with
+// that instead of the street, so results are actually recognizable.
 function shortLabel(result) {
   const addr = result.address || {};
+  const venueName = result.name || addr.amenity || addr.shop || addr.office || addr.tourism || addr.leisure;
   const street = [addr.house_number, addr.road].filter(Boolean).join(' ');
-  const locality = addr.suburb || addr.city || addr.town || addr.village || addr.county;
-  const short = [street, locality].filter(Boolean).join(', ');
-  return short || result.display_name;
+  const suburb = addr.suburb || addr.quarter;
+  const city = addr.city || addr.town || addr.village || addr.county;
+
+  const parts = [];
+  parts.push(venueName || street);
+  if (suburb && suburb !== city) parts.push(suburb);
+  if (city) parts.push(addr.postcode ? `${city} ${addr.postcode}` : city);
+
+  const label = parts.filter(Boolean).join(', ');
+  return label || result.display_name;
 }
 
 /**
@@ -25,8 +36,11 @@ function shortLabel(result) {
  *
  * countrycodes=nz restricts results to New Zealand, matching where this
  * service currently operates.
+ *
+ * Public (no auth) - needed by the passenger and driver signup pages
+ * before a token exists, as well as the logged-in booking flows.
  */
-router.get('/search', auth, roleMiddleware(['passenger', 'driver']), async (req, res) => {
+router.get('/search', async (req, res) => {
   const q = (req.query.q || '').trim();
   if (q.length < 3) return res.json([]);
 
@@ -42,8 +56,9 @@ router.get('/search', auth, roleMiddleware(['passenger', 'driver']), async (req,
 });
 
 // GET /api/geocode/reverse?lat=&lng= - turns "use my current location" GPS
-// coordinates into a human-readable address for the pickup field.
-router.get('/reverse', auth, roleMiddleware(['passenger', 'driver']), async (req, res) => {
+// coordinates into a human-readable address for the pickup field. Public,
+// same reasoning as /search above.
+router.get('/reverse', async (req, res) => {
   const { lat, lng } = req.query;
   if (lat == null || lng == null) return res.status(400).json({ error: 'lat and lng are required' });
 

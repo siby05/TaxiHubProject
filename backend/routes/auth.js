@@ -7,8 +7,10 @@ const { auth } = require('../middleware/auth');
 const { emailService } = require('../services/emailService');
 
 function signToken(user) {
+  // Long-lived by default so users stay signed in across visits instead of
+  // being logged out mid-week; override via JWT_EXPIRES_IN if needed.
   return jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+    expiresIn: process.env.JWT_EXPIRES_IN || '30d',
   });
 }
 

@@ -28,6 +28,7 @@ export default function Navbar() {
                 <Link to="/driver/qr-code">My QR code</Link>
                 <Link to="/driver/billing">Fees</Link>
                 <Link to="/driver/complaints">Complaints</Link>
+                <Link to="/terms">Terms</Link>
               </>
             )}
             {user.role === 'admin' && (
@@ -44,6 +45,7 @@ export default function Navbar() {
           <>
             <Link to="/login">Log in</Link>
             <Link to="/register">Sign up</Link>
+            <Link to="/driver-signup">Drive with us</Link>
           </>
         )}
       </nav>

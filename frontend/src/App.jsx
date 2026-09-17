@@ -3,6 +3,8 @@ import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import DriverSignup from './pages/DriverSignup';
+import Terms from './pages/Terms';
 import PassengerDashboard from './pages/passenger/PassengerDashboard';
 import LodgeComplaint from './pages/passenger/LodgeComplaint';
 import MyComplaints from './pages/passenger/MyComplaints';
@@ -29,6 +31,8 @@ export default function App() {
         <Route path="/" element={<Navigate to={home} replace />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/driver-signup" element={<DriverSignup />} />
+        <Route path="/terms" element={<Terms />} />
 
         <Route path="/passenger" element={<ProtectedRoute roles={['passenger']}><PassengerDashboard /></ProtectedRoute>} />
         <Route path="/passenger/complaints" element={<ProtectedRoute roles={['passenger']}><MyComplaints /></ProtectedRoute>} />

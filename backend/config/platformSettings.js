@@ -11,6 +11,9 @@ let settings = {
   commissionType: 'per-trip-percent',
   commissionPercent: 15,
   weeklyFlatFee: 50,
+  // Default outstanding-fee ceiling before a driver is blocked from going
+  // online (per-driver override lives on Driver.feeLimitOverride).
+  outstandingFeeLimit: 50,
 };
 
 function getSettings() {

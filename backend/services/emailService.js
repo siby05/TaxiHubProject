@@ -65,6 +65,9 @@ const emailService = {
 
   sendEscalationAlert: (complaint) =>
     send(process.env.EMAIL_FROM || 'admin@taxihub.local', `ESCALATED: ${complaint.complaintId}`, `Complaint ${complaint.complaintId} has been escalated to authorities.`),
+
+  sendTripReminder: (to, booking, whenLabel) =>
+    send(to, `Reminder: trip ${whenLabel} (${booking.bookingId})`, `Your trip from ${booking.pickupAddress} to ${booking.dropAddress} is scheduled for ${new Date(booking.scheduledFor).toLocaleString()}.`),
 };
 
 module.exports = { emailService };

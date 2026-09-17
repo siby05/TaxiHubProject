@@ -1,7 +1,13 @@
 import axios from 'axios';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
+// Uploaded files (complaint attachments, driver documents) are served from
+// the backend's origin, not under /api - strip that suffix to link to them.
+export const fileOrigin = API_URL.replace(/\/api\/?$/, '');
+
 const client = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+  baseURL: API_URL,
 });
 
 client.interceptors.request.use((config) => {

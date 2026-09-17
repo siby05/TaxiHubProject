@@ -91,14 +91,19 @@ async function getDriverBilling(driver) {
 
   const totalOwed = Math.round(weeks.reduce((s, w) => s + w.amountOwed, 0) * 100) / 100;
   const totalPaid = Math.round(weeks.reduce((s, w) => s + w.amountPaid, 0) * 100) / 100;
+  const totalPending = Math.round((totalOwed - totalPaid) * 100) / 100;
+
+  const feeLimit = driver.feeLimitOverride != null ? driver.feeLimitOverride : getSettings().outstandingFeeLimit;
 
   return {
     commissionType: settings.commissionType,
     weeks,
     totalOwed,
     totalPaid,
-    totalPending: Math.round((totalOwed - totalPaid) * 100) / 100,
+    totalPending,
     hasOverdue: weeks.some((w) => w.status === 'overdue'),
+    feeLimit,
+    overLimit: totalPending > feeLimit,
   };
 }
 

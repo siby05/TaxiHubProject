@@ -5,6 +5,8 @@ build/
 !*.env.example
 backend/uploads/complaints/*
 !backend/uploads/complaints/.gitkeep
+backend/uploads/driver-documents/*
+!backend/uploads/driver-documents/.gitkeep
 *.log
 .DS_Store
 .claude/

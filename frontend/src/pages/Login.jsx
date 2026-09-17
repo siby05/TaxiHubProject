@@ -44,7 +44,7 @@ export default function Login() {
         {error && <p className="error-text">{error}</p>}
         <button className="btn" disabled={loading}>{loading ? 'Logging in...' : 'Log in'}</button>
       </form>
-      <p className="muted">No account? <Link to="/register" state={location.state}>Sign up as a passenger</Link></p>
+      <p className="muted">No account? <Link to="/register" state={location.state}>Sign up as a passenger</Link> or <Link to="/driver-signup">apply to drive</Link></p>
     </div>
   );
 }

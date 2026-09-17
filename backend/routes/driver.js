@@ -32,9 +32,9 @@ router.put('/availability', auth, roleMiddleware(['driver']), async (req, res) =
 
   if (isAvailable) {
     const billing = await getDriverBilling(driver);
-    if (billing.hasOverdue) {
+    if (billing.overLimit) {
       return res.status(402).json({
-        error: `You have overdue platform fees ($${billing.totalPending.toFixed(2)}). Settle payment with the admin to go online again.`,
+        error: `Your outstanding fees ($${billing.totalPending.toFixed(2)}) are over the $${billing.feeLimit} limit. Pay the balance or contact admin to go online again.`,
         billing,
       });
     }

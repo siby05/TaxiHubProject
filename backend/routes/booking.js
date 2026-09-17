@@ -7,6 +7,9 @@ const { auth, roleMiddleware } = require('../middleware/auth');
 const { emailService } = require('../services/emailService');
 const { haversineKm, calculateFare } = require('../utils/distance');
 const { notifyUser, notifyAdmins } = require('../utils/notify');
+const { getPassengerRatingAvg } = require('../utils/ratings');
+const { isWithinSchedule } = require('../utils/schedule');
+const { getDriverBilling } = require('../utils/billing');
 
 // Passengers should never see the rating a driver gave them (they can only
 // see driver ratings) - strip it before sending any booking list/detail
@@ -43,8 +46,13 @@ async function resolveDriver(driverId) {
     }
   }
 
-  const available = await Driver.find({ isAvailable: true, status: 'approved' });
-  return { driver: available[0] || null, usedFallback: !!driverId, requestedUnavailable, requestedName };
+  // Auto-match only considers drivers who are both toggled online AND
+  // currently within their declared weekly schedule (a direct QR hail
+  // above bypasses both, same as flagging a cab in person - that's
+  // unchanged; this filter is just for "any available driver" matching).
+  const candidates = await Driver.find({ isAvailable: true, status: 'approved' });
+  const inSchedule = candidates.filter((d) => isWithinSchedule(d));
+  return { driver: inSchedule[0] || null, usedFallback: !!driverId, requestedUnavailable, requestedName };
 }
 
 function noDriverError(requestedUnavailable, requestedName) {
@@ -168,12 +176,13 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
     await emailService.sendBookingConfirmation(passenger.email, booking);
     if (driverUser) await emailService.sendDriverBookingAlert(driverUser.email, booking);
 
-    emitToUser(req, driver.userId, 'booking:new', booking);
+    const passengerRatingAvg = await getPassengerRatingAvg(passenger._id);
+    emitToUser(req, driver.userId, 'booking:new', { ...booking, passengerName: passenger.name, passengerRatingAvg });
     if (driverUser) {
       await notifyUser(driverUser._id, {
         type: 'booking-new',
         title: 'New ride request',
-        message: `${booking.pickupAddress} → ${booking.dropAddress} - $${booking.estimatedFare}`,
+        message: `${passenger.name} (${passengerRatingAvg ? `⭐${passengerRatingAvg}` : 'no ratings yet'}) · ${booking.pickupAddress} → ${booking.dropAddress} - $${booking.estimatedFare}`,
         link: '/driver',
       });
     }
@@ -207,7 +216,13 @@ router.get('/driver', auth, roleMiddleware(['driver']), async (req, res) => {
   const bookings = await Booking.find(filter)
     .populate('passengerId', 'name mobile')
     .sort({ createdAt: -1 });
-  res.json(bookings);
+
+  const ratingByPassenger = new Map();
+  for (const b of bookings) {
+    const pid = String(b.passengerId?._id);
+    if (!ratingByPassenger.has(pid)) ratingByPassenger.set(pid, await getPassengerRatingAvg(pid));
+  }
+  res.json(bookings.map((b) => ({ ...b, passengerRatingAvg: ratingByPassenger.get(String(b.passengerId?._id)) })));
 });
 
 // PUT /api/booking/:id/accept - driver accepts within the 30s window
@@ -283,6 +298,29 @@ router.put('/:id/complete', auth, roleMiddleware(['driver']), async (req, res) =
     message: `${driverUser?.name || 'A driver'} completed booking ${updated._id} - $${updated.actualFare}`,
     link: '/admin',
   });
+
+  // Completing a trip can push a per-trip-commission driver's outstanding
+  // balance over their limit - take them offline immediately rather than
+  // waiting for their next go-online attempt.
+  const freshDriver = await Driver.findById(driver._id);
+  const billing = await getDriverBilling(freshDriver);
+  if (billing.overLimit && freshDriver.isAvailable) {
+    await Driver.findByIdAndUpdate(driver._id, { isAvailable: false });
+    if (driverUser) {
+      await notifyUser(driverUser._id, {
+        type: 'driver-disabled',
+        title: 'You have been taken offline',
+        message: `Outstanding fees ($${billing.totalPending.toFixed(2)}) are over the $${billing.feeLimit} limit. Pay the balance or contact admin to go online again.`,
+        link: '/driver/billing',
+      });
+    }
+    await notifyAdmins({
+      type: 'driver-disabled',
+      title: 'Driver auto-disabled (fee limit)',
+      message: `${driverUser?.name || 'A driver'} exceeded their $${billing.feeLimit} outstanding fee limit ($${billing.totalPending.toFixed(2)} owed) and was taken offline`,
+      link: `/admin/drivers/${driver._id}/report`,
+    });
+  }
 
   res.json(updated);
 });

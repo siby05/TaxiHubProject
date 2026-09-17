@@ -8,10 +8,15 @@ const User = require('./User');
 // rating, totalTrips, totalEarnings, qrCodeUrl, qrCodeImage, feeOverride
 // (null = use the platform-wide commission policy; otherwise a partial
 // {commissionType, commissionPercent, weeklyFlatFee} just for this driver -
-// see utils/billing.js). NZTA SPSV fields (see utils/compliance.js):
-// serviceCategory ('private-hire' | 'taxi', default 'private-hire'),
-// hasSecurityCamera, passengerEndorsementNumber, passengerEndorsementExpiry,
-// vehicleCofExpiry.
+// see utils/billing.js). feeLimitOverride (null = use the platform-wide
+// outstandingFeeLimit; otherwise a $ ceiling just for this driver - going
+// over it blocks them from going online, see routes/driver.js). NZTA SPSV
+// fields (see utils/compliance.js): serviceCategory ('private-hire' |
+// 'taxi', default 'private-hire'), hasSecurityCamera, tslNumber (Transport
+// Service Licence), passengerEndorsementNumber, passengerEndorsementExpiry,
+// vehicleCofExpiry. Driver signup documents (see routes/driverSignup.js):
+// licenseDocUrl, tslDocUrl, cofDocUrl, regoDocUrl, documentsSubmitted
+// (bool), termsAcceptedAt (Date the driver accepted the T&Cs at signup).
 const Driver = createModel('Driver', {
   userId: () => User.collection,
 });

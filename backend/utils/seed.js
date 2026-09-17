@@ -21,6 +21,7 @@ module.exports = async function seed() {
   await Driver.create({
     userId: driverUser._id,
     licenseNumber: 'NZ-DL-12345',
+    tslNumber: 'TSL-000001',
     vehicleType: 'Comfort',
     vehicleNumber: 'ABC123',
     ratePerKm: 1.8,
@@ -30,18 +31,22 @@ module.exports = async function seed() {
     rating: 4.8,
     totalTrips: 0,
     totalEarnings: 0,
+    feeOverride: null,
+    feeLimitOverride: null,
     // NZTA compliance demo data (Private Hire category - no security camera required).
     serviceCategory: 'private-hire',
     hasSecurityCamera: false,
     passengerEndorsementNumber: 'PEND-000001',
     passengerEndorsementExpiry: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
     vehicleCofExpiry: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString(),
-    // Mon-Fri 08:00-18:00, weekends off - demo data for the availability calendar.
+    // All days, all hours open by default so the demo always works
+    // regardless of when you test it - narrow this via the Schedule page
+    // to see trips actually get held back outside declared hours.
     availabilitySchedule: [0, 1, 2, 3, 4, 5, 6].map((dayOfWeek) => ({
       dayOfWeek,
-      enabled: dayOfWeek >= 1 && dayOfWeek <= 5,
-      startTime: '08:00',
-      endTime: '18:00',
+      enabled: true,
+      startTime: '00:00',
+      endTime: '23:59',
     })),
   });
 

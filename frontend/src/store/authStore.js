@@ -34,4 +34,12 @@ export const useAuthStore = create((set) => ({
     localStorage.removeItem('taxihub_user');
     set({ user: null, token: null });
   },
+
+  // For flows that get a token/user from a non-/auth endpoint (e.g. driver
+  // self-signup) but should still land the user signed in immediately.
+  setSession: (token, user) => {
+    localStorage.setItem('taxihub_token', token);
+    localStorage.setItem('taxihub_user', JSON.stringify(user));
+    set({ user, token });
+  },
 }));

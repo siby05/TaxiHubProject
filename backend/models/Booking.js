@@ -2,7 +2,8 @@ const { createModel } = require('../lib/MemoryStore');
 const User = require('./User');
 const Driver = require('./Driver');
 
-// Fields: passengerId (-> User), driverId (-> Driver), pickupAddress,
+// Fields: bookingId (human-readable "TRIP-YYYYMMDD-NNNNN", like Complaint's
+// complaintId), passengerId (-> User), driverId (-> Driver), pickupAddress,
 // pickupLat/Lng, dropAddress, dropLat/Lng, distanceKm, estimatedFare,
 // actualFare, status ('pending' | 'accepted' | 'in-progress' | 'completed'
 // | 'cancelled' | 'expired'), requestedAt, scheduledFor (optional - a
@@ -16,10 +17,20 @@ const Driver = require('./Driver');
 // (driver's rating of the passenger - never shown to the passenger, see
 // hidePassengerRating() in routes/booking.js), bookedByDriver (true when a
 // driver created this on a passenger's behalf - see routes/driver.js POST
-// /bookings).
+// /bookings), reminderDayEmailSent/reminderHourEmailSent (scheduled-trip
+// reminder flags - see utils/reminders.js).
 const Booking = createModel('Booking', {
   passengerId: () => User.collection,
   driverId: () => Driver.collection,
+});
+
+Booking.pre(async (doc, collection) => {
+  if (!doc.bookingId) {
+    const count = collection.docs.length;
+    const date = new Date();
+    const dateStr = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`;
+    doc.bookingId = `TRIP-${dateStr}-${String(count + 1).padStart(5, '0')}`;
+  }
 });
 
 module.exports = Booking;

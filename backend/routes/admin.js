@@ -13,6 +13,7 @@ const { getDriverBilling } = require('../utils/billing');
 const WeeklyPayment = require('../models/WeeklyPayment');
 const { getSettings, updateSettings } = require('../config/platformSettings');
 const { checkDriverCompliance } = require('../utils/compliance');
+const { getPassengerRatingAvg } = require('../utils/ratings');
 
 function withCompliance(driver) {
   return { ...driver, compliance: checkDriverCompliance(driver) };
@@ -72,14 +73,15 @@ router.put('/users/:id/activate', async (req, res) => {
 // GET /api/admin/passengers - passenger roster with booking stats, for the grid view
 router.get('/passengers', async (req, res) => {
   const [users, bookings] = await Promise.all([User.find({ role: 'passenger' }), Booking.find({})]);
-  const result = users.map((u) => {
+  const result = await Promise.all(users.map(async (u) => {
     const own = bookings.filter((b) => String(b.passengerId) === String(u._id));
     return {
       ...publicUser(u),
       totalBookings: own.length,
       completedTrips: own.filter((b) => b.status === 'completed').length,
+      ratingAvg: await getPassengerRatingAvg(u._id),
     };
-  });
+  }));
   res.json(result);
 });
 
@@ -95,12 +97,14 @@ router.put('/users/:id/unblock-booking', async (req, res) => {
   res.json(publicUser(user));
 });
 
-// POST /api/admin/drivers - admin-managed driver creation (no public driver signup)
+// POST /api/admin/drivers - admin-managed driver creation. Drivers can
+// also self-register with documents via POST /api/driver-signup; either
+// way they land as status:'pending' until an admin approves them here.
 router.post('/drivers', async (req, res) => {
   try {
     const {
       name, email, mobile, licenseNumber, vehicleType, vehicleNumber, ratePerKm,
-      serviceCategory, hasSecurityCamera, passengerEndorsementNumber, passengerEndorsementExpiry, vehicleCofExpiry,
+      serviceCategory, hasSecurityCamera, tslNumber, passengerEndorsementNumber, passengerEndorsementExpiry, vehicleCofExpiry,
     } = req.body;
     if (!name || !email || !licenseNumber || !vehicleNumber) {
       return res.status(400).json({ error: 'name, email, licenseNumber and vehicleNumber are required' });
@@ -133,6 +137,7 @@ router.post('/drivers', async (req, res) => {
       ratePerKm: ratePerKm || Number(process.env.DEFAULT_RATE_PER_KM) || 1.8,
       pendingRatePerKm: null,
       feeOverride: null,
+      feeLimitOverride: null,
       status: 'pending',
       isAvailable: false,
       rating: 0,
@@ -140,6 +145,7 @@ router.post('/drivers', async (req, res) => {
       totalEarnings: 0,
       serviceCategory: serviceCategory === 'taxi' ? 'taxi' : 'private-hire',
       hasSecurityCamera: !!hasSecurityCamera,
+      tslNumber: tslNumber || null,
       passengerEndorsementNumber: passengerEndorsementNumber || null,
       passengerEndorsementExpiry: passengerEndorsementExpiry || null,
       vehicleCofExpiry: vehicleCofExpiry || null,
@@ -195,7 +201,7 @@ router.delete('/drivers/:id/fee-settings', async (req, res) => {
 router.put('/drivers/:id', async (req, res) => {
   const {
     name, mobile, licenseNumber, vehicleType, vehicleNumber,
-    serviceCategory, hasSecurityCamera, passengerEndorsementNumber, passengerEndorsementExpiry, vehicleCofExpiry,
+    serviceCategory, hasSecurityCamera, tslNumber, passengerEndorsementNumber, passengerEndorsementExpiry, vehicleCofExpiry,
   } = req.body;
   const driver = await Driver.findById(req.params.id);
   if (!driver) return res.status(404).json({ error: 'Driver not found' });
@@ -217,6 +223,7 @@ router.put('/drivers/:id', async (req, res) => {
     ...(vehicleNumber && { vehicleNumber }),
     ...(serviceCategory && { serviceCategory: serviceCategory === 'taxi' ? 'taxi' : 'private-hire' }),
     ...(hasSecurityCamera != null && { hasSecurityCamera: !!hasSecurityCamera }),
+    ...(tslNumber !== undefined && { tslNumber }),
     ...(passengerEndorsementNumber !== undefined && { passengerEndorsementNumber }),
     ...(passengerEndorsementExpiry !== undefined && { passengerEndorsementExpiry }),
     ...(vehicleCofExpiry !== undefined && { vehicleCofExpiry }),
@@ -305,17 +312,29 @@ router.get('/settings', async (req, res) => {
 
 // PUT /api/admin/settings - update commission/fee policy
 router.put('/settings', async (req, res) => {
-  const { commissionType, commissionPercent, weeklyFlatFee } = req.body;
+  const { commissionType, commissionPercent, weeklyFlatFee, outstandingFeeLimit } = req.body;
   try {
     const updated = updateSettings({
       ...(commissionType && { commissionType }),
       ...(commissionPercent != null && { commissionPercent: Number(commissionPercent) }),
       ...(weeklyFlatFee != null && { weeklyFlatFee: Number(weeklyFlatFee) }),
+      ...(outstandingFeeLimit != null && { outstandingFeeLimit: Number(outstandingFeeLimit) }),
     });
     res.json(updated);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
+});
+
+// PUT /api/admin/drivers/:id/fee-limit - override the platform-wide
+// outstanding-fee ceiling for just this driver (null clears the override).
+router.put('/drivers/:id/fee-limit', async (req, res) => {
+  const { feeLimitOverride } = req.body;
+  const updated = await Driver.findByIdAndUpdate(req.params.id, {
+    feeLimitOverride: feeLimitOverride === null || feeLimitOverride === '' ? null : Number(feeLimitOverride),
+  });
+  if (!updated) return res.status(404).json({ error: 'Driver not found' });
+  res.json(withCompliance(updated));
 });
 
 // GET /api/admin/drivers/:id/qr-code - reprint a driver's QR (e.g. lost sticker)
@@ -340,9 +359,17 @@ router.get('/bookings', async (req, res) => {
   // driver's name in a second pass so the trips table can show it.
   const driverUsers = await User.find({ role: 'driver' });
   const nameByUserId = new Map(driverUsers.map((u) => [String(u._id), u.name]));
-  const enriched = bookings.map((b) => (
-    b.driverId ? { ...b, driverId: { ...b.driverId, userId: { _id: b.driverId.userId, name: nameByUserId.get(String(b.driverId.userId)) } } } : b
-  ));
+
+  const ratingByPassenger = new Map();
+  for (const b of bookings) {
+    const pid = String(b.passengerId?._id);
+    if (!ratingByPassenger.has(pid)) ratingByPassenger.set(pid, await getPassengerRatingAvg(pid));
+  }
+
+  const enriched = bookings.map((b) => ({
+    ...(b.driverId ? { ...b, driverId: { ...b.driverId, userId: { _id: b.driverId.userId, name: nameByUserId.get(String(b.driverId.userId)) } } } : b),
+    passengerRatingAvg: ratingByPassenger.get(String(b.passengerId?._id)),
+  }));
 
   res.json(enriched);
 });

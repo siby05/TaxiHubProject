@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import client from '../../api/client';
+import client, { fileOrigin } from '../../api/client';
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
@@ -8,11 +8,12 @@ export default function AdminDashboard() {
   const [tab, setTab] = useState('drivers');
   const [form, setForm] = useState({
     name: '', email: '', mobile: '', licenseNumber: '', vehicleType: 'Economy', vehicleNumber: '', ratePerKm: 1.8,
-    serviceCategory: 'private-hire', hasSecurityCamera: false, passengerEndorsementNumber: '', passengerEndorsementExpiry: '', vehicleCofExpiry: '',
+    serviceCategory: 'private-hire', hasSecurityCamera: false, tslNumber: '', passengerEndorsementNumber: '', passengerEndorsementExpiry: '', vehicleCofExpiry: '',
   });
   const [createdInfo, setCreatedInfo] = useState(null);
   const [error, setError] = useState('');
   const [qrFor, setQrFor] = useState(null);
+  const [docsFor, setDocsFor] = useState(null);
   const [editFor, setEditFor] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [editError, setEditError] = useState('');
@@ -45,7 +46,7 @@ export default function AdminDashboard() {
       setCreatedInfo(data);
       setForm({
         name: '', email: '', mobile: '', licenseNumber: '', vehicleType: 'Economy', vehicleNumber: '', ratePerKm: 1.8,
-        serviceCategory: 'private-hire', hasSecurityCamera: false, passengerEndorsementNumber: '', passengerEndorsementExpiry: '', vehicleCofExpiry: '',
+        serviceCategory: 'private-hire', hasSecurityCamera: false, tslNumber: '', passengerEndorsementNumber: '', passengerEndorsementExpiry: '', vehicleCofExpiry: '',
       });
       load();
     } catch (err) {
@@ -81,6 +82,7 @@ export default function AdminDashboard() {
       name: d.userId?.name || '', mobile: d.userId?.mobile || '', licenseNumber: d.licenseNumber, vehicleType: d.vehicleType, vehicleNumber: d.vehicleNumber,
       serviceCategory: d.serviceCategory || 'private-hire',
       hasSecurityCamera: !!d.hasSecurityCamera,
+      tslNumber: d.tslNumber || '',
       passengerEndorsementNumber: d.passengerEndorsementNumber || '',
       passengerEndorsementExpiry: d.passengerEndorsementExpiry ? d.passengerEndorsementExpiry.slice(0, 10) : '',
       vehicleCofExpiry: d.vehicleCofExpiry ? d.vehicleCofExpiry.slice(0, 10) : '',
@@ -172,6 +174,9 @@ export default function AdminDashboard() {
                       {d.status === 'rejected' && <button className="btn" onClick={() => reactivate(d._id)}>Reactivate</button>}
                       <button className="btn secondary" onClick={() => startEdit(d)}>{editFor === d._id ? 'Cancel' : 'Edit'}</button>
                       <button className="btn secondary" onClick={() => viewQr(d._id)}>{qrFor?.id === d._id ? 'Hide QR' : 'View QR'}</button>
+                      {d.documentsSubmitted && (
+                        <button className="btn secondary" onClick={() => setDocsFor(docsFor === d._id ? null : d._id)}>{docsFor === d._id ? 'Hide docs' : 'View docs'}</button>
+                      )}
                       <Link className="btn secondary" to={`/admin/drivers/${d._id}/report`}>Report</Link>
                     </td>
                   </tr>
@@ -180,6 +185,19 @@ export default function AdminDashboard() {
                       <td colSpan={5} style={{ textAlign: 'center', padding: 16 }}>
                         <img src={qrFor.qrCodeImage} alt="Driver QR code" style={{ width: 180, height: 180 }} />
                         <div className="muted" style={{ wordBreak: 'break-all' }}>{qrFor.qrCodeUrl}</div>
+                      </td>
+                    </tr>
+                  )}
+                  {docsFor === d._id && (
+                    <tr>
+                      <td colSpan={5} style={{ padding: 16 }}>
+                        <strong>Submitted documents</strong> (self-signup on {d.termsAcceptedAt ? new Date(d.termsAcceptedAt).toLocaleDateString() : '-'}, T&amp;Cs accepted)
+                        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 8 }}>
+                          {d.licenseDocUrl && <a href={`${fileOrigin}${d.licenseDocUrl}`} target="_blank" rel="noreferrer" className="btn secondary">Driver license</a>}
+                          {d.tslDocUrl && <a href={`${fileOrigin}${d.tslDocUrl}`} target="_blank" rel="noreferrer" className="btn secondary">TSL</a>}
+                          {d.cofDocUrl && <a href={`${fileOrigin}${d.cofDocUrl}`} target="_blank" rel="noreferrer" className="btn secondary">CoF</a>}
+                          {d.regoDocUrl && <a href={`${fileOrigin}${d.regoDocUrl}`} target="_blank" rel="noreferrer" className="btn secondary">Rego</a>}
+                        </div>
                       </td>
                     </tr>
                   )}
@@ -214,6 +232,7 @@ export default function AdminDashboard() {
                               Has approved security camera
                             </label>
                           )}
+                          <div><label>TSL number</label><input value={editForm.tslNumber} onChange={(e) => setEditForm((f) => ({ ...f, tslNumber: e.target.value }))} /></div>
                           <div><label>Passenger (P) endorsement #</label><input value={editForm.passengerEndorsementNumber} onChange={(e) => setEditForm((f) => ({ ...f, passengerEndorsementNumber: e.target.value }))} /></div>
                           <div><label>Endorsement expiry</label><input type="date" value={editForm.passengerEndorsementExpiry} onChange={(e) => setEditForm((f) => ({ ...f, passengerEndorsementExpiry: e.target.value }))} /></div>
                           <div><label>Vehicle CoF expiry</label><input type="date" value={editForm.vehicleCofExpiry} onChange={(e) => setEditForm((f) => ({ ...f, vehicleCofExpiry: e.target.value }))} /></div>
@@ -262,6 +281,7 @@ export default function AdminDashboard() {
                 Has approved security camera
               </label>
             )}
+            <div><label>TSL number</label><input value={form.tslNumber} onChange={(e) => update('tslNumber', e.target.value)} /></div>
             <div><label>Passenger (P) endorsement #</label><input value={form.passengerEndorsementNumber} onChange={(e) => update('passengerEndorsementNumber', e.target.value)} /></div>
             <div><label>Endorsement expiry</label><input type="date" value={form.passengerEndorsementExpiry} onChange={(e) => update('passengerEndorsementExpiry', e.target.value)} /></div>
             <div><label>Vehicle CoF expiry</label><input type="date" value={form.vehicleCofExpiry} onChange={(e) => update('vehicleCofExpiry', e.target.value)} /></div>

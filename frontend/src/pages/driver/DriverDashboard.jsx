@@ -3,6 +3,7 @@ import client from '../../api/client';
 import { useBookingStore } from '../../store/bookingStore';
 import { useSocket } from '../../hooks/useSocket';
 import StarRating from '../../components/StarRating';
+import { notificationPermission, requestNotificationPermission, showBrowserNotification } from '../../utils/browserNotify';
 
 export default function DriverDashboard() {
   const { bookings, fetchDriverBookings } = useBookingStore();
@@ -14,6 +15,7 @@ export default function DriverDashboard() {
   const [newRate, setNewRate] = useState('');
   const [rateMsg, setRateMsg] = useState('');
   const [showAllTrips, setShowAllTrips] = useState(false);
+  const [notifPermission, setNotifPermission] = useState(notificationPermission());
 
   function load() {
     fetchDriverBookings(showAllTrips ? { all: true } : undefined);
@@ -25,10 +27,17 @@ export default function DriverDashboard() {
 
   useSocket({
     'booking:new': (booking) => {
-      setAlert(`New ride request: ${booking.pickupAddress} → ${booking.dropAddress}`);
+      const ratingText = booking.passengerRatingAvg ? `⭐${booking.passengerRatingAvg}` : 'no ratings yet';
+      setAlert(`New ride request: ${booking.passengerName} (${ratingText}) · ${booking.pickupAddress} → ${booking.dropAddress}`);
+      showBrowserNotification('New ride request', `${booking.passengerName} (${ratingText})\n${booking.pickupAddress} → ${booking.dropAddress}`);
       load();
     },
   });
+
+  async function enableNotifications() {
+    const permission = await requestNotificationPermission();
+    setNotifPermission(permission);
+  }
 
   async function toggleAvailable() {
     setAvailError('');
@@ -89,9 +98,14 @@ export default function DriverDashboard() {
                 <div className="muted">Rate change to ${profile.pendingRatePerKm}/km pending admin approval</div>
               )}
             </div>
-            <button className={`btn ${profile.isAvailable ? 'secondary' : ''}`} onClick={toggleAvailable} disabled={profile.status !== 'approved'}>
-              {profile.isAvailable ? 'Go offline' : 'Go online'}
-            </button>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              {notifPermission !== 'granted' && notifPermission !== 'unsupported' && (
+                <button className="btn secondary" onClick={enableNotifications}>🔔 Enable trip notifications</button>
+              )}
+              <button className={`btn ${profile.isAvailable ? 'secondary' : ''}`} onClick={toggleAvailable} disabled={profile.status !== 'approved'}>
+                {profile.isAvailable ? 'Go offline' : 'Go online'}
+              </button>
+            </div>
           </div>
           {availError && <p className="error-text" style={{ marginTop: 10 }}>{availError}</p>}
 
@@ -126,9 +140,13 @@ export default function DriverDashboard() {
             {bookings.map((b) => (
               <tr key={b._id}>
                 <td>
+                  <div className="muted">{b.bookingId}</div>
                   <div>{b.pickupAddress} → {b.dropAddress}</div>
                   <div className="muted">
-                    {b.passengerId?.name} · {b.distanceKm} km · est. ${b.estimatedFare} · {b.paymentMethod === 'card' ? (b.paymentStatus === 'paid' ? 'paid online' : 'awaiting online payment') : 'cash'}
+                    {b.passengerId?.name}{b.passengerRatingAvg ? ` (⭐${b.passengerRatingAvg})` : ''} · {b.distanceKm} km · est. ${b.estimatedFare} · {b.paymentMethod === 'card' ? (b.paymentStatus === 'paid' ? 'paid online' : 'awaiting online payment') : 'cash'}
+                  </div>
+                  <div className="muted">
+                    {b.scheduledFor ? `Scheduled: ${new Date(b.scheduledFor).toLocaleString()}` : `Requested: ${new Date(b.requestedAt || b.createdAt).toLocaleString()}`}
                   </div>
                   {b.status === 'completed' && !b.passengerRating && (
                     <StarRating label="Rate this passenger" submitLabel="Rate" onSubmit={(rating, review) => ratePassenger(b._id, rating, review)} />

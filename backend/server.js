@@ -18,7 +18,9 @@ const adminRoutes = require('./routes/admin');
 const complaintRoutes = require('./routes/complaints');
 const geocodeRoutes = require('./routes/geocode');
 const notificationRoutes = require('./routes/notifications');
+const driverSignupRoutes = require('./routes/driverSignup');
 const { setIo } = require('./utils/notify');
+const { startReminderScheduler } = require('./utils/reminders');
 
 const app = express();
 const server = http.createServer(app);
@@ -42,6 +44,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/complaints', complaintRoutes);
 app.use('/api/geocode', geocodeRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/driver-signup', driverSignupRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
@@ -69,4 +72,5 @@ connectDatabase().then(async () => {
     await require('./utils/seed')();
   }
   server.listen(PORT, () => console.log(`TaxiHub API listening on http://localhost:${PORT}`));
+  startReminderScheduler();
 });
