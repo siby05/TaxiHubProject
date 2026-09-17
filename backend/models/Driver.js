@@ -20,6 +20,10 @@ const User = require('./User');
 // Stripe Connect (see routes/stripeConnect.js): stripeAccountId (Express
 // connected account id, null until onboarding starts), stripeChargesEnabled
 // (bool - true once Stripe has verified them enough to receive payouts).
+// acceptsOnlinePayment (bool, default true, driver's own choice via PUT
+// /api/driver/payment-preference) - false means cash-only: they're
+// excluded from auto-match for card bookings, and a direct QR hail with
+// paymentMethod:'card' is rejected instead of silently charging them.
 const Driver = createModel('Driver', {
   userId: () => User.collection,
 });

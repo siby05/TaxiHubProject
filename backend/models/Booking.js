@@ -9,9 +9,11 @@ const Driver = require('./Driver');
 // | 'cancelled' | 'expired'), requestedAt, scheduledFor (optional - a
 // future date/time the passenger asked for instead of "now"), acceptedAt,
 // completedAt, cancelledAt, cancelReason, paymentMethod ('cash' | 'card',
-// chosen at booking time), paymentStatus ('unpaid' | 'paid' - cash trips
-// are auto-marked paid on completion; card trips only once /api/payment
-// confirms), paymentIntentId,
+// chosen at booking time), cardSurchargeAmount (payment-gateway fee
+// disclosed and added on top of the fare for card bookings only, 0 for
+// cash - see utils/distance.js calculateCardSurcharge()), paymentStatus
+// ('unpaid' | 'paid' - cash trips are auto-marked paid on completion;
+// card trips only once /api/payment confirms), paymentIntentId,
 // rating/review (passenger's rating of the driver - public, feeds the
 // driver's aggregate Driver.rating), passengerRating/passengerReview
 // (driver's rating of the passenger - never shown to the passenger, see

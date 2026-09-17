@@ -8,10 +8,11 @@ const Booking = require('../models/Booking');
 const { auth, roleMiddleware } = require('../middleware/auth');
 const { ensureDriverQrCode } = require('../utils/qrcode');
 const { getDriverBilling } = require('../utils/billing');
-const { haversineKm, calculateFare } = require('../utils/distance');
+const { haversineKm, calculateFare, calculateCardSurcharge } = require('../utils/distance');
 const { emailService } = require('../services/emailService');
 const { notifyUser, notifyAdmins } = require('../utils/notify');
 const { checkDriverCompliance } = require('../utils/compliance');
+const { getSettings } = require('../config/platformSettings');
 
 async function getDriverProfile(userId) {
   return Driver.findOne({ userId }).populate('userId', 'name email mobile');
@@ -49,6 +50,18 @@ router.put('/availability', auth, roleMiddleware(['driver']), async (req, res) =
   }
 
   const updated = await Driver.findByIdAndUpdate(driver._id, { isAvailable: !!isAvailable });
+  res.json(updated);
+});
+
+// PUT /api/driver/payment-preference - driver decides whether they accept
+// online (card) payments at all, or cash only. Cash-only drivers are
+// excluded from auto-match for card bookings, and a direct QR hail with
+// paymentMethod:'card' is rejected instead of silently charging them.
+router.put('/payment-preference', auth, roleMiddleware(['driver']), async (req, res) => {
+  const { acceptsOnlinePayment } = req.body;
+  const driver = await Driver.findOne({ userId: req.user.id });
+  if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
+  const updated = await Driver.findByIdAndUpdate(driver._id, { acceptsOnlinePayment: !!acceptsOnlinePayment });
   res.json(updated);
 });
 
@@ -163,6 +176,9 @@ router.post('/bookings', auth, roleMiddleware(['driver']), async (req, res) => {
 
     const driver = await Driver.findOne({ userId: req.user.id });
     if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
+    if (paymentMethod === 'card' && driver.acceptsOnlinePayment === false) {
+      return res.status(400).json({ error: 'You have online payment turned off - book this trip as cash, or turn it on from your Fees page.' });
+    }
 
     let passenger;
     if (passengerId) {
@@ -192,6 +208,7 @@ router.post('/bookings', auth, roleMiddleware(['driver']), async (req, res) => {
 
     const distanceKm = Math.round(haversineKm(pickupLat, pickupLng, dropLat, dropLng) * 100) / 100;
     const estimatedFare = calculateFare(distanceKm, driver.ratePerKm);
+    const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(estimatedFare, getSettings().cardSurchargePercent) : 0;
 
     const booking = await Booking.create({
       passengerId: passenger._id,
@@ -204,6 +221,7 @@ router.post('/bookings', auth, roleMiddleware(['driver']), async (req, res) => {
       dropLng,
       distanceKm,
       estimatedFare,
+      cardSurchargeAmount,
       status: 'accepted',
       paymentMethod: paymentMethod || 'cash',
       paymentStatus: 'unpaid',

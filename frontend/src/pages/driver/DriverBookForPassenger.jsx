@@ -40,12 +40,12 @@ export default function DriverBookForPassenger() {
     if (!pickup || !drop) return;
     let cancelled = false;
     setQuoteLoading(true);
-    client.post('/booking/quote', { pickupLat: pickup.lat, pickupLng: pickup.lng, dropLat: drop.lat, dropLng: drop.lng })
+    client.post('/booking/quote', { pickupLat: pickup.lat, pickupLng: pickup.lng, dropLat: drop.lat, dropLng: drop.lng, paymentMethod })
       .then((r) => { if (!cancelled) setQuote(r.data); })
       .catch((err) => { if (!cancelled) setError(err.response?.data?.error || 'Could not calculate fare'); })
       .finally(() => { if (!cancelled) setQuoteLoading(false); });
     return () => { cancelled = true; };
-  }, [pickup, drop]);
+  }, [pickup, drop, paymentMethod]);
 
   const passengerReady = mode === 'search' ? !!selected : !!(newPassenger.name && newPassenger.mobile && newPassenger.address);
 
@@ -147,6 +147,9 @@ export default function DriverBookForPassenger() {
           {quote && !quoteLoading && (
             <div className="card fare-confirm">
               <strong>Estimated fare: ${quote.estimatedFare.toFixed(2)}</strong>
+              {quote.cardSurchargeAmount > 0 && (
+                <div className="muted">+ ${quote.cardSurchargeAmount.toFixed(2)} online payment surcharge = <strong>${quote.total.toFixed(2)} total</strong></div>
+              )}
               <div className="muted">{quote.distanceKm} km{scheduledFor && ` · scheduled for ${new Date(scheduledFor).toLocaleString()}`}</div>
               {error && <p className="error-text">{error}</p>}
               <button className="btn" style={{ marginTop: 8 }} onClick={confirmBooking} disabled={loading || !passengerReady}>

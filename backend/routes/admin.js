@@ -140,6 +140,7 @@ router.post('/drivers', async (req, res) => {
       pendingRatePerKm: null,
       feeOverride: null,
       feeLimitOverride: null,
+      acceptsOnlinePayment: true,
       status: 'pending',
       isAvailable: false,
       rating: 0,
@@ -324,13 +325,14 @@ router.get('/settings', async (req, res) => {
 
 // PUT /api/admin/settings - update commission/fee policy
 router.put('/settings', async (req, res) => {
-  const { commissionType, commissionPercent, weeklyFlatFee, outstandingFeeLimit } = req.body;
+  const { commissionType, commissionPercent, weeklyFlatFee, outstandingFeeLimit, cardSurchargePercent } = req.body;
   try {
     const updated = updateSettings({
       ...(commissionType && { commissionType }),
       ...(commissionPercent != null && { commissionPercent: Number(commissionPercent) }),
       ...(weeklyFlatFee != null && { weeklyFlatFee: Number(weeklyFlatFee) }),
       ...(outstandingFeeLimit != null && { outstandingFeeLimit: Number(outstandingFeeLimit) }),
+      ...(cardSurchargePercent != null && { cardSurchargePercent: Number(cardSurchargePercent) }),
     });
     res.json(updated);
   } catch (err) {

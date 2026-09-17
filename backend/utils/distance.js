@@ -19,4 +19,11 @@ function calculateFare(distanceKm, ratePerKm) {
   return Math.round((baseFare + distanceKm * rate) * 100) / 100;
 }
 
-module.exports = { haversineKm, calculateFare };
+// Card-only surcharge disclosed to the passenger up front (see
+// platformSettings.cardSurchargePercent) - covers the payment gateway's
+// own processing fee. Cash trips never carry this.
+function calculateCardSurcharge(fare, surchargePercent) {
+  return Math.round(fare * (surchargePercent / 100) * 100) / 100;
+}
+
+module.exports = { haversineKm, calculateFare, calculateCardSurcharge };

@@ -83,6 +83,7 @@ router.post(
         pendingRatePerKm: null,
         feeOverride: null,
         feeLimitOverride: null,
+        acceptsOnlinePayment: true,
         status: 'pending',
         isAvailable: false,
         rating: 0,

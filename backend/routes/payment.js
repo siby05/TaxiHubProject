@@ -27,7 +27,11 @@ router.post('/create-intent', auth, roleMiddleware(['passenger']), async (req, r
     if (booking.paymentMethod === 'cash') return res.status(400).json({ error: 'This booking is set to pay by cash' });
     if (booking.paymentStatus === 'paid') return res.status(400).json({ error: 'This booking is already paid' });
 
-    const amount = Math.round((booking.actualFare || booking.estimatedFare) * 100);
+    // The disclosed card surcharge (see routes/booking.js quote/create) is
+    // part of what's actually charged - it's not just a cosmetic label.
+    const fare = booking.actualFare || booking.estimatedFare;
+    const amount = Math.round((fare + (booking.cardSurchargeAmount || 0)) * 100);
+    const surchargeCents = Math.round((booking.cardSurchargeAmount || 0) * 100);
 
     if (stripe) {
       const intentOptions = { amount, currency: 'nzd', metadata: { bookingId }, automatic_payment_methods: { enabled: true } };
@@ -36,7 +40,10 @@ router.post('/create-intent', auth, roleMiddleware(['passenger']), async (req, r
       if (driver?.stripeAccountId && driver.stripeChargesEnabled) {
         const settings = getEffectiveCommissionSettings(driver);
         const feePercent = settings.commissionType === 'per-trip-percent' ? settings.commissionPercent : 0;
-        intentOptions.application_fee_amount = Math.round(amount * (feePercent / 100));
+        // Platform keeps its usual commission off the fare, plus the whole
+        // surcharge (that's what covers Stripe's own processing cost) -
+        // the driver still receives exactly fare minus their commission.
+        intentOptions.application_fee_amount = Math.round(fare * 100 * (feePercent / 100)) + surchargeCents;
         intentOptions.transfer_data = { destination: driver.stripeAccountId };
       }
 

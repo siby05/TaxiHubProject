@@ -43,12 +43,12 @@ export default function BookDriver() {
     if (!pickup || !drop) return;
     let cancelled = false;
     setQuoteLoading(true);
-    client.post('/booking/quote', { driverId: effectiveDriverId, pickupLat: pickup.lat, pickupLng: pickup.lng, dropLat: drop.lat, dropLng: drop.lng })
+    client.post('/booking/quote', { driverId: effectiveDriverId, pickupLat: pickup.lat, pickupLng: pickup.lng, dropLat: drop.lat, dropLng: drop.lng, paymentMethod })
       .then((r) => { if (!cancelled) setQuote(r.data); })
       .catch((err) => { if (!cancelled) setError(err.response?.data?.error || 'Could not calculate fare'); })
       .finally(() => { if (!cancelled) setQuoteLoading(false); });
     return () => { cancelled = true; };
-  }, [pickup, drop, effectiveDriverId]);
+  }, [pickup, drop, effectiveDriverId, paymentMethod]);
 
   async function confirmBooking() {
     setError('');
@@ -169,6 +169,7 @@ export default function BookDriver() {
                 <input type="radio" style={{ width: 'auto' }} checked={paymentMethod === 'card'} onChange={() => setPaymentMethod('card')} /> Pay online
               </label>
             </div>
+            {paymentMethod === 'card' && <p className="muted">Online payment includes a small payment-gateway surcharge (≈2.6%), added on top of the fare - shown below before you confirm.</p>}
             {paymentMethod === 'card' && scheduledFor && <p className="muted">You'll be able to pay once the driver accepts.</p>}
             {paymentMethod === 'card' && !scheduledFor && <p className="muted">You'll get a "Pay now" option right after booking.</p>}
           </div>
@@ -177,7 +178,13 @@ export default function BookDriver() {
 
           {quote && !quoteLoading && (
             <div className="card fare-confirm">
+              {quote.requestedCashOnly && (
+                <p className="muted" style={{ color: '#b45309' }}>⚠️ {quote.requestedName || 'This driver'} is cash-only - matching you with another driver for online payment.</p>
+              )}
               <strong>Estimated fare: ${quote.estimatedFare.toFixed(2)}</strong>
+              {quote.cardSurchargeAmount > 0 && (
+                <div className="muted">+ ${quote.cardSurchargeAmount.toFixed(2)} online payment surcharge = <strong>${quote.total.toFixed(2)} total</strong></div>
+              )}
               <div className="muted">{quote.distanceKm} km{scheduledFor && ` · scheduled for ${new Date(scheduledFor).toLocaleString()}`}</div>
               {error && <p className="error-text">{error}</p>}
               <button className="btn" style={{ marginTop: 8 }} onClick={confirmBooking} disabled={loading || !driver}>

@@ -33,6 +33,7 @@ module.exports = async function seed() {
     totalEarnings: 0,
     feeOverride: null,
     feeLimitOverride: null,
+    acceptsOnlinePayment: true,
     // NZTA compliance demo data (Private Hire category - no security camera required).
     serviceCategory: 'private-hire',
     hasSecurityCamera: false,

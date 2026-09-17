@@ -32,6 +32,9 @@ export default function DriverDashboard() {
       showBrowserNotification('New ride request', `${booking.passengerName} (${ratingText})\n${booking.pickupAddress} → ${booking.dropAddress}`);
       load();
     },
+    // Another driver claimed a broadcast request we were also shown -
+    // refresh so it drops out of our pending list too.
+    'booking:claimed': () => load(),
   });
 
   async function enableNotifications() {
@@ -47,6 +50,11 @@ export default function DriverDashboard() {
     } catch (err) {
       setAvailError(err.response?.data?.error || 'Could not update availability');
     }
+  }
+
+  async function togglePaymentPreference() {
+    const { data } = await client.put('/driver/payment-preference', { acceptsOnlinePayment: !profile.acceptsOnlinePayment });
+    setProfile(data);
   }
 
   async function requestRate(e) {
@@ -109,6 +117,16 @@ export default function DriverDashboard() {
           </div>
           {availError && <p className="error-text" style={{ marginTop: 10 }}>{availError}</p>}
 
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10 }}>
+            <input type="checkbox" style={{ width: 'auto' }} checked={profile.acceptsOnlinePayment !== false} onChange={togglePaymentPreference} />
+            Accept online (card) payments
+          </label>
+          <p className="muted" style={{ marginTop: 2 }}>
+            {profile.acceptsOnlinePayment !== false
+              ? 'Passengers can pay you by card or cash. Card fares include a small disclosed surcharge to cover payment processing.'
+              : 'Cash only - you won\'t be offered card-paying passengers via auto-match, and a card payer scanning your QR code will be told to pay cash or matched with another driver.'}
+          </p>
+
           <form onSubmit={requestRate} style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginTop: 14, flexWrap: 'wrap' }}>
             <div style={{ maxWidth: 160 }}>
               <label>Request new rate ($/km)</label>
@@ -140,7 +158,10 @@ export default function DriverDashboard() {
             {bookings.map((b) => (
               <tr key={b._id}>
                 <td>
-                  <div className="muted">{b.bookingId}</div>
+                  <div className="muted">
+                    {b.bookingId}
+                    {b.status === 'pending' && !b.driverId && <span className="badge" style={{ marginLeft: 6 }}>open request - first to accept gets it</span>}
+                  </div>
                   <div>{b.pickupAddress} → {b.dropAddress}</div>
                   <div className="muted">
                     {b.passengerId?.name}{b.passengerRatingAvg ? ` (⭐${b.passengerRatingAvg})` : ''} · {b.distanceKm} km · est. ${b.estimatedFare} · {b.paymentMethod === 'card' ? (b.paymentStatus === 'paid' ? 'paid online' : 'awaiting online payment') : 'cash'}
