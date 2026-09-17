@@ -30,6 +30,12 @@ const emailService = {
   sendVerificationEmail: (to, name) =>
     send(to, 'Welcome to TaxiHub - verify your email', `Hi ${name}, welcome to TaxiHub! Your account is ready to use.`),
 
+  sendDriverApplicationReceived: (to, name) =>
+    send(to, 'Your TaxiHub driver application was received', `Hi ${name}, thanks for applying to drive with TaxiHub. Your documents (license, TSL, CoF, vehicle registration) are being reviewed by an admin - you'll be notified once your account is approved and you can start accepting trips.`),
+
+  sendDriverApproved: (to, name) =>
+    send(to, 'You are approved to drive on TaxiHub', `Hi ${name}, your driver account has been approved. Log in, go online, and you can start receiving trip requests.`),
+
   sendBookingConfirmation: (to, booking) =>
     send(to, `Booking confirmed (${booking._id})`, `Your ride from ${booking.pickupAddress} to ${booking.dropAddress} has been requested. Estimated fare: $${booking.estimatedFare}.`),
 

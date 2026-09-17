@@ -22,12 +22,17 @@ export default function AdminDashboard() {
   const [passengers, setPassengers] = useState([]);
   const [trips, setTrips] = useState([]);
   const [tripFilter, setTripFilter] = useState('');
+  const [tripDriverFilter, setTripDriverFilter] = useState('');
+  const [tripDateFrom, setTripDateFrom] = useState('');
+  const [tripDateTo, setTripDateTo] = useState('');
+  const [feedback, setFeedback] = useState([]);
 
   function load() {
     client.get('/admin/stats').then((r) => setStats(r.data));
     client.get('/admin/drivers').then((r) => setDrivers(r.data));
     client.get('/admin/settings').then((r) => setSettings(r.data));
     client.get('/admin/passengers').then((r) => setPassengers(r.data));
+    client.get('/admin/feedback').then((r) => setFeedback(r.data));
     client.get('/admin/bookings').then((r) => setTrips(r.data));
   }
 
@@ -112,6 +117,15 @@ export default function AdminDashboard() {
     }
   }
 
+  const filteredTrips = trips.filter((t) => {
+    if (tripFilter && t.status !== tripFilter) return false;
+    if (tripDriverFilter && String(t.driverId?._id) !== tripDriverFilter) return false;
+    const created = new Date(t.createdAt);
+    if (tripDateFrom && created < new Date(`${tripDateFrom}T00:00:00`)) return false;
+    if (tripDateTo && created > new Date(`${tripDateTo}T23:59:59`)) return false;
+    return true;
+  });
+
   return (
     <div className="container">
       <h1>Admin dashboard</h1>
@@ -135,6 +149,7 @@ export default function AdminDashboard() {
         <button className={tab === 'passengers' ? 'active' : ''} onClick={() => setTab('passengers')}>Passengers</button>
         <button className={tab === 'trips' ? 'active' : ''} onClick={() => setTab('trips')}>Trips</button>
         <button className={tab === 'settings' ? 'active' : ''} onClick={() => setTab('settings')}>Platform fee settings</button>
+        <button className={tab === 'feedback' ? 'active' : ''} onClick={() => setTab('feedback')}>Feedback</button>
       </div>
 
       {tab === 'drivers' && (
@@ -310,7 +325,7 @@ export default function AdminDashboard() {
                 </div>
                 {p.bookingBlocked && <span className="badge cancelled">booking blocked</span>}
               </div>
-              <div className="muted" style={{ marginTop: 8 }}>{p.totalBookings} bookings · {p.completedTrips} completed</div>
+              <div className="muted" style={{ marginTop: 8 }}>{p.totalBookings} bookings · {p.completedTrips} completed · {p.ratingAvg ? `⭐ ${p.ratingAvg}` : 'no rating yet'}</div>
               <button
                 className={`btn ${p.bookingBlocked ? '' : 'danger'}`}
                 style={{ marginTop: 10 }}
@@ -331,23 +346,39 @@ export default function AdminDashboard() {
               <button key={s || 'all'} className={tripFilter === s ? 'active' : ''} onClick={() => setTripFilter(s)}>{s || 'All'}</button>
             ))}
           </div>
+          <div className="card" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div>
+              <label>Driver</label>
+              <select value={tripDriverFilter} onChange={(e) => setTripDriverFilter(e.target.value)}>
+                <option value="">All drivers</option>
+                {drivers.map((d) => <option key={d._id} value={d._id}>{d.userId?.name}</option>)}
+              </select>
+            </div>
+            <div><label>From</label><input type="date" value={tripDateFrom} onChange={(e) => setTripDateFrom(e.target.value)} /></div>
+            <div><label>To</label><input type="date" value={tripDateTo} onChange={(e) => setTripDateTo(e.target.value)} /></div>
+            {(tripDriverFilter || tripDateFrom || tripDateTo) && (
+              <button className="btn secondary" onClick={() => { setTripDriverFilter(''); setTripDateFrom(''); setTripDateTo(''); }}>Clear</button>
+            )}
+          </div>
           <div className="card">
             <table>
-              <thead><tr><th>Route</th><th>Passenger</th><th>Driver</th><th>Fare</th><th>Status</th><th>When</th></tr></thead>
+              <thead><tr><th>Trip</th><th>Passenger</th><th>Driver</th><th>Fare</th><th>Status</th><th>When</th></tr></thead>
               <tbody>
-                {trips.filter((t) => !tripFilter || t.status === tripFilter).map((t) => (
+                {filteredTrips.map((t) => (
                   <tr key={t._id}>
-                    <td>{t.pickupAddress} → {t.dropAddress}{t.scheduledFor && <div className="muted">Scheduled: {new Date(t.scheduledFor).toLocaleString()}</div>}</td>
-                    <td>{t.passengerId?.name}</td>
+                    <td>
+                      <div className="muted">{t.bookingId}</div>
+                      {t.pickupAddress} → {t.dropAddress}
+                      {t.scheduledFor && <div className="muted">Scheduled: {new Date(t.scheduledFor).toLocaleString()}</div>}
+                    </td>
+                    <td>{t.passengerId?.name}{t.passengerRatingAvg ? <div className="muted">⭐ {t.passengerRatingAvg}</div> : ''}</td>
                     <td>{t.driverId?.userId?.name || '-'}</td>
-                    <td>${t.actualFare ?? t.estimatedFare}{t.rating && <div className="muted">⭐ {t.rating}</div>}</td>
+                    <td>${t.actualFare ?? t.estimatedFare}{t.rating && <div className="muted">⭐ {t.rating} (driver)</div>}</td>
                     <td><span className={`badge ${t.status}`}>{t.status}</span></td>
                     <td className="muted">{new Date(t.createdAt).toLocaleString()}</td>
                   </tr>
                 ))}
-                {trips.filter((t) => !tripFilter || t.status === tripFilter).length === 0 && (
-                  <tr><td colSpan={6} className="muted">No trips match this filter.</td></tr>
-                )}
+                {filteredTrips.length === 0 && <tr><td colSpan={6} className="muted">No trips match this filter.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -371,9 +402,35 @@ export default function AdminDashboard() {
             ) : (
               <div><label>Weekly fee ($)</label><input type="number" step="1" min="0" value={settings.weeklyFlatFee} onChange={(e) => setSettings((s) => ({ ...s, weeklyFlatFee: e.target.value }))} /></div>
             )}
+            <div>
+              <label>Default outstanding-fee limit ($)</label>
+              <input type="number" step="1" min="0" value={settings.outstandingFeeLimit} onChange={(e) => setSettings((s) => ({ ...s, outstandingFeeLimit: e.target.value }))} />
+              <p className="muted" style={{ marginTop: 4 }}>A driver whose unpaid balance exceeds this is blocked from going online (auto-disabled if it happens mid-session). Override per driver from their report page.</p>
+            </div>
             {settingsMsg && <p className="muted">{settingsMsg}</p>}
             <button className="btn">Save</button>
           </form>
+        </div>
+      )}
+
+      {tab === 'feedback' && (
+        <div className="card">
+          <h3>Feedback submissions</h3>
+          {feedback.length === 0 && <p className="muted">No feedback yet.</p>}
+          <table>
+            <tbody>
+              {feedback.map((f) => (
+                <tr key={f._id}>
+                  <td>
+                    <strong>{f.name}</strong>{f.email && <span className="muted"> · {f.email}</span>}
+                    {f.rating ? <span> · {'★'.repeat(f.rating)}{'☆'.repeat(5 - f.rating)}</span> : ''}
+                    <div className="muted">{f.message}</div>
+                  </td>
+                  <td className="muted">{new Date(f.createdAt).toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

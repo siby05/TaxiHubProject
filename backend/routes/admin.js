@@ -14,6 +14,8 @@ const WeeklyPayment = require('../models/WeeklyPayment');
 const { getSettings, updateSettings } = require('../config/platformSettings');
 const { checkDriverCompliance } = require('../utils/compliance');
 const { getPassengerRatingAvg } = require('../utils/ratings');
+const Feedback = require('../models/Feedback');
+const { notifyUser } = require('../utils/notify');
 
 function withCompliance(driver) {
   return { ...driver, compliance: checkDriverCompliance(driver) };
@@ -235,6 +237,16 @@ router.put('/drivers/:id', async (req, res) => {
 // PUT /api/admin/drivers/:id/approve
 router.put('/drivers/:id/approve', async (req, res) => {
   const driver = await Driver.findByIdAndUpdate(req.params.id, { status: 'approved' });
+  const driverUser = await User.findById(driver.userId);
+  if (driverUser) {
+    await emailService.sendDriverApproved(driverUser.email, driverUser.name);
+    await notifyUser(driverUser._id, {
+      type: 'driver-approved',
+      title: 'You are approved to drive',
+      message: 'Log in and go online to start receiving trips.',
+      link: '/driver',
+    });
+  }
   res.json(driver);
 });
 
@@ -372,6 +384,12 @@ router.get('/bookings', async (req, res) => {
   }));
 
   res.json(enriched);
+});
+
+// GET /api/admin/feedback - submissions from the public feedback form
+router.get('/feedback', async (req, res) => {
+  const feedback = await Feedback.find({}).sort({ createdAt: -1 });
+  res.json(feedback);
 });
 
 module.exports = router;

@@ -101,7 +101,7 @@ router.post(
         termsAcceptedAt: new Date(),
       });
 
-      await emailService.sendVerificationEmail(user.email, user.name);
+      await emailService.sendDriverApplicationReceived(user.email, user.name);
       await notifyAdmins({
         type: 'driver-signup',
         title: 'New driver application',

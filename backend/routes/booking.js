@@ -26,18 +26,25 @@ function emitToUser(req, userId, event, payload) {
 
 // Resolves who a booking/quote should go to: the requested driver if
 // they're still approved, otherwise falls back to any available approved
-// driver (same as a QR code for a driver who's since been rejected or
-// deactivated - the passenger still gets a ride, just not that specific
-// driver). requestedUnavailable/requestedName let the caller show a
-// warning; a null driver with requestedUnavailable true means the
-// fallback itself came up empty ("no drivers available").
+// driver (same as a QR code for a driver who's since been rejected,
+// deactivated, or currently outside their own declared schedule - the
+// passenger still gets a ride, just not that specific driver).
+// requestedUnavailable/requestedName let the caller show a warning; a null
+// driver with requestedUnavailable true means the fallback itself came up
+// empty ("no drivers available").
+//
+// A direct QR hail bypasses the ad-hoc isAvailable ("online/offline")
+// toggle - same as flagging a cab in person, it goes through even if they
+// forgot to switch it on. It does NOT bypass their declared weekly
+// schedule: a driver who's told the system "I don't work Sundays" stays
+// off Sundays regardless of how the booking reaches them.
 async function resolveDriver(driverId) {
   let requestedUnavailable = false;
   let requestedName = null;
 
   if (driverId) {
     const requested = await Driver.findById(driverId).populate('userId', 'name');
-    if (requested && requested.status === 'approved') {
+    if (requested && requested.status === 'approved' && isWithinSchedule(requested)) {
       return { driver: requested, usedFallback: false, requestedUnavailable: false, requestedName: null };
     }
     if (requested) {
@@ -46,10 +53,8 @@ async function resolveDriver(driverId) {
     }
   }
 
-  // Auto-match only considers drivers who are both toggled online AND
-  // currently within their declared weekly schedule (a direct QR hail
-  // above bypasses both, same as flagging a cab in person - that's
-  // unchanged; this filter is just for "any available driver" matching).
+  // Auto-match (no specific driver requested) considers drivers who are
+  // both toggled online AND currently within their declared schedule.
   const candidates = await Driver.find({ isAvailable: true, status: 'approved' });
   const inSchedule = candidates.filter((d) => isWithinSchedule(d));
   return { driver: inSchedule[0] || null, usedFallback: !!driverId, requestedUnavailable, requestedName };

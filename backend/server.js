@@ -19,6 +19,7 @@ const complaintRoutes = require('./routes/complaints');
 const geocodeRoutes = require('./routes/geocode');
 const notificationRoutes = require('./routes/notifications');
 const driverSignupRoutes = require('./routes/driverSignup');
+const feedbackRoutes = require('./routes/feedback');
 const { setIo } = require('./utils/notify');
 const { startReminderScheduler } = require('./utils/reminders');
 
@@ -45,6 +46,7 @@ app.use('/api/complaints', complaintRoutes);
 app.use('/api/geocode', geocodeRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/driver-signup', driverSignupRoutes);
+app.use('/api/feedback', feedbackRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

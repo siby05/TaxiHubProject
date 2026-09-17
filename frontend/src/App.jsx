@@ -1,6 +1,8 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
+import Home from './pages/Home';
+import About from './pages/About';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import DriverSignup from './pages/DriverSignup';
@@ -15,6 +17,7 @@ import DriverSchedule from './pages/driver/DriverSchedule';
 import DriverQrCode from './pages/driver/DriverQrCode';
 import DriverBilling from './pages/driver/DriverBilling';
 import DriverBookForPassenger from './pages/driver/DriverBookForPassenger';
+import DriverReports from './pages/driver/DriverReports';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminComplaints from './pages/admin/AdminComplaints';
 import AdminDriverReport from './pages/admin/AdminDriverReport';
@@ -28,7 +31,8 @@ export default function App() {
     <>
       <Navbar />
       <Routes>
-        <Route path="/" element={<Navigate to={home} replace />} />
+        <Route path="/" element={user ? <Navigate to={home} replace /> : <Home />} />
+        <Route path="/about" element={<About />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/driver-signup" element={<DriverSignup />} />
@@ -45,6 +49,7 @@ export default function App() {
         <Route path="/driver/billing" element={<ProtectedRoute roles={['driver']}><DriverBilling /></ProtectedRoute>} />
         <Route path="/driver/book" element={<ProtectedRoute roles={['driver']}><DriverBookForPassenger /></ProtectedRoute>} />
         <Route path="/driver/complaints" element={<ProtectedRoute roles={['driver']}><DriverComplaints /></ProtectedRoute>} />
+        <Route path="/driver/reports" element={<ProtectedRoute roles={['driver']}><DriverReports /></ProtectedRoute>} />
 
         <Route path="/admin" element={<ProtectedRoute roles={['admin']}><AdminDashboard /></ProtectedRoute>} />
         <Route path="/admin/complaints" element={<ProtectedRoute roles={['admin']}><AdminComplaints /></ProtectedRoute>} />

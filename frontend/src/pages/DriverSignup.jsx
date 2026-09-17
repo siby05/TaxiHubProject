@@ -4,6 +4,7 @@ import client from '../api/client';
 import { useAuthStore } from '../store/authStore';
 import Modal from '../components/Modal';
 import TermsContent from '../components/TermsContent';
+import AddressAutocomplete from '../components/AddressAutocomplete';
 
 const emptyForm = {
   name: '', email: '', password: '', mobile: '', address: '',
@@ -84,7 +85,7 @@ export default function DriverSignup() {
             <div><label>Password</label><input type="password" value={form.password} onChange={(e) => update('password', e.target.value)} required minLength={6} /></div>
             <div><label>Mobile</label><input value={form.mobile} onChange={(e) => update('mobile', e.target.value)} required /></div>
           </div>
-          <div><label>Address</label><input value={form.address} onChange={(e) => update('address', e.target.value)} /></div>
+          <AddressAutocomplete label="Address" onSelect={(r) => update('address', r ? r.label : '')} />
 
           <h3 style={{ marginBottom: 0 }}>Licensing &amp; vehicle</h3>
           <div className="grid cols-2">

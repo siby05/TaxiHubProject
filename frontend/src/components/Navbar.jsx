@@ -10,7 +10,7 @@ export default function Navbar() {
 
   return (
     <div className="navbar">
-      <Link className="brand" to={user ? home : '/login'}>🚖 TaxiHub</Link>
+      <Link className="brand" to={user ? home : '/'}>🚖 TaxiHub</Link>
       <nav>
         {user ? (
           <>
@@ -28,6 +28,7 @@ export default function Navbar() {
                 <Link to="/driver/qr-code">My QR code</Link>
                 <Link to="/driver/billing">Fees</Link>
                 <Link to="/driver/complaints">Complaints</Link>
+                <Link to="/driver/reports">Reports</Link>
                 <Link to="/terms">Terms</Link>
               </>
             )}
@@ -43,6 +44,7 @@ export default function Navbar() {
           </>
         ) : (
           <>
+            <Link to="/about">About</Link>
             <Link to="/login">Log in</Link>
             <Link to="/register">Sign up</Link>
             <Link to="/driver-signup">Drive with us</Link>

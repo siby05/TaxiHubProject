@@ -155,6 +155,7 @@ export default function PassengerDashboard() {
               {bookings.map((b) => (
                 <tr key={b._id}>
                   <td>
+                    <div className="muted">{b.bookingId}</div>
                     <div>{b.pickupAddress} → {b.dropAddress}</div>
                     <div className="muted">
                       {b.distanceKm} km · ${b.actualFare ?? b.estimatedFare} · {b.paymentMethod === 'card' ? (b.paymentStatus === 'paid' ? 'paid online' : 'unpaid (online)') : 'cash'}

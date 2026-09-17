@@ -145,6 +145,7 @@ export default function AdminDriverReport() {
               {trips.map((t) => (
                 <tr key={t._id}>
                   <td>
+                    <div className="muted">{t.bookingId}</div>
                     <div>{t.pickupAddress} → {t.dropAddress}</div>
                     <div className="muted">{t.passengerId?.name} · {new Date(t.createdAt).toLocaleDateString()}</div>
                   </td>
