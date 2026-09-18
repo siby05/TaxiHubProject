@@ -4,7 +4,8 @@ import { useBookingStore } from '../../store/bookingStore';
 import { useSocket } from '../../hooks/useSocket';
 import StarRating from '../../components/StarRating';
 import { notificationPermission, requestNotificationPermission, showBrowserNotification } from '../../utils/browserNotify';
-import { waLink, newTripMessage, driverArrivedMessage } from '../../utils/whatsapp';
+import { waLink, driverPendingMessage, driverArrivedMessage } from '../../utils/whatsapp';
+import WhatsAppIcon from '../../components/WhatsAppIcon';
 
 export default function DriverDashboard() {
   const { bookings, fetchDriverBookings } = useBookingStore();
@@ -168,59 +169,57 @@ export default function DriverDashboard() {
           <button className="btn secondary" onClick={() => setShowAllTrips((v) => !v)}>{showAllTrips ? 'Show last 30 days' : 'Show all history'}</button>
         </div>
         {bookings.length === 0 && <p className="muted">No bookings yet.</p>}
-        <table>
-          <tbody>
-            {bookings.map((b) => (
-              <tr key={b._id}>
-                <td>
-                  <div className="muted">
-                    {b.bookingId}
-                    {b.status === 'pending' && !b.driverId && <span className="badge" style={{ marginLeft: 6 }}>open request - first to accept gets it</span>}
-                  </div>
-                  <div>{b.pickupAddress} → {b.dropAddress}</div>
-                  <div className="muted">
-                    {b.passengerId?.name}{b.passengerRatingAvg ? ` (⭐${b.passengerRatingAvg})` : ''} · {b.distanceKm} km · est. ${b.estimatedFare} · {b.paymentMethod === 'card' ? (b.paymentStatus === 'paid' ? 'paid online' : 'awaiting online payment') : 'cash'}
-                  </div>
-                  <div className="muted">
-                    {b.scheduledFor ? `Scheduled: ${new Date(b.scheduledFor).toLocaleString()}` : `Requested: ${new Date(b.requestedAt || b.createdAt).toLocaleString()}`}
-                  </div>
-                  {b.arrivedAt && b.status === 'accepted' && <div className="muted">Arrived at pickup: {new Date(b.arrivedAt).toLocaleTimeString()}</div>}
-                  {b.status === 'completed' && !b.passengerRating && (
-                    <StarRating label="Rate this passenger" submitLabel="Rate" onSubmit={(rating, review) => ratePassenger(b._id, rating, review)} />
-                  )}
-                  {b.passengerRating && <div className="muted">You rated: {'★'.repeat(b.passengerRating)}{'☆'.repeat(5 - b.passengerRating)}</div>}
-                </td>
-                <td><span className={`badge ${b.status}`}>{b.status}</span></td>
-                <td>
-                  {b.status === 'pending' && (
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      <button className="btn" onClick={() => accept(b._id)}>Accept</button>
-                      <button className="btn secondary" onClick={() => decline(b._id)}>Decline</button>
-                      {waLink(b.passengerId?.mobile, newTripMessage(b, b.passengerId?.name)) && (
-                        <a className="btn secondary" target="_blank" rel="noreferrer"
-                          href={waLink(b.passengerId?.mobile, newTripMessage(b, b.passengerId?.name))}>WhatsApp passenger</a>
-                      )}
-                    </div>
-                  )}
-                  {(b.status === 'accepted' || b.status === 'in-progress') && (
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      {b.status === 'accepted' && !b.arrivedAt && (
-                        <button className="btn secondary" onClick={() => markArrived(b._id)}>I've arrived</button>
-                      )}
-                      {b.status === 'accepted' && b.arrivedAt && waLink(b.passengerId?.mobile, driverArrivedMessage(b, profile?.userId?.name, `${profile?.vehicleType} · ${profile?.vehicleNumber}`)) && (
-                        <a className="btn secondary" target="_blank" rel="noreferrer"
-                          href={waLink(b.passengerId?.mobile, driverArrivedMessage(b, profile?.userId?.name, `${profile?.vehicleType} · ${profile?.vehicleNumber}`))}>WhatsApp "I've arrived"</a>
-                      )}
-                      <input style={{ width: 90 }} type="number" step="0.01" placeholder="Actual $"
-                        value={fareInputs[b._id] || ''} onChange={(e) => setFareInputs((f) => ({ ...f, [b._id]: e.target.value }))} />
-                      <button className="btn" onClick={() => complete(b._id)}>Complete</button>
-                    </div>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {bookings.map((b) => (
+          <div className="booking-row" key={b._id}>
+            <div className="booking-row-top">
+              <div>
+                <div className="muted">
+                  {b.bookingId}
+                  {b.status === 'pending' && !b.driverId && <span className="badge" style={{ marginLeft: 6 }}>open request - first to accept gets it</span>}
+                </div>
+                <div>{b.pickupAddress} → {b.dropAddress}</div>
+                <div className="muted">
+                  {b.passengerId?.name}{b.passengerRatingAvg ? ` (⭐${b.passengerRatingAvg})` : ''} · {b.distanceKm} km · est. ${b.estimatedFare} · {b.paymentMethod === 'card' ? (b.paymentStatus === 'paid' ? 'paid online' : 'awaiting online payment') : 'cash'}
+                </div>
+                <div className="muted">
+                  {b.scheduledFor ? `Scheduled: ${new Date(b.scheduledFor).toLocaleString()}` : `Requested: ${new Date(b.requestedAt || b.createdAt).toLocaleString()}`}
+                </div>
+                {b.arrivedAt && b.status === 'accepted' && <div className="muted">Arrived at pickup: {new Date(b.arrivedAt).toLocaleTimeString()}</div>}
+                {b.passengerRating && <div className="muted">You rated: {'★'.repeat(b.passengerRating)}{'☆'.repeat(5 - b.passengerRating)}</div>}
+              </div>
+              <span className={`badge ${b.status}`}>{b.status}</span>
+            </div>
+
+            {b.status === 'completed' && !b.passengerRating && (
+              <StarRating label="Rate this passenger" submitLabel="Rate" onSubmit={(rating, review) => ratePassenger(b._id, rating, review)} />
+            )}
+
+            {b.status === 'pending' && (
+              <div className="booking-actions">
+                <button className="btn" onClick={() => accept(b._id)}>Accept</button>
+                <button className="btn secondary" onClick={() => decline(b._id)}>Decline</button>
+                {waLink(b.passengerId?.mobile, driverPendingMessage(b, b.passengerId?.name)) && (
+                  <a className="btn whatsapp" target="_blank" rel="noreferrer"
+                    href={waLink(b.passengerId?.mobile, driverPendingMessage(b, b.passengerId?.name))}><WhatsAppIcon /> Message passenger</a>
+                )}
+              </div>
+            )}
+            {(b.status === 'accepted' || b.status === 'in-progress') && (
+              <div className="booking-actions">
+                {b.status === 'accepted' && !b.arrivedAt && (
+                  <button className="btn secondary" onClick={() => markArrived(b._id)}>I've arrived</button>
+                )}
+                {b.status === 'accepted' && b.arrivedAt && waLink(b.passengerId?.mobile, driverArrivedMessage(b, profile?.userId?.name, `${profile?.vehicleType} · ${profile?.vehicleNumber}`)) && (
+                  <a className="btn whatsapp" target="_blank" rel="noreferrer"
+                    href={waLink(b.passengerId?.mobile, driverArrivedMessage(b, profile?.userId?.name, `${profile?.vehicleType} · ${profile?.vehicleNumber}`))}><WhatsAppIcon /> "I've arrived"</a>
+                )}
+                <input style={{ width: 90 }} type="number" step="0.01" placeholder="Actual $"
+                  value={fareInputs[b._id] || ''} onChange={(e) => setFareInputs((f) => ({ ...f, [b._id]: e.target.value }))} />
+                <button className="btn" onClick={() => complete(b._id)}>Complete</button>
+              </div>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -10,21 +10,28 @@ export function waLink(mobile, text) {
   return `https://wa.me/${digits}${text ? `?text=${encodeURIComponent(text)}` : ''}`;
 }
 
-export function newTripMessage(booking, passengerName) {
-  return `Hi, this is TaxiHub - new ride request${passengerName ? ` from ${passengerName}` : ''}.\n` +
+// Each message below is pre-filled text for the SENDER to send - so it must
+// read naturally in that person's voice, addressed to the other party. Mixing
+// these up (e.g. giving the passenger a message written as if the driver
+// were confirming their own details) reads backwards to whoever gets it.
+
+// Driver -> passenger, sent from a still-pending request (before accept).
+export function driverPendingMessage(booking, passengerName) {
+  return `Hi${passengerName ? ` ${passengerName}` : ''}, this is your TaxiHub driver about booking ${booking.bookingId}.\n` +
     `Pickup: ${booking.pickupAddress}\nDrop: ${booking.dropAddress}\n` +
     `${booking.distanceKm} km · est. $${booking.estimatedFare} · ${booking.paymentMethod === 'card' ? 'paying online' : 'cash'}` +
-    `${booking.scheduledFor ? `\nScheduled: ${new Date(booking.scheduledFor).toLocaleString()}` : ''}`;
+    `${booking.scheduledFor ? `\nScheduled: ${new Date(booking.scheduledFor).toLocaleString()}` : ''}\n` +
+    `I'll confirm shortly.`;
 }
 
-export function bookingAcceptedMessage(booking, driverName, vehicleLabel) {
-  return `Hi, your TaxiHub ride is confirmed (${booking.bookingId}).\n` +
-    `Driver: ${driverName}${vehicleLabel ? `\nVehicle: ${vehicleLabel}` : ''}\n` +
-    `Pickup: ${booking.pickupAddress}\nDrop: ${booking.dropAddress}\n` +
-    `Estimated fare: $${booking.estimatedFare}` +
-    `${booking.scheduledFor ? `\nScheduled: ${new Date(booking.scheduledFor).toLocaleString()}` : ''}`;
-}
-
+// Driver -> passenger, sent once the driver has arrived at pickup.
 export function driverArrivedMessage(booking, driverName, vehicleLabel) {
-  return `Hi, your TaxiHub driver has arrived at the pickup point.\n${driverName}${vehicleLabel ? ` · ${vehicleLabel}` : ''}\nPickup: ${booking.pickupAddress}`;
+  return `Hi, this is ${driverName || 'your TaxiHub driver'}${vehicleLabel ? ` (${vehicleLabel})` : ''} - I've arrived at ${booking.pickupAddress}. Whenever you're ready.`;
+}
+
+// Passenger -> driver, sent once the driver has accepted the ride.
+export function passengerToDriverMessage(booking, passengerName, driverName) {
+  return `Hi${driverName ? ` ${driverName}` : ''}, this is ${passengerName || 'your TaxiHub passenger'} - about booking ${booking.bookingId}.\n` +
+    `Pickup: ${booking.pickupAddress}\nDrop: ${booking.dropAddress}` +
+    `${booking.scheduledFor ? `\nScheduled: ${new Date(booking.scheduledFor).toLocaleString()}` : ''}`;
 }

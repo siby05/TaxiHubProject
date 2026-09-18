@@ -104,6 +104,16 @@ button.btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .muted { color: var(--muted); font-size: 0.9rem; }
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+
+/* One booking record: details + status on top, action buttons in a
+   full-width wrapping row underneath - so buttons never sit off to the
+   right where a phone would need to scroll sideways to reach them. */
+.booking-row { padding: 12px 0; border-bottom: 1px solid var(--border); }
+.booking-row:last-child { border-bottom: none; }
+.booking-row .booking-row-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.booking-row .booking-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.btn.whatsapp { background: #25d366; color: white; display: inline-flex; align-items: center; gap: 6px; }
+.btn.whatsapp:hover { background: #1ebe5a; }
 .auth-shell { max-width: 380px; margin: 60px auto; }
 .tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
 .tabs button { padding: 8px 14px; border-radius: 6px; border: 1px solid var(--border); background: white; cursor: pointer; }

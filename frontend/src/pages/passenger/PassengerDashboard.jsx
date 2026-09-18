@@ -2,14 +2,17 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../../api/client';
 import { useBookingStore } from '../../store/bookingStore';
+import { useAuthStore } from '../../store/authStore';
 import { useSocket } from '../../hooks/useSocket';
 import AddressAutocomplete from '../../components/AddressAutocomplete';
 import ScheduleField from '../../components/ScheduleField';
 import StarRating from '../../components/StarRating';
 import StripePaymentModal from '../../components/StripePaymentModal';
-import { waLink, bookingAcceptedMessage } from '../../utils/whatsapp';
+import { waLink, passengerToDriverMessage } from '../../utils/whatsapp';
+import WhatsAppIcon from '../../components/WhatsAppIcon';
 
 export default function PassengerDashboard() {
+  const { user } = useAuthStore();
   const { bookings, fetchMine, createBooking } = useBookingStore();
   const [stats, setStats] = useState(null);
   const [pickup, setPickup] = useState(null);
@@ -208,42 +211,46 @@ export default function PassengerDashboard() {
           <h3>My bookings</h3>
           {payError && <p className="error-text">{payError}</p>}
           {bookings.length === 0 && <p className="muted">No bookings yet.</p>}
-          <table>
-            <tbody>
-              {bookings.map((b) => (
-                <tr key={b._id}>
-                  <td>
-                    <div className="muted">{b.bookingId}</div>
-                    <div>{b.pickupAddress} → {b.dropAddress}</div>
-                    <div className="muted">
-                      {b.distanceKm} km · ${b.actualFare ?? b.estimatedFare} · {b.paymentMethod === 'card' ? (b.paymentStatus === 'paid' ? 'paid online' : 'unpaid (online)') : 'cash'}
-                    </div>
-                    {b.scheduledFor && <div className="muted">Scheduled: {new Date(b.scheduledFor).toLocaleString()}</div>}
-                    {b.arrivedAt && b.status === 'accepted' && (
-                      <div style={{ color: '#16a34a', fontWeight: 600 }}>🚕 Your driver has arrived - head out to the car.</div>
-                    )}
-                    {['accepted', 'in-progress'].includes(b.status) && waLink(b.driverContact?.mobile, bookingAcceptedMessage(b, b.driverContact?.name, `${b.driverId?.vehicleType} · ${b.driverId?.vehicleNumber}`)) && (
-                      <a className="btn secondary" style={{ marginTop: 4, display: 'inline-block' }} target="_blank" rel="noreferrer"
-                        href={waLink(b.driverContact?.mobile, bookingAcceptedMessage(b, b.driverContact?.name, `${b.driverId?.vehicleType} · ${b.driverId?.vehicleNumber}`))}>
-                        WhatsApp driver
-                      </a>
-                    )}
-                    {b.paymentMethod === 'card' && b.paymentStatus !== 'paid' && (!b.scheduledFor || b.status !== 'pending') && !['cancelled'].includes(b.status) && (
-                      <button className="btn secondary" style={{ marginTop: 4 }} onClick={() => payNow(b)} disabled={payingId === b._id}>
-                        {payingId === b._id ? 'Paying...' : 'Pay now'}
-                      </button>
-                    )}
-                    {b.status === 'completed' && !b.rating && (
-                      <StarRating label="Rate this driver" submitLabel="Rate" onSubmit={(rating, review) => rateDriver(b._id, rating, review)} />
-                    )}
-                    {b.rating && <div className="muted">You rated: {'★'.repeat(b.rating)}{'☆'.repeat(5 - b.rating)}</div>}
-                  </td>
-                  <td><span className={`badge ${b.status}`}>{b.status}</span></td>
-                  <td>{b.status === 'completed' && <Link to="/passenger/complaints/new" state={{ bookingId: b._id, driverName: b.driverId?.userId?.name }}>Lodge complaint</Link>}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {bookings.map((b) => (
+            <div className="booking-row" key={b._id}>
+              <div className="booking-row-top">
+                <div>
+                  <div className="muted">{b.bookingId}</div>
+                  <div>{b.pickupAddress} → {b.dropAddress}</div>
+                  <div className="muted">
+                    {b.distanceKm} km · ${b.actualFare ?? b.estimatedFare} · {b.paymentMethod === 'card' ? (b.paymentStatus === 'paid' ? 'paid online' : 'unpaid (online)') : 'cash'}
+                  </div>
+                  {b.scheduledFor && <div className="muted">Scheduled: {new Date(b.scheduledFor).toLocaleString()}</div>}
+                  {b.arrivedAt && b.status === 'accepted' && (
+                    <div style={{ color: '#16a34a', fontWeight: 600 }}>🚕 Your driver has arrived - head out to the car.</div>
+                  )}
+                  {b.rating && <div className="muted">You rated: {'★'.repeat(b.rating)}{'☆'.repeat(5 - b.rating)}</div>}
+                </div>
+                <span className={`badge ${b.status}`}>{b.status}</span>
+              </div>
+
+              {b.status === 'completed' && !b.rating && (
+                <StarRating label="Rate this driver" submitLabel="Rate" onSubmit={(rating, review) => rateDriver(b._id, rating, review)} />
+              )}
+
+              <div className="booking-actions">
+                {['accepted', 'in-progress'].includes(b.status) && waLink(b.driverContact?.mobile, passengerToDriverMessage(b, user?.name, b.driverContact?.name)) && (
+                  <a className="btn whatsapp" target="_blank" rel="noreferrer"
+                    href={waLink(b.driverContact?.mobile, passengerToDriverMessage(b, user?.name, b.driverContact?.name))}>
+                    <WhatsAppIcon /> Message driver
+                  </a>
+                )}
+                {b.paymentMethod === 'card' && b.paymentStatus !== 'paid' && (!b.scheduledFor || b.status !== 'pending') && !['cancelled'].includes(b.status) && (
+                  <button className="btn secondary" onClick={() => payNow(b)} disabled={payingId === b._id}>
+                    {payingId === b._id ? 'Paying...' : 'Pay now'}
+                  </button>
+                )}
+                {b.status === 'completed' && (
+                  <Link className="btn secondary" to="/passenger/complaints/new" state={{ bookingId: b._id, driverName: b.driverId?.userId?.name }}>Lodge complaint</Link>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
