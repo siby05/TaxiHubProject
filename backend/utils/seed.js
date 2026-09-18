@@ -55,8 +55,68 @@ module.exports = async function seed() {
     name: 'Demo Passenger', email: 'passenger@easyride.local', password, mobile: '+64210000001', role: 'passenger', isActive: true, emailVerified: true,
   });
 
+  // Extra test accounts (TEMPORARY - remove once real drivers/passengers
+  // are on the platform): three more approved, ready-to-book drivers each
+  // in a different vehicle class, and three more passengers, so the
+  // vehicle-type filter and multi-driver broadcast flow can be tested
+  // without hand-creating accounts through the admin UI every time.
+  const fullWeekSchedule = [0, 1, 2, 3, 4, 5, 6].map((dayOfWeek) => ({
+    dayOfWeek, enabled: true, startTime: '00:00', endTime: '23:59',
+  }));
+
+  const testDrivers = [
+    { name: 'Test Driver Economy', email: 'driver-economy@easyride.local', mobile: '+64210000010', vehicleType: 'Economy', vehicleNumber: 'ECO001', license: 'NZ-DL-20001', tsl: 'TSL-020001' },
+    { name: 'Test Driver Electric', email: 'driver-electric@easyride.local', mobile: '+64210000011', vehicleType: 'Electric', vehicleNumber: 'ELC001', license: 'NZ-DL-20002', tsl: 'TSL-020002' },
+    { name: 'Test Driver Premium', email: 'driver-premium@easyride.local', mobile: '+64210000012', vehicleType: 'Premium', vehicleNumber: 'PRE001', license: 'NZ-DL-20003', tsl: 'TSL-020003' },
+  ];
+  for (const d of testDrivers) {
+    const user = await User.create({
+      name: d.name, email: d.email, password, mobile: d.mobile, role: 'driver', isActive: true, emailVerified: true,
+    });
+    await Driver.create({
+      userId: user._id,
+      licenseNumber: d.license,
+      tslNumber: d.tsl,
+      vehicleType: d.vehicleType,
+      vehicleNumber: d.vehicleNumber,
+      ratePerKm: 1.8,
+      pendingRatePerKm: null,
+      status: 'approved',
+      isAvailable: true,
+      rating: 5,
+      totalTrips: 0,
+      totalEarnings: 0,
+      feeOverride: null,
+      feeLimitOverride: null,
+      acceptsOnlinePayment: true,
+      serviceCategory: 'private-hire',
+      hasSecurityCamera: false,
+      passengerEndorsementNumber: `PEND-${d.license.slice(-5)}`,
+      passengerEndorsementExpiry: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+      vehicleCofExpiry: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString(),
+      availabilitySchedule: fullWeekSchedule,
+    });
+  }
+
+  const testPassengers = [
+    { name: 'Test Passenger Two', email: 'passenger2@easyride.local', mobile: '+64210000020' },
+    { name: 'Test Passenger Three', email: 'passenger3@easyride.local', mobile: '+64210000021' },
+    { name: 'Test Passenger Four', email: 'passenger4@easyride.local', mobile: '+64210000022' },
+  ];
+  for (const p of testPassengers) {
+    await User.create({
+      name: p.name, email: p.email, password, mobile: p.mobile, role: 'passenger', isActive: true, emailVerified: true,
+    });
+  }
+
   console.log('[seed] demo accounts ready (password for all: "password123"):');
-  console.log('  admin@easyride.local     (admin)');
-  console.log('  driver@easyride.local    (driver, approved & available)');
-  console.log('  passenger@easyride.local (passenger)');
+  console.log('  admin@easyride.local          (admin)');
+  console.log('  driver@easyride.local         (driver, Comfort, approved & available)');
+  console.log('  driver-economy@easyride.local (driver, Economy, approved & available)');
+  console.log('  driver-electric@easyride.local(driver, Electric, approved & available)');
+  console.log('  driver-premium@easyride.local (driver, Premium, approved & available)');
+  console.log('  passenger@easyride.local      (passenger)');
+  console.log('  passenger2@easyride.local     (passenger)');
+  console.log('  passenger3@easyride.local     (passenger)');
+  console.log('  passenger4@easyride.local     (passenger)');
 };
