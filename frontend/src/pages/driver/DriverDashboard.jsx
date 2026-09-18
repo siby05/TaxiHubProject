@@ -4,7 +4,7 @@ import { useBookingStore } from '../../store/bookingStore';
 import { useSocket } from '../../hooks/useSocket';
 import StarRating from '../../components/StarRating';
 import { notificationPermission, requestNotificationPermission, showBrowserNotification } from '../../utils/browserNotify';
-import { waLink, driverPendingMessage, driverConfirmedMessage, driverArrivedMessage } from '../../utils/whatsapp';
+import { waLink, driverPendingMessage, driverConfirmedMessage, driverArrivedMessage, paymentReminderMessage } from '../../utils/whatsapp';
 import WhatsAppIcon from '../../components/WhatsAppIcon';
 
 export default function DriverDashboard() {
@@ -106,8 +106,26 @@ export default function DriverDashboard() {
   }
 
   async function complete(id) {
+    const booking = bookings.find((b) => b._id === id);
     const actualFare = Number(fareInputs[id]) || undefined;
-    await client.put(`/booking/${id}/complete`, { actualFare });
+
+    // Same synchronous-before-await trick as accept(): if this is a card
+    // trip that's still unpaid, open WhatsApp with a payment-reminder link
+    // right away, in this click, before the popup-blocker window closes.
+    let popup = null;
+    if (booking && booking.paymentMethod === 'card' && booking.paymentStatus !== 'paid') {
+      const payLink = `${window.location.origin}/pay/${id}`;
+      const finalBooking = { ...booking, actualFare: actualFare || booking.estimatedFare };
+      const link = waLink(booking.passengerId?.mobile, paymentReminderMessage(finalBooking, profile?.userId?.name, payLink));
+      popup = link ? window.open(link, '_blank') : null;
+    }
+
+    try {
+      await client.put(`/booking/${id}/complete`, { actualFare });
+    } catch (err) {
+      setAlert(err.response?.data?.error || 'Could not complete this trip');
+      if (popup) popup.close();
+    }
     load();
   }
 

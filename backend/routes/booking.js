@@ -477,6 +477,20 @@ router.get('/previous-drivers', auth, roleMiddleware(['passenger']), async (req,
   res.json(drivers);
 });
 
+// GET /api/booking/:id - single booking for its own passenger. Backs the
+// /pay/:bookingId deep link a driver can WhatsApp to a passenger who
+// completed a trip without having paid online yet (see PUT /:id/complete
+// below) - lets them jump straight to paying that one trip without
+// scrolling their full booking list. Kept deliberately last among the GET
+// routes above so it can't shadow the static ones (/mine, /vehicle-types,
+// /previous-drivers etc.) that share this router.
+router.get('/:id', auth, roleMiddleware(['passenger']), async (req, res) => {
+  const booking = await Booking.findById(req.params.id).populate('driverId');
+  if (!booking) return res.status(404).json({ error: 'Booking not found' });
+  if (String(booking.passengerId) !== String(req.user.id)) return res.status(403).json({ error: 'Not your booking' });
+  res.json(hidePassengerRating(booking));
+});
+
 // PUT /api/booking/:id/accept - driver accepts. For a booking already
 // assigned to this driver (direct hail), same as before. For a broadcast
 // request (driverId still null - see POST / above), this claims it: first

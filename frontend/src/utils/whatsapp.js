@@ -46,3 +46,14 @@ export function driverArrivedMessage(booking, driverName, vehicleLabel) {
 export function passengerToDriverMessage(driverName) {
   return `Hi${driverName ? ` ${driverName}` : ''}`;
 }
+
+// Driver -> passenger, opened automatically on Complete when the trip was
+// a card payment that's still unpaid (see pages/driver/DriverDashboard.jsx
+// complete()). payLink is the /pay/:bookingId deep link - one tap from
+// WhatsApp straight to the payment screen (logging in first if needed),
+// no need to find the trip in their own booking list.
+export function paymentReminderMessage(booking, driverName, payLink) {
+  return `Hi, this is ${driverName || 'your EasyRide driver'} - your trip (${booking.bookingId}) is complete.\n` +
+    `Fare: $${booking.actualFare}\n` +
+    `Please complete your online payment here: ${payLink}`;
+}

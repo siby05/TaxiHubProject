@@ -12,6 +12,7 @@ import PassengerProfile from './pages/passenger/PassengerProfile';
 import LodgeComplaint from './pages/passenger/LodgeComplaint';
 import MyComplaints from './pages/passenger/MyComplaints';
 import BookDriver from './pages/passenger/BookDriver';
+import PayBooking from './pages/passenger/PayBooking';
 import DriverDashboard from './pages/driver/DriverDashboard';
 import DriverComplaints from './pages/driver/DriverComplaints';
 import DriverSchedule from './pages/driver/DriverSchedule';
@@ -45,6 +46,7 @@ export default function App() {
         <Route path="/passenger/complaints" element={<ProtectedRoute roles={['passenger']}><MyComplaints /></ProtectedRoute>} />
         <Route path="/passenger/complaints/new" element={<ProtectedRoute roles={['passenger']}><LodgeComplaint /></ProtectedRoute>} />
         <Route path="/book/:driverId" element={<BookDriver />} />
+        <Route path="/pay/:bookingId" element={<ProtectedRoute roles={['passenger']}><PayBooking /></ProtectedRoute>} />
 
         <Route path="/driver" element={<ProtectedRoute roles={['driver']}><DriverDashboard /></ProtectedRoute>} />
         <Route path="/driver/schedule" element={<ProtectedRoute roles={['driver']}><DriverSchedule /></ProtectedRoute>} />
