@@ -170,8 +170,7 @@ export default function BookDriver() {
               </label>
             </div>
             {paymentMethod === 'card' && <p className="muted">Online payment includes a small payment-gateway surcharge (≈2.6%), added on top of the fare - shown below before you confirm.</p>}
-            {paymentMethod === 'card' && scheduledFor && <p className="muted">You'll be able to pay once the driver accepts.</p>}
-            {paymentMethod === 'card' && !scheduledFor && <p className="muted">You'll get a "Pay now" option right after booking.</p>}
+            {paymentMethod === 'card' && <p className="muted">You'll be able to pay once a driver accepts your ride.</p>}
           </div>
 
           {quoteLoading && <p className="muted">Calculating fare...</p>}

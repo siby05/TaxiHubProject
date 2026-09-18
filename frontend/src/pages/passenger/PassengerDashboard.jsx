@@ -157,10 +157,10 @@ export default function PassengerDashboard() {
     }
   }
 
-  // Card bookings can be paid as soon as they exist (immediate) or only
-  // once the driver has accepted (scheduled-for-later) - matches "later
-  // bookings pay online after confirmation". A real Stripe key configured
-  // opens an actual card-entry form (mock:false); without one, the backend
+  // Card bookings can only be paid once a driver has accepted - not while
+  // still a pending/broadcast request (see the matching guard in
+  // routes/payment.js create-intent). A real Stripe key configured opens
+  // an actual card-entry form (mock:false); without one, the backend
   // auto-marks it paid immediately so the flow still works for testing.
   async function payNow(booking) {
     setPayError('');
@@ -241,8 +241,8 @@ export default function PassengerDashboard() {
               {paymentMethod === 'card' && (
                 <p className="muted">Online payment includes a small payment-gateway surcharge (≈2.6%), added on top of the fare - shown below before you confirm.</p>
               )}
-              {paymentMethod === 'card' && scheduledFor && (
-                <p className="muted">You'll be able to pay once the driver accepts.</p>
+              {paymentMethod === 'card' && (
+                <p className="muted">You'll be able to pay once a driver accepts your ride.</p>
               )}
             </div>
 
@@ -305,7 +305,7 @@ export default function PassengerDashboard() {
                     <WhatsAppIcon /> Message driver
                   </a>
                 )}
-                {b.paymentMethod === 'card' && b.paymentStatus !== 'paid' && (!b.scheduledFor || b.status !== 'pending') && !['cancelled'].includes(b.status) && (
+                {b.paymentMethod === 'card' && b.paymentStatus !== 'paid' && !['pending', 'cancelled'].includes(b.status) && (
                   <button className="btn secondary" onClick={() => payNow(b)} disabled={payingId === b._id}>
                     {payingId === b._id ? 'Paying...' : 'Pay now'}
                   </button>

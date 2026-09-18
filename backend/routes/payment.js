@@ -26,6 +26,8 @@ router.post('/create-intent', auth, roleMiddleware(['passenger']), async (req, r
     if (String(booking.passengerId) !== String(req.user.id)) return res.status(403).json({ error: 'Not your booking' });
     if (booking.paymentMethod === 'cash') return res.status(400).json({ error: 'This booking is set to pay by cash' });
     if (booking.paymentStatus === 'paid') return res.status(400).json({ error: 'This booking is already paid' });
+    if (booking.status === 'pending') return res.status(400).json({ error: 'Wait for a driver to accept before paying' });
+    if (booking.status === 'cancelled') return res.status(400).json({ error: 'This booking was cancelled' });
 
     // The disclosed card surcharge (see routes/booking.js quote/create) is
     // part of what's actually charged - it's not just a cosmetic label.
