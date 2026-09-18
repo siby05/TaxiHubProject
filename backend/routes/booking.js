@@ -289,6 +289,117 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
   }
 });
 
+// PUT /api/booking/:id/edit - passenger corrects trip details (pickup/drop,
+// scheduled time, payment method, vehicle type) while the request is still
+// pending. Locked once a driver accepts - editing a trip mid-drive doesn't
+// make sense, and re-editing a broadcast a driver already committed to
+// would be confusing. Driver assignment itself isn't editable here: for a
+// direct-hail booking the driver stays fixed (only the trip details around
+// them change); for a still-unclaimed broadcast, changing the payment
+// method or vehicle type can change who it's even shown to, so the fare
+// and eligible-driver pool are both recalculated exactly like a fresh
+// booking, and everyone who could see the old or new version is nudged to
+// refresh (see 'booking:updated' below).
+router.put('/:id/edit', auth, roleMiddleware(['passenger']), async (req, res) => {
+  try {
+    const booking = await Booking.findById(req.params.id);
+    if (!booking) return res.status(404).json({ error: 'Booking not found' });
+    if (String(booking.passengerId) !== String(req.user.id)) return res.status(403).json({ error: 'Not your booking' });
+    if (booking.status !== 'pending') return res.status(400).json({ error: `Can't edit a trip that's already ${booking.status}` });
+
+    const {
+      pickupAddress, pickupLat, pickupLng, dropAddress, dropLat, dropLng,
+      scheduledFor, paymentMethod, vehicleType,
+    } = req.body;
+
+    if (scheduledFor !== undefined && scheduledFor && new Date(scheduledFor) <= new Date()) {
+      return res.status(400).json({ error: 'scheduledFor must be a time in the future' });
+    }
+    if (paymentMethod && !['cash', 'card'].includes(paymentMethod)) {
+      return res.status(400).json({ error: 'paymentMethod must be "cash" or "card"' });
+    }
+    if (vehicleType && !isValidVehicleType(vehicleType)) {
+      return res.status(400).json({ error: 'Unknown vehicle type' });
+    }
+
+    const nextPickupAddress = pickupAddress ?? booking.pickupAddress;
+    const nextPickupLat = pickupLat ?? booking.pickupLat;
+    const nextPickupLng = pickupLng ?? booking.pickupLng;
+    const nextDropAddress = dropAddress ?? booking.dropAddress;
+    const nextDropLat = dropLat ?? booking.dropLat;
+    const nextDropLng = dropLng ?? booking.dropLng;
+    const nextPaymentMethod = paymentMethod || booking.paymentMethod;
+    const oldVehicleType = booking.requestedVehicleType;
+    const nextVehicleType = vehicleType !== undefined ? (vehicleType || null) : oldVehicleType;
+
+    const distanceKm = Math.round(haversineKm(nextPickupLat, nextPickupLng, nextDropLat, nextDropLng) * 100) / 100;
+    const bookingSettings = getSettings();
+    let ratePerKmForEstimate;
+    let oldEligible = [];
+    let newEligible = [];
+
+    if (booking.driverId) {
+      // Direct hail: driver is fixed. Only block the edit if it would
+      // require charging by card through a driver who doesn't take it.
+      const driver = await Driver.findById(booking.driverId);
+      if (nextPaymentMethod === 'card' && driver?.acceptsOnlinePayment === false) {
+        const driverUser = await User.findById(driver.userId);
+        return res.status(400).json({ error: `${driverUser?.name || 'This driver'} only accepts cash. Switch back to cash, or cancel and request a different driver.` });
+      }
+      ratePerKmForEstimate = driver.ratePerKm;
+    } else {
+      oldEligible = await findEligibleCandidates(booking.paymentMethod, oldVehicleType);
+      newEligible = await findEligibleCandidates(nextPaymentMethod, nextVehicleType);
+      if (newEligible.length === 0) {
+        return res.status(400).json({ error: noDriverError(false, null, false, nextVehicleType) });
+      }
+      ratePerKmForEstimate = newEligible.reduce((sum, d) => sum + d.ratePerKm, 0) / newEligible.length;
+    }
+
+    const estimatedFare = calculateTripFare(distanceKm, ratePerKmForEstimate, bookingSettings);
+    const cardSurchargeAmount = nextPaymentMethod === 'card' ? calculateCardSurcharge(estimatedFare, bookingSettings.cardSurchargePercent) : 0;
+
+    const updated = await Booking.findByIdAndUpdate(booking._id, {
+      pickupAddress: nextPickupAddress,
+      pickupLat: nextPickupLat,
+      pickupLng: nextPickupLng,
+      dropAddress: nextDropAddress,
+      dropLat: nextDropLat,
+      dropLng: nextDropLng,
+      scheduledFor: scheduledFor !== undefined ? (scheduledFor ? new Date(scheduledFor) : null) : booking.scheduledFor,
+      paymentMethod: nextPaymentMethod,
+      requestedVehicleType: nextVehicleType,
+      distanceKm,
+      estimatedFare,
+      cardSurchargeAmount,
+    });
+
+    // Let whoever could see this trip know it changed - a full reload is
+    // enough since GET /driver always re-filters live against the current
+    // booking state, so a driver who's no longer eligible just won't see
+    // it after refreshing, and a newly-eligible one will.
+    if (booking.driverId) {
+      const driverUser = await User.findById((await Driver.findById(booking.driverId)).userId);
+      if (driverUser) {
+        emitToUser(req, driverUser._id, 'booking:updated', { bookingId: booking._id });
+        await notifyUser(driverUser._id, {
+          type: 'booking-updated',
+          title: 'A trip you accepted was updated',
+          message: `${updated.pickupAddress} → ${updated.dropAddress}`,
+          link: '/driver',
+        });
+      }
+    } else {
+      const notifySet = new Map([...oldEligible, ...newEligible].map((d) => [String(d.userId), d.userId]));
+      for (const userId of notifySet.values()) emitToUser(req, userId, 'booking:updated', { bookingId: booking._id });
+    }
+
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/booking/mine - passenger's own bookings
 router.get('/mine', auth, roleMiddleware(['passenger']), async (req, res) => {
   const bookings = await Booking.find({ passengerId: req.user.id })

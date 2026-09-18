@@ -37,6 +37,10 @@ export default function DriverDashboard() {
     // Another driver claimed a broadcast request we were also shown -
     // refresh so it drops out of our pending list too.
     'booking:claimed': () => load(),
+    // The passenger edited a still-pending trip (ours or a broadcast we
+    // could see) - reload so the details, or our eligibility for it, are
+    // current rather than stale.
+    'booking:updated': () => load(),
   });
 
   async function enableNotifications() {

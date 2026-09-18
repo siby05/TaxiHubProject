@@ -8,7 +8,7 @@ import Logo from './Logo';
 export default function PrintableQrCard({ qrCodeImage, vehicleNumber, vehicleType }) {
   return (
     <div className="printable-qr-card">
-      <Logo size={40} tagline />
+      <Logo size={40} tagline gap={8} />
       <h2 style={{ margin: 0 }}>Scan me to book a ride</h2>
       {qrCodeImage && <img src={qrCodeImage} alt="Booking QR code" style={{ width: '62mm', height: '62mm' }} />}
       {vehicleNumber && (

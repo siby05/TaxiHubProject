@@ -1,11 +1,20 @@
 import { useState } from 'react';
 
 // Optional "book for later" toggle. Reports the combined date+time as an
-// ISO string via onChange, or null when scheduling is off (book now).
-export default function ScheduleField({ onChange }) {
-  const [enabled, setEnabled] = useState(false);
-  const [date, setDate] = useState('');
-  const [time, setTime] = useState('');
+// ISO string via onChange, or null when scheduling is off (book now). Pass
+// defaultValue (an ISO string, e.g. an existing booking's scheduledFor) to
+// pre-fill and start toggled on - used when editing an already-scheduled trip.
+function pad(n) { return String(n).padStart(2, '0'); }
+
+export default function ScheduleField({ onChange, defaultValue }) {
+  // Date/time <input> values are local, but a stored scheduledFor is a UTC
+  // ISO string - pull local components back out rather than slicing the
+  // ISO string directly, or the pre-filled time would be off by the
+  // viewer's UTC offset.
+  const initial = defaultValue ? new Date(defaultValue) : null;
+  const [enabled, setEnabled] = useState(!!initial);
+  const [date, setDate] = useState(initial ? `${initial.getFullYear()}-${pad(initial.getMonth() + 1)}-${pad(initial.getDate())}` : '');
+  const [time, setTime] = useState(initial ? `${pad(initial.getHours())}:${pad(initial.getMinutes())}` : '');
 
   function toggle(checked) {
     setEnabled(checked);

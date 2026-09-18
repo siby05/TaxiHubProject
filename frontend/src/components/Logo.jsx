@@ -18,13 +18,13 @@ export function LogoBadge({ size = 32, dark = false }) {
 
 const FONT_STACK = "'Sora', system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
 
-export default function Logo({ size = 32, tagline = false, dark = false }) {
+export default function Logo({ size = 32, tagline = false, dark = false, gap }) {
   const easyColor = dark ? '#FFFFFF' : '#0B2942';
   const rideColor = dark ? '#38BDF8' : '#0EA5E9';
   const taglineColor = '#64748B';
 
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: size * 0.34 }}>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: gap ?? size * 0.34 }}>
       <LogoBadge size={size} dark={dark} />
       <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1 }}>
         <span style={{ fontFamily: FONT_STACK, fontWeight: 800, fontSize: size * 0.62 }}>

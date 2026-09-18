@@ -7,6 +7,7 @@ import AddressAutocomplete from '../../components/AddressAutocomplete';
 import ScheduleField from '../../components/ScheduleField';
 import StarRating from '../../components/StarRating';
 import StripePaymentModal from '../../components/StripePaymentModal';
+import Modal from '../../components/Modal';
 import { waLink, passengerToDriverMessage } from '../../utils/whatsapp';
 import WhatsAppIcon from '../../components/WhatsAppIcon';
 
@@ -30,6 +31,17 @@ export default function PassengerDashboard() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState('');
+
+  const [editingBooking, setEditingBooking] = useState(null);
+  const [editPickup, setEditPickup] = useState(null);
+  const [editDrop, setEditDrop] = useState(null);
+  const [editScheduledFor, setEditScheduledFor] = useState(null);
+  const [editPaymentMethod, setEditPaymentMethod] = useState('cash');
+  const [editVehicleType, setEditVehicleType] = useState('');
+  const [editQuote, setEditQuote] = useState(null);
+  const [editQuoteLoading, setEditQuoteLoading] = useState(false);
+  const [editError, setEditError] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
 
   function refresh() {
     fetchMine();
@@ -67,6 +79,58 @@ export default function PassengerDashboard() {
   async function rateDriver(bookingId, rating, review) {
     await client.put(`/booking/${bookingId}/rate`, { rating, review });
     refresh();
+  }
+
+  function openEdit(b) {
+    setEditError('');
+    setEditingBooking(b);
+    setEditPickup({ label: b.pickupAddress, lat: b.pickupLat, lng: b.pickupLng });
+    setEditDrop({ label: b.dropAddress, lat: b.dropLat, lng: b.dropLng });
+    setEditScheduledFor(b.scheduledFor || null);
+    setEditPaymentMethod(b.paymentMethod);
+    setEditVehicleType(b.requestedVehicleType || '');
+  }
+
+  function closeEdit() {
+    setEditingBooking(null);
+    setEditQuote(null);
+  }
+
+  useEffect(() => {
+    setEditQuote(null);
+    setEditError('');
+    if (!editingBooking || !editPickup || !editDrop) return;
+    let cancelled = false;
+    setEditQuoteLoading(true);
+    client.post('/booking/quote', {
+      driverId: editingBooking.driverId?._id || editingBooking.driverId || undefined,
+      pickupLat: editPickup.lat, pickupLng: editPickup.lng, dropLat: editDrop.lat, dropLng: editDrop.lng,
+      paymentMethod: editPaymentMethod, vehicleType: editVehicleType || undefined,
+    })
+      .then((r) => { if (!cancelled) setEditQuote(r.data); })
+      .catch((err) => { if (!cancelled) setEditError(err.response?.data?.error || 'Could not calculate fare'); })
+      .finally(() => { if (!cancelled) setEditQuoteLoading(false); });
+    return () => { cancelled = true; };
+  }, [editingBooking, editPickup, editDrop, editPaymentMethod, editVehicleType]);
+
+  async function saveEdit() {
+    setEditError('');
+    setEditSaving(true);
+    try {
+      await client.put(`/booking/${editingBooking._id}/edit`, {
+        pickupAddress: editPickup.label, pickupLat: editPickup.lat, pickupLng: editPickup.lng,
+        dropAddress: editDrop.label, dropLat: editDrop.lat, dropLng: editDrop.lng,
+        scheduledFor: editScheduledFor,
+        paymentMethod: editPaymentMethod,
+        vehicleType: editVehicleType || null,
+      });
+      closeEdit();
+      refresh();
+    } catch (err) {
+      setEditError(err.response?.data?.error || 'Could not save changes');
+    } finally {
+      setEditSaving(false);
+    }
   }
 
   async function confirmBooking() {
@@ -232,6 +296,9 @@ export default function PassengerDashboard() {
               )}
 
               <div className="booking-actions">
+                {b.status === 'pending' && (
+                  <button className="btn secondary" onClick={() => openEdit(b)}>Edit ride</button>
+                )}
                 {['accepted', 'in-progress'].includes(b.status) && waLink(b.driverContact?.mobile, passengerToDriverMessage(b.driverContact?.name)) && (
                   <a className="btn whatsapp" target="_blank" rel="noreferrer"
                     href={waLink(b.driverContact?.mobile, passengerToDriverMessage(b.driverContact?.name))}>
@@ -259,6 +326,60 @@ export default function PassengerDashboard() {
           onClose={() => setPayModal(null)}
           onSuccess={() => { setPayModal(null); refresh(); }}
         />
+      )}
+
+      {editingBooking && (
+        <Modal title={`Edit ride ${editingBooking.bookingId}`} onClose={closeEdit}>
+          <p className="muted">
+            You can edit this while it's still pending. {editingBooking.driverId ? "It's requested from a specific driver, so the driver stays the same - only the trip details below can change." : "It's an open request to any available driver, so changing payment method or vehicle type may change who it's shown to."}
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <AddressAutocomplete label="Pickup address" defaultValue={editPickup?.label} onSelect={setEditPickup} required allowLocate />
+            <AddressAutocomplete label="Drop address" defaultValue={editDrop?.label} onSelect={setEditDrop} required />
+            <ScheduleField onChange={setEditScheduledFor} defaultValue={editScheduledFor} />
+
+            {vehicleTypes.length > 0 && !editingBooking.driverId && (
+              <div>
+                <label>Vehicle type</label>
+                <select value={editVehicleType} onChange={(e) => setEditVehicleType(e.target.value)}>
+                  <option value="">Any vehicle</option>
+                  {vehicleTypes.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+              </div>
+            )}
+
+            <div>
+              <label>Payment</label>
+              <div style={{ display: 'flex', gap: 16 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input type="radio" style={{ width: 'auto' }} checked={editPaymentMethod === 'cash'} onChange={() => setEditPaymentMethod('cash')} /> Cash to driver
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input type="radio" style={{ width: 'auto' }} checked={editPaymentMethod === 'card'} onChange={() => setEditPaymentMethod('card')} /> Pay online
+                </label>
+              </div>
+            </div>
+
+            {editQuoteLoading && <p className="muted">Recalculating fare...</p>}
+            {editQuote && !editQuoteLoading && (
+              <div className="card fare-confirm">
+                <strong>Estimated fare: ${editQuote.estimatedFare.toFixed(2)}</strong>
+                {editQuote.cardSurchargeAmount > 0 && (
+                  <div className="muted">+ ${editQuote.cardSurchargeAmount.toFixed(2)} online payment surcharge = <strong>${editQuote.total.toFixed(2)} total</strong></div>
+                )}
+                <div className="muted">{editQuote.distanceKm} km{editScheduledFor && ` · scheduled for ${new Date(editScheduledFor).toLocaleString()}`}</div>
+              </div>
+            )}
+            {editError && <p className="error-text">{editError}</p>}
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn" onClick={saveEdit} disabled={editSaving || editQuoteLoading || !editQuote}>
+                {editSaving ? 'Saving...' : 'Save changes'}
+              </button>
+              <button className="btn secondary" onClick={closeEdit}>Cancel</button>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   );
