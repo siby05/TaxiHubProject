@@ -28,13 +28,13 @@ async function send(to, subject, text) {
 
 const emailService = {
   sendVerificationEmail: (to, name) =>
-    send(to, 'Welcome to TaxiHub - verify your email', `Hi ${name}, welcome to TaxiHub! Your account is ready to use.`),
+    send(to, 'Welcome to EasyRide - verify your email', `Hi ${name}, welcome to EasyRide! Your account is ready to use.`),
 
   sendDriverApplicationReceived: (to, name) =>
-    send(to, 'Your TaxiHub driver application was received', `Hi ${name}, thanks for applying to drive with TaxiHub. Your documents (license, TSL, CoF, vehicle registration) are being reviewed by an admin - you'll be notified once your account is approved and you can start accepting trips.`),
+    send(to, 'Your EasyRide driver application was received', `Hi ${name}, thanks for applying to drive with EasyRide. Your documents (license, TSL, CoF, vehicle registration) are being reviewed by an admin - you'll be notified once your account is approved and you can start accepting trips.`),
 
   sendDriverApproved: (to, name) =>
-    send(to, 'You are approved to drive on TaxiHub', `Hi ${name}, your driver account has been approved. Log in, go online, and you can start receiving trip requests.`),
+    send(to, 'You are approved to drive on EasyRide', `Hi ${name}, your driver account has been approved. Log in, go online, and you can start receiving trip requests.`),
 
   sendBookingConfirmation: (to, booking) =>
     send(to, `Booking confirmed (${booking._id})`, `Your ride from ${booking.pickupAddress} to ${booking.dropAddress} has been requested. Estimated fare: $${booking.estimatedFare}.`),
@@ -55,7 +55,7 @@ const emailService = {
     send(to, `A complaint has been lodged (${complaint.complaintId})`, `A passenger has lodged a complaint regarding a recent trip. Please log in to review and respond.`),
 
   sendAdminAlertSerious: (complaint) =>
-    send(process.env.EMAIL_FROM || 'admin@taxihub.local', `SERIOUS INCIDENT: ${complaint.complaintId}`, `A serious complaint (${complaint.complaintType}) was lodged and requires immediate review.`),
+    send(process.env.EMAIL_FROM || 'admin@easyride.local', `SERIOUS INCIDENT: ${complaint.complaintId}`, `A serious complaint (${complaint.complaintType}) was lodged and requires immediate review.`),
 
   sendDriverResponseNotification: (to, complaint) =>
     send(to, `Driver responded to your complaint (${complaint.complaintId})`, `The driver has responded to your complaint. Log in to view the response.`),
@@ -70,7 +70,7 @@ const emailService = {
     send(to, `Complaint reopened (${complaint.complaintId})`, `We've reopened your complaint and will review it again.`),
 
   sendEscalationAlert: (complaint) =>
-    send(process.env.EMAIL_FROM || 'admin@taxihub.local', `ESCALATED: ${complaint.complaintId}`, `Complaint ${complaint.complaintId} has been escalated to authorities.`),
+    send(process.env.EMAIL_FROM || 'admin@easyride.local', `ESCALATED: ${complaint.complaintId}`, `Complaint ${complaint.complaintId} has been escalated to authorities.`),
 
   sendTripReminder: (to, booking, whenLabel) =>
     send(to, `Reminder: trip ${whenLabel} (${booking.bookingId})`, `Your trip from ${booking.pickupAddress} to ${booking.dropAddress} is scheduled for ${new Date(booking.scheduledFor).toLocaleString()}.`),

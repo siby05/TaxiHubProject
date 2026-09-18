@@ -1,10 +1,13 @@
 :root {
-  --bg: #0f172a;
+  /* EasyRide brand palette - see "Easy Ride Logo.pdf" style reference. */
+  --bg: #0b2942;
   --surface: #ffffff;
   --text: #1e293b;
   --muted: #64748b;
-  --primary: #ea580c;
-  --primary-dark: #c2410c;
+  --primary: #0ea5e9;
+  --primary-dark: #0284c7;
+  --accent: #38bdf8;
+  --ink: #0b2942;
   --border: #e2e8f0;
   --success: #16a34a;
   --danger: #dc2626;

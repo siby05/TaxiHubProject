@@ -6,8 +6,8 @@ import client from '../api/client';
 // onSelect(null) while the user is still typing (no confirmed coordinates
 // yet) and onSelect({label,lat,lng}) once they pick a suggestion or use
 // their current location.
-export default function AddressAutocomplete({ label, placeholder, onSelect, required, allowLocate }) {
-  const [query, setQuery] = useState('');
+export default function AddressAutocomplete({ label, placeholder, onSelect, required, allowLocate, defaultValue }) {
+  const [query, setQuery] = useState(defaultValue || '');
   const [results, setResults] = useState([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);

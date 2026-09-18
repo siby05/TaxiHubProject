@@ -44,7 +44,7 @@ export default function Home() {
         </div>
 
         <p className="muted" style={{ marginTop: 24 }}>
-          Want the full story? Read <Link to="/about">About TaxiHub</Link>, or check our <Link to="/terms">Terms &amp; Conditions</Link>.
+          Want the full story? Read <Link to="/about">About EasyRide</Link>, or check our <Link to="/terms">Terms &amp; Conditions</Link>.
         </p>
       </div>
     </div>

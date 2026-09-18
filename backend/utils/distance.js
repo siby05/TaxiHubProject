@@ -19,6 +19,25 @@ function calculateFare(distanceKm, ratePerKm) {
   return Math.round((baseFare + distanceKm * rate) * 100) / 100;
 }
 
+// The price of whichever admin-configured distance band the trip falls
+// into (see config/platformSettings.js fareRanges), or 0 if it's longer
+// than every band - meaning that floor simply doesn't apply to this trip.
+function rangeBasedPrice(distanceKm, fareRanges) {
+  const band = (fareRanges || []).find((r) => distanceKm <= r.maxKm);
+  return band ? band.price : 0;
+}
+
+// The actual quoted fare: the highest of (a) the per-km calculation, (b)
+// the admin's flat minimum fare, and (c) the admin's range-based price for
+// this distance band - so neither a cheap per-km rate nor a driver's own
+// rate can undercut the platform's configured floors.
+function calculateTripFare(distanceKm, ratePerKm, settings) {
+  const byDistance = calculateFare(distanceKm, ratePerKm);
+  const byMinimum = settings?.minimumFare || 0;
+  const byRange = rangeBasedPrice(distanceKm, settings?.fareRanges);
+  return Math.max(byDistance, byMinimum, byRange);
+}
+
 // Card-only surcharge disclosed to the passenger up front (see
 // platformSettings.cardSurchargePercent) - covers the payment gateway's
 // own processing fee. Cash trips never carry this.
@@ -26,4 +45,4 @@ function calculateCardSurcharge(fare, surchargePercent) {
   return Math.round(fare * (surchargePercent / 100) * 100) / 100;
 }
 
-module.exports = { haversineKm, calculateFare, calculateCardSurcharge };
+module.exports = { haversineKm, calculateFare, calculateTripFare, calculateCardSurcharge };

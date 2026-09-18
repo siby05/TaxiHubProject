@@ -4,7 +4,7 @@ import { useBookingStore } from '../../store/bookingStore';
 import { useSocket } from '../../hooks/useSocket';
 import StarRating from '../../components/StarRating';
 import { notificationPermission, requestNotificationPermission, showBrowserNotification } from '../../utils/browserNotify';
-import { waLink, driverPendingMessage, driverArrivedMessage } from '../../utils/whatsapp';
+import { waLink, driverPendingMessage, driverConfirmedMessage, driverArrivedMessage } from '../../utils/whatsapp';
 import WhatsAppIcon from '../../components/WhatsAppIcon';
 
 export default function DriverDashboard() {
@@ -73,10 +73,20 @@ export default function DriverDashboard() {
   }
 
   async function accept(id) {
+    // Open the WhatsApp tab synchronously, in the same click, before any
+    // await - browsers only allow window.open without a popup-blocker
+    // prompt when it's called directly inside a user gesture's call stack.
+    // Booking details are already in state, so the link doesn't need to
+    // wait on the accept API call.
+    const booking = bookings.find((b) => b._id === id);
+    const link = booking && waLink(booking.passengerId?.mobile, driverConfirmedMessage(booking, profile?.userId?.name, profile ? `${profile.vehicleType} · ${profile.vehicleNumber}` : ''));
+    const popup = link ? window.open(link, '_blank') : null;
+
     try {
       await client.put(`/booking/${id}/accept`);
     } catch (err) {
       setAlert(err.response?.data?.error || 'Could not accept this trip');
+      if (popup) popup.close();
     }
     load();
   }

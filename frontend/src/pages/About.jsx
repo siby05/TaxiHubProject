@@ -26,10 +26,10 @@ export default function About() {
   return (
     <div className="container" style={{ maxWidth: 860, margin: '0 auto' }}>
       <div className="hero" style={{ maxWidth: '100%' }}>
-        <div className="eyebrow">About TaxiHub</div>
+        <div className="eyebrow">About EasyRide</div>
         <h1>Local rides, booked straight from the driver in front of you.</h1>
         <p className="tagline">
-          TaxiHub started in New Plymouth as a simple idea: let a passenger book a specific driver directly - by
+          EasyRide started in New Plymouth as a simple idea: let a passenger book a specific driver directly - by
           scanning the QR code on their car - with an upfront price, instead of guessing who'll turn up. We're
           expanding to more towns across New Zealand as more drivers join.
         </p>
@@ -49,7 +49,7 @@ export default function About() {
           <h3 style={{ marginTop: 0 }}>Where we operate</h3>
           <p className="muted">
             Currently serving <strong>New Plymouth</strong>, with drivers being added in more Taranaki and wider New
-            Zealand towns as we grow. If you'd like TaxiHub in your area - as a driver or on behalf of a local
+            Zealand towns as we grow. If you'd like EasyRide in your area - as a driver or on behalf of a local
             operator - get in touch below.
           </p>
           <h3>For drivers</h3>

@@ -1,5 +1,5 @@
 {
-  "name": "taxihub-backend",
+  "name": "easyride-backend",
   "version": "1.0.0",
   "description": "TaxiHub booking API - auth, bookings, drivers, admin, complaints (NZ Transport Agency compliant)",
   "main": "server.js",

@@ -5,13 +5,12 @@ const Driver = require('../models/Driver');
 const User = require('../models/User');
 const { auth, roleMiddleware } = require('../middleware/auth');
 const { emailService } = require('../services/emailService');
-const { haversineKm, calculateFare } = require('../utils/distance');
+const { haversineKm, calculateTripFare, calculateCardSurcharge } = require('../utils/distance');
 const { VEHICLE_TYPES, isValidVehicleType } = require('../config/vehicleTypes');
 const { notifyUser, notifyAdmins } = require('../utils/notify');
 const { getPassengerRatingAvg } = require('../utils/ratings');
 const { isWithinSchedule } = require('../utils/schedule');
 const { getDriverBilling } = require('../utils/billing');
-const { calculateCardSurcharge } = require('../utils/distance');
 const { getSettings } = require('../config/platformSettings');
 
 // Passengers should never see the rating a driver gave them (they can only
@@ -176,8 +175,9 @@ router.post('/quote', auth, roleMiddleware(['passenger', 'driver']), async (req,
     }
 
     const distanceKm = Math.round(haversineKm(pickupLat, pickupLng, dropLat, dropLng) * 100) / 100;
-    const estimatedFare = calculateFare(distanceKm, driver.ratePerKm);
-    const cardSurchargePercent = getSettings().cardSurchargePercent;
+    const settings = getSettings();
+    const estimatedFare = calculateTripFare(distanceKm, driver.ratePerKm, settings);
+    const cardSurchargePercent = settings.cardSurchargePercent;
     const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(estimatedFare, cardSurchargePercent) : 0;
     res.json({
       distanceKm, estimatedFare, usedFallback, requestedUnavailable, requestedCashOnly, requestedName,
@@ -248,8 +248,9 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
       ratePerKmForEstimate = broadcastCandidates.reduce((sum, d) => sum + d.ratePerKm, 0) / broadcastCandidates.length;
     }
 
-    const estimatedFare = calculateFare(distanceKm, ratePerKmForEstimate);
-    const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(estimatedFare, getSettings().cardSurchargePercent) : 0;
+    const bookingSettings = getSettings();
+    const estimatedFare = calculateTripFare(distanceKm, ratePerKmForEstimate, bookingSettings);
+    const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(estimatedFare, bookingSettings.cardSurchargePercent) : 0;
 
     const booking = await Booking.create({
       passengerId: req.user.id,

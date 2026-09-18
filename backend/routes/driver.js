@@ -8,7 +8,7 @@ const Booking = require('../models/Booking');
 const { auth, roleMiddleware } = require('../middleware/auth');
 const { ensureDriverQrCode } = require('../utils/qrcode');
 const { getDriverBilling } = require('../utils/billing');
-const { haversineKm, calculateFare, calculateCardSurcharge } = require('../utils/distance');
+const { haversineKm, calculateTripFare, calculateCardSurcharge } = require('../utils/distance');
 const { emailService } = require('../services/emailService');
 const { notifyUser, notifyAdmins } = require('../utils/notify');
 const { checkDriverCompliance } = require('../utils/compliance');
@@ -247,7 +247,7 @@ router.post('/bookings', auth, roleMiddleware(['driver']), async (req, res) => {
       const placeholderPassword = await bcrypt.hash(crypto.randomBytes(16).toString('hex'), 10);
       passenger = await User.create({
         name: passengerName,
-        email: passengerEmail ? passengerEmail.toLowerCase() : `walkup-${crypto.randomBytes(4).toString('hex')}@no-email.taxihub.local`,
+        email: passengerEmail ? passengerEmail.toLowerCase() : `walkup-${crypto.randomBytes(4).toString('hex')}@no-email.easyride.local`,
         password: placeholderPassword,
         mobile: passengerMobile,
         address: passengerAddress,
@@ -259,8 +259,9 @@ router.post('/bookings', auth, roleMiddleware(['driver']), async (req, res) => {
     }
 
     const distanceKm = Math.round(haversineKm(pickupLat, pickupLng, dropLat, dropLng) * 100) / 100;
-    const estimatedFare = calculateFare(distanceKm, driver.ratePerKm);
-    const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(estimatedFare, getSettings().cardSurchargePercent) : 0;
+    const driverBookingSettings = getSettings();
+    const estimatedFare = calculateTripFare(distanceKm, driver.ratePerKm, driverBookingSettings);
+    const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(estimatedFare, driverBookingSettings.cardSurchargePercent) : 0;
 
     const booking = await Booking.create({
       passengerId: passenger._id,

@@ -472,6 +472,51 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {tab === 'settings' && settings && (
+        <div className="card" style={{ maxWidth: 480 }}>
+          <h3>Fare floors</h3>
+          <p className="muted">
+            Every trip is quoted at the <strong>highest</strong> of: the driver's per-km rate, the minimum fare
+            below, and (if the trip's distance falls inside one) the matching range price. This stops a short or
+            low per-km trip from underpricing the ride.
+          </p>
+          <form onSubmit={saveSettings}>
+            <div>
+              <label>Minimum fare ($)</label>
+              <input type="number" step="0.5" min="0" value={settings.minimumFare}
+                onChange={(e) => setSettings((s) => ({ ...s, minimumFare: e.target.value }))} />
+              <p className="muted" style={{ marginTop: 4 }}>No trip is ever quoted below this, regardless of distance.</p>
+            </div>
+
+            <div>
+              <label>Range-based prices</label>
+              <p className="muted" style={{ marginTop: 0 }}>
+                E.g. "up to 5 km = $12" - a flat price for any trip whose distance falls at or under that km figure.
+                Leave empty to rely on the minimum fare and per-km rate alone.
+              </p>
+              {settings.fareRanges.map((r, i) => (
+                <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                  <input type="number" step="0.5" min="0.1" placeholder="up to km" style={{ maxWidth: 110 }}
+                    value={r.maxKm}
+                    onChange={(e) => setSettings((s) => ({ ...s, fareRanges: s.fareRanges.map((row, j) => (j === i ? { ...row, maxKm: e.target.value } : row)) }))} />
+                  <span className="muted">km → $</span>
+                  <input type="number" step="0.5" min="0" placeholder="price" style={{ maxWidth: 110 }}
+                    value={r.price}
+                    onChange={(e) => setSettings((s) => ({ ...s, fareRanges: s.fareRanges.map((row, j) => (j === i ? { ...row, price: e.target.value } : row)) }))} />
+                  <button type="button" className="btn danger" style={{ padding: '4px 10px' }}
+                    onClick={() => setSettings((s) => ({ ...s, fareRanges: s.fareRanges.filter((_, j) => j !== i) }))}>Remove</button>
+                </div>
+              ))}
+              <button type="button" className="btn secondary"
+                onClick={() => setSettings((s) => ({ ...s, fareRanges: [...s.fareRanges, { maxKm: '', price: '' }] }))}>Add range</button>
+            </div>
+
+            {settingsMsg && <p className="muted">{settingsMsg}</p>}
+            <button className="btn" style={{ marginTop: 12 }}>Save</button>
+          </form>
+        </div>
+      )}
+
       {tab === 'feedback' && (
         <div className="card">
           <h3>Feedback submissions</h3>

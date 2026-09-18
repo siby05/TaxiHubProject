@@ -1,29 +1,38 @@
-// TaxiHub "road badge" mark - a road receding to the horizon inside a
-// rounded badge. Kept as inline SVG (not an <img>) so it stays crisp at
-// every size and can be recoloured for print. Mirrors public/favicon.svg;
-// change both together.
-export function LogoBadge({ size = 32 }) {
+// EasyRide brand mark - a chevron-in-a-badge icon plus a two-tone "Easy
+// Ride" wordmark. See "Easy Ride Logo.pdf" (style reference: primary
+// #0EA5E9, accent #38BDF8 for dark backgrounds, ink #0B2942, Sora
+// ExtraBold for the wordmark). Kept as inline SVG (not an <img>) so it
+// stays crisp at every size. Mirrors public/favicon.svg; change both
+// together. Pass `dark` when placed on a dark surface (e.g. the navbar) -
+// swaps the badge to the lighter accent blue and "Easy" to white so it
+// doesn't sit flat against a dark background.
+export function LogoBadge({ size = 32, dark = false }) {
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true" style={{ display: 'block', flexShrink: 0 }}>
-      <rect width="64" height="64" rx="16" fill="#F2C53D" />
-      <circle cx="32" cy="19" r="5.5" fill="#151C24" />
-      <path d="M29 28h6l5 23H24z" fill="#151C24" />
-      <rect x="31" y="31" width="2" height="3.5" fill="#F2C53D" />
-      <rect x="30.8" y="38" width="2.4" height="4" fill="#F2C53D" />
-      <rect x="30.6" y="45.5" width="2.8" height="4.5" fill="#F2C53D" />
+      <rect width="64" height="64" rx="15" fill={dark ? '#38BDF8' : '#0EA5E9'} />
+      <path d="M25 17 L40 32 L25 47" fill="none" stroke="#FFFFFF" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" />
+      <rect x="18" y="48" width="26" height="5" rx="2.5" fill="#FFFFFF" fillOpacity="0.55" />
     </svg>
   );
 }
 
-export default function Logo({ size = 32, tagline = false, color }) {
+const FONT_STACK = "'Sora', system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
+
+export default function Logo({ size = 32, tagline = false, dark = false }) {
+  const easyColor = dark ? '#FFFFFF' : '#0B2942';
+  const rideColor = dark ? '#38BDF8' : '#0EA5E9';
+  const taglineColor = '#64748B';
+
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: size * 0.34 }}>
-      <LogoBadge size={size} />
+      <LogoBadge size={size} dark={dark} />
       <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1 }}>
-        <span style={{ fontWeight: 800, letterSpacing: size * 0.02, fontSize: size * 0.62, color }}>TAXIHUB</span>
+        <span style={{ fontFamily: FONT_STACK, fontWeight: 800, fontSize: size * 0.62 }}>
+          <span style={{ color: easyColor }}>Easy</span> <span style={{ color: rideColor }}>Ride</span>
+        </span>
         {tagline && (
-          <span style={{ fontWeight: 600, letterSpacing: size * 0.09, fontSize: size * 0.25, marginTop: size * 0.14, opacity: 0.65, color }}>
-            TAXI HIRE · 24/7
+          <span style={{ fontWeight: 600, letterSpacing: size * 0.06, fontSize: size * 0.22, marginTop: size * 0.14, color: taglineColor }}>
+            PREMIUM TRANSPORT · NEW ZEALAND
           </span>
         )}
       </span>

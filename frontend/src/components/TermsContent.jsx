@@ -6,9 +6,9 @@ export default function TermsContent() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <section>
-        <h3>1. What TaxiHub is</h3>
+        <h3>1. What EasyRide is</h3>
         <p className="muted">
-          TaxiHub is a booking platform that connects passengers with independent drivers. It is not a transport
+          EasyRide is a booking platform that connects passengers with independent drivers. It is not a transport
           operator, does not employ drivers, and does not itself hold a Transport Service Licence for any vehicle.
           Each driver operates under their own licences and is solely responsible for complying with all applicable
           New Zealand transport law.
@@ -26,7 +26,7 @@ export default function TermsContent() {
         </ul>
         <p className="muted">
           Some regions require an approved in-vehicle security camera for certain service categories, unless the
-          service only carries registered, pre-booked passengers. Since every TaxiHub trip requires a signed-in
+          service only carries registered, pre-booked passengers. Since every EasyRide trip requires a signed-in
           passenger account, drivers here operate under the <strong>Private Hire</strong> category by default (no
           camera required) - but you're responsible for confirming your own region's current rules with NZTA before
           driving.
@@ -68,7 +68,7 @@ export default function TermsContent() {
         <h3>6. Conduct &amp; complaints</h3>
         <p className="muted">
           Passenger complaints are handled through the in-app complaint system and may be escalated to NZTA or
-          Police for serious incidents. TaxiHub is not liable for the conduct of any driver or passenger.
+          Police for serious incidents. EasyRide is not liable for the conduct of any driver or passenger.
         </p>
       </section>
     </div>

@@ -8,6 +8,7 @@ import Register from './pages/Register';
 import DriverSignup from './pages/DriverSignup';
 import Terms from './pages/Terms';
 import PassengerDashboard from './pages/passenger/PassengerDashboard';
+import PassengerProfile from './pages/passenger/PassengerProfile';
 import LodgeComplaint from './pages/passenger/LodgeComplaint';
 import MyComplaints from './pages/passenger/MyComplaints';
 import BookDriver from './pages/passenger/BookDriver';
@@ -40,6 +41,7 @@ export default function App() {
         <Route path="/terms" element={<Terms />} />
 
         <Route path="/passenger" element={<ProtectedRoute roles={['passenger']}><PassengerDashboard /></ProtectedRoute>} />
+        <Route path="/passenger/profile" element={<ProtectedRoute roles={['passenger']}><PassengerProfile /></ProtectedRoute>} />
         <Route path="/passenger/complaints" element={<ProtectedRoute roles={['passenger']}><MyComplaints /></ProtectedRoute>} />
         <Route path="/passenger/complaints/new" element={<ProtectedRoute roles={['passenger']}><LodgeComplaint /></ProtectedRoute>} />
         <Route path="/book/:driverId" element={<BookDriver />} />

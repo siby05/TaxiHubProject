@@ -75,6 +75,6 @@ connectDatabase().then(async () => {
   if ((process.env.DB_MODE || 'memory') === 'memory') {
     await require('./utils/seed')();
   }
-  server.listen(PORT, () => console.log(`TaxiHub API listening on http://localhost:${PORT}`));
+  server.listen(PORT, () => console.log(`EasyRide API listening on http://localhost:${PORT}`));
   startReminderScheduler();
 });

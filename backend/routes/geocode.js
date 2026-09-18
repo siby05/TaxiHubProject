@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 
-const NOMINATIM_HEADERS = { 'User-Agent': 'TaxiHub/1.0 (demo project)' };
+const NOMINATIM_HEADERS = { 'User-Agent': 'EasyRide/1.0 (demo project)' };
 
 // Nominatim's display_name is the full administrative chain (e.g. "50,
 // Karamea Street, Whalers Gate, New Plymouth, New Plymouth District,

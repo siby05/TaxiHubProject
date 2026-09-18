@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../../api/client';
 import { useBookingStore } from '../../store/bookingStore';
-import { useAuthStore } from '../../store/authStore';
 import { useSocket } from '../../hooks/useSocket';
 import AddressAutocomplete from '../../components/AddressAutocomplete';
 import ScheduleField from '../../components/ScheduleField';
@@ -12,7 +11,6 @@ import { waLink, passengerToDriverMessage } from '../../utils/whatsapp';
 import WhatsAppIcon from '../../components/WhatsAppIcon';
 
 export default function PassengerDashboard() {
-  const { user } = useAuthStore();
   const { bookings, fetchMine, createBooking } = useBookingStore();
   const [stats, setStats] = useState(null);
   const [pickup, setPickup] = useState(null);
@@ -234,9 +232,9 @@ export default function PassengerDashboard() {
               )}
 
               <div className="booking-actions">
-                {['accepted', 'in-progress'].includes(b.status) && waLink(b.driverContact?.mobile, passengerToDriverMessage(b, user?.name, b.driverContact?.name)) && (
+                {['accepted', 'in-progress'].includes(b.status) && waLink(b.driverContact?.mobile, passengerToDriverMessage(b.driverContact?.name)) && (
                   <a className="btn whatsapp" target="_blank" rel="noreferrer"
-                    href={waLink(b.driverContact?.mobile, passengerToDriverMessage(b, user?.name, b.driverContact?.name))}>
+                    href={waLink(b.driverContact?.mobile, passengerToDriverMessage(b.driverContact?.name))}>
                     <WhatsAppIcon /> Message driver
                   </a>
                 )}

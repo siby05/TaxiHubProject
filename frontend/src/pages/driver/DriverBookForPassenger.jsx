@@ -85,9 +85,9 @@ export default function DriverBookForPassenger() {
           <p>For {success.passenger.name} ({success.passenger.mobile}) - ${success.booking.estimatedFare} estimated, already marked accepted.</p>
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn" onClick={() => navigate('/driver')}>Back to trips</button>
-            {waLink(success.passenger.mobile, `Hi ${success.passenger.name}, your TaxiHub ride is booked (${success.booking.bookingId}). Pickup: ${success.booking.pickupAddress}, drop: ${success.booking.dropAddress}. Estimated fare: $${success.booking.estimatedFare}.`) && (
+            {waLink(success.passenger.mobile, `Hi ${success.passenger.name}, your EasyRide ride is booked (${success.booking.bookingId}). Pickup: ${success.booking.pickupAddress}, drop: ${success.booking.dropAddress}. Estimated fare: $${success.booking.estimatedFare}.`) && (
               <a className="btn secondary" target="_blank" rel="noreferrer"
-                href={waLink(success.passenger.mobile, `Hi ${success.passenger.name}, your TaxiHub ride is booked (${success.booking.bookingId}). Pickup: ${success.booking.pickupAddress}, drop: ${success.booking.dropAddress}. Estimated fare: $${success.booking.estimatedFare}.`)}>
+                href={waLink(success.passenger.mobile, `Hi ${success.passenger.name}, your EasyRide ride is booked (${success.booking.bookingId}). Pickup: ${success.booking.pickupAddress}, drop: ${success.booking.dropAddress}. Estimated fare: $${success.booking.estimatedFare}.`)}>
                 WhatsApp passenger
               </a>
             )}

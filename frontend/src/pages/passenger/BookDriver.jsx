@@ -73,7 +73,7 @@ export default function BookDriver() {
     return (
       <div className="container">
         <div className="hero">
-          <div className="eyebrow">You scanned a TaxiHub driver</div>
+          <div className="eyebrow">You scanned an EasyRide driver</div>
           <h1>Your ride, on your terms.</h1>
           <p className="tagline">Upfront fares, direct booking with the driver in front of you, and live updates the moment they accept.</p>
 
@@ -102,9 +102,9 @@ export default function BookDriver() {
 
           <div className="grid cols-2" style={{ marginTop: 32, textAlign: 'left' }}>
             <div className="card">
-              <h3 style={{ marginTop: 0 }}>About TaxiHub</h3>
+              <h3 style={{ marginTop: 0 }}>About EasyRide</h3>
               <p className="muted">
-                TaxiHub connects you directly with a driver by scanning the QR code in their vehicle - like flagging
+                EasyRide connects you directly with a driver by scanning the QR code in their vehicle - like flagging
                 a cab, but with an upfront price and a booking record. Every driver on the platform is added and
                 approved by an admin, holds a registered license and vehicle, and has a rating built from real
                 completed trips. If a driver isn't taking bookings right now, we match you with another available

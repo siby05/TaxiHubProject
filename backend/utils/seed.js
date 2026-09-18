@@ -6,17 +6,17 @@ const Driver = require('../models/Driver');
 // be tested immediately without a registration flow for driver/admin
 // (matches the "admin-managed driver accounts, no public driver signup" spec).
 module.exports = async function seed() {
-  const existing = await User.findOne({ email: 'admin@taxihub.local' });
+  const existing = await User.findOne({ email: 'admin@easyride.local' });
   if (existing) return;
 
   const password = await bcrypt.hash('password123', 10);
 
   await User.create({
-    name: 'Admin', email: 'admin@taxihub.local', password, role: 'admin', isActive: true, emailVerified: true,
+    name: 'Admin', email: 'admin@easyride.local', password, role: 'admin', isActive: true, emailVerified: true,
   });
 
   const driverUser = await User.create({
-    name: 'Demo Driver', email: 'driver@taxihub.local', password, mobile: '+64210000000', role: 'driver', isActive: true, emailVerified: true,
+    name: 'Demo Driver', email: 'driver@easyride.local', password, mobile: '+64210000000', role: 'driver', isActive: true, emailVerified: true,
   });
   await Driver.create({
     userId: driverUser._id,
@@ -52,11 +52,11 @@ module.exports = async function seed() {
   });
 
   await User.create({
-    name: 'Demo Passenger', email: 'passenger@taxihub.local', password, mobile: '+64210000001', role: 'passenger', isActive: true, emailVerified: true,
+    name: 'Demo Passenger', email: 'passenger@easyride.local', password, mobile: '+64210000001', role: 'passenger', isActive: true, emailVerified: true,
   });
 
   console.log('[seed] demo accounts ready (password for all: "password123"):');
-  console.log('  admin@taxihub.local     (admin)');
-  console.log('  driver@taxihub.local    (driver, approved & available)');
-  console.log('  passenger@taxihub.local (passenger)');
+  console.log('  admin@easyride.local     (admin)');
+  console.log('  driver@easyride.local    (driver, approved & available)');
+  console.log('  passenger@easyride.local (passenger)');
 };

@@ -17,21 +17,32 @@ export function waLink(mobile, text) {
 
 // Driver -> passenger, sent from a still-pending request (before accept).
 export function driverPendingMessage(booking, passengerName) {
-  return `Hi${passengerName ? ` ${passengerName}` : ''}, this is your TaxiHub driver about booking ${booking.bookingId}.\n` +
+  return `Hi${passengerName ? ` ${passengerName}` : ''}, this is your EasyRide driver about booking ${booking.bookingId}.\n` +
     `Pickup: ${booking.pickupAddress}\nDrop: ${booking.dropAddress}\n` +
     `${booking.distanceKm} km · est. $${booking.estimatedFare} · ${booking.paymentMethod === 'card' ? 'paying online' : 'cash'}` +
     `${booking.scheduledFor ? `\nScheduled: ${new Date(booking.scheduledFor).toLocaleString()}` : ''}\n` +
     `I'll confirm shortly.`;
 }
 
-// Driver -> passenger, sent once the driver has arrived at pickup.
-export function driverArrivedMessage(booking, driverName, vehicleLabel) {
-  return `Hi, this is ${driverName || 'your TaxiHub driver'}${vehicleLabel ? ` (${vehicleLabel})` : ''} - I've arrived at ${booking.pickupAddress}. Whenever you're ready.`;
+// Driver -> passenger, opened automatically the moment the driver taps
+// Accept (see pages/driver/DriverDashboard.jsx accept()) - states the
+// confirmation: who's coming, in what, and the fare.
+export function driverConfirmedMessage(booking, driverName, vehicleLabel) {
+  return `Hi, this is ${driverName || 'your EasyRide driver'} - your ride is confirmed (${booking.bookingId}).\n` +
+    `${vehicleLabel ? `Vehicle: ${vehicleLabel}\n` : ''}` +
+    `Pickup: ${booking.pickupAddress}\nDrop: ${booking.dropAddress}\n` +
+    `Estimated fare: $${booking.estimatedFare}` +
+    `${booking.scheduledFor ? `\nScheduled: ${new Date(booking.scheduledFor).toLocaleString()}` : ''}`;
 }
 
-// Passenger -> driver, sent once the driver has accepted the ride.
-export function passengerToDriverMessage(booking, passengerName, driverName) {
-  return `Hi${driverName ? ` ${driverName}` : ''}, this is ${passengerName || 'your TaxiHub passenger'} - about booking ${booking.bookingId}.\n` +
-    `Pickup: ${booking.pickupAddress}\nDrop: ${booking.dropAddress}` +
-    `${booking.scheduledFor ? `\nScheduled: ${new Date(booking.scheduledFor).toLocaleString()}` : ''}`;
+// Driver -> passenger, sent once the driver has arrived at pickup.
+export function driverArrivedMessage(booking, driverName, vehicleLabel) {
+  return `Hi, this is ${driverName || 'your EasyRide driver'}${vehicleLabel ? ` (${vehicleLabel})` : ''} - I've arrived at ${booking.pickupAddress}. Whenever you're ready.`;
+}
+
+// Passenger -> driver, once the driver has accepted the ride. Deliberately
+// just a greeting - the passenger types their own message rather than
+// getting a wall of booking details dropped into the compose box.
+export function passengerToDriverMessage(driverName) {
+  return `Hi${driverName ? ` ${driverName}` : ''}`;
 }

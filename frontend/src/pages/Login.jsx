@@ -28,9 +28,9 @@ export default function Login() {
 
   return (
     <div className="auth-shell card">
-      <h2>Log in to TaxiHub</h2>
+      <h2>Log in to EasyRide</h2>
       <p className="muted">
-        Demo accounts (password <code>password123</code>): admin@taxihub.local · driver@taxihub.local · passenger@taxihub.local
+        Demo accounts (password <code>password123</code>): admin@easyride.local · driver@easyride.local · passenger@easyride.local
       </p>
       <form onSubmit={onSubmit}>
         <div>

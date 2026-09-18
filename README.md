@@ -1,4 +1,4 @@
-# TaxiHub
+# EasyRide
 
 A working taxi booking system: passenger booking, admin-managed drivers, live
 booking updates (Socket.IO), payments (Stripe, mock by default), and a full
@@ -40,8 +40,8 @@ npm run dev               # http://localhost:5173
 ```
 
 On first boot the backend seeds three demo accounts (password `password123`
-for all): `admin@taxihub.local`, `driver@taxihub.local` (pre-approved),
-`passenger@taxihub.local`. Data is in-memory and resets when the backend
+for all): `admin@easyride.local`, `driver@easyride.local` (pre-approved),
+`passenger@easyride.local`. Data is in-memory and resets when the backend
 restarts.
 
 ## Complaint system

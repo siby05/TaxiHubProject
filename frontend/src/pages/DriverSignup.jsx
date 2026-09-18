@@ -80,7 +80,7 @@ export default function DriverSignup() {
   return (
     <div className="container">
       <div className="card" style={{ maxWidth: 560, margin: '0 auto' }}>
-        <h1>Drive with TaxiHub</h1>
+        <h1>Drive with EasyRide</h1>
         <p className="muted">Submit your details and documents below. An admin reviews and approves every application before you can start accepting trips.</p>
 
         <form onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

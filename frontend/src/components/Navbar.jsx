@@ -11,13 +11,14 @@ export default function Navbar() {
 
   return (
     <div className="navbar">
-      <Link className="brand" to={user ? home : '/'}><Logo size={30} /></Link>
+      <Link className="brand" to={user ? home : '/'}><Logo size={30} dark /></Link>
       <nav>
         {user ? (
           <>
             {user.role === 'passenger' && (
               <>
                 <Link to="/passenger">Book a ride</Link>
+                <Link to="/passenger/profile">My details</Link>
                 <Link to="/passenger/complaints">My complaints</Link>
               </>
             )}

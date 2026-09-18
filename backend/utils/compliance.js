@@ -11,7 +11,7 @@
  * medical check, police vet), and the vehicle needs a current Certificate
  * of Fitness (CoF), not just a WoF. Separately, some regions require an
  * approved in-vehicle security camera UNLESS the service only carries
- * registered/pre-booked passengers - since every TaxiHub trip requires a
+ * registered/pre-booked passengers - since every EasyRide trip requires a
  * signed-in passenger account, driver.serviceCategory defaults to
  * 'private-hire' (no camera) on that basis.
  */
