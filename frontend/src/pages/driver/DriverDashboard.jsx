@@ -71,7 +71,21 @@ export default function DriverDashboard() {
   }
 
   async function accept(id) {
-    await client.put(`/booking/${id}/accept`);
+    try {
+      await client.put(`/booking/${id}/accept`);
+    } catch (err) {
+      setAlert(err.response?.data?.error || 'Could not accept this trip');
+    }
+    load();
+  }
+
+  async function decline(id) {
+    await client.put(`/booking/${id}/decline`);
+    load();
+  }
+
+  async function markArrived(id) {
+    await client.put(`/booking/${id}/arrived`);
     load();
   }
 
@@ -169,6 +183,7 @@ export default function DriverDashboard() {
                   <div className="muted">
                     {b.scheduledFor ? `Scheduled: ${new Date(b.scheduledFor).toLocaleString()}` : `Requested: ${new Date(b.requestedAt || b.createdAt).toLocaleString()}`}
                   </div>
+                  {b.arrivedAt && b.status === 'accepted' && <div className="muted">Arrived at pickup: {new Date(b.arrivedAt).toLocaleTimeString()}</div>}
                   {b.status === 'completed' && !b.passengerRating && (
                     <StarRating label="Rate this passenger" submitLabel="Rate" onSubmit={(rating, review) => ratePassenger(b._id, rating, review)} />
                   )}
@@ -176,9 +191,17 @@ export default function DriverDashboard() {
                 </td>
                 <td><span className={`badge ${b.status}`}>{b.status}</span></td>
                 <td>
-                  {b.status === 'pending' && <button className="btn" onClick={() => accept(b._id)}>Accept</button>}
-                  {(b.status === 'accepted' || b.status === 'in-progress') && (
+                  {b.status === 'pending' && (
                     <div style={{ display: 'flex', gap: 6 }}>
+                      <button className="btn" onClick={() => accept(b._id)}>Accept</button>
+                      <button className="btn secondary" onClick={() => decline(b._id)}>Decline</button>
+                    </div>
+                  )}
+                  {(b.status === 'accepted' || b.status === 'in-progress') && (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {b.status === 'accepted' && !b.arrivedAt && (
+                        <button className="btn secondary" onClick={() => markArrived(b._id)}>I've arrived</button>
+                      )}
                       <input style={{ width: 90 }} type="number" step="0.01" placeholder="Actual $"
                         value={fareInputs[b._id] || ''} onChange={(e) => setFareInputs((f) => ({ ...f, [b._id]: e.target.value }))} />
                       <button className="btn" onClick={() => complete(b._id)}>Complete</button>

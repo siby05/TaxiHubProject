@@ -16,7 +16,7 @@ module.exports = async function seed() {
   });
 
   const driverUser = await User.create({
-    name: 'Demo Driver', email: 'driver@taxihub.local', password, mobile: '0210000000', role: 'driver', isActive: true, emailVerified: true,
+    name: 'Demo Driver', email: 'driver@taxihub.local', password, mobile: '+64210000000', role: 'driver', isActive: true, emailVerified: true,
   });
   await Driver.create({
     userId: driverUser._id,
@@ -52,7 +52,7 @@ module.exports = async function seed() {
   });
 
   await User.create({
-    name: 'Demo Passenger', email: 'passenger@taxihub.local', password, mobile: '0210000001', role: 'passenger', isActive: true, emailVerified: true,
+    name: 'Demo Passenger', email: 'passenger@taxihub.local', password, mobile: '+64210000001', role: 'passenger', isActive: true, emailVerified: true,
   });
 
   console.log('[seed] demo accounts ready (password for all: "password123"):');

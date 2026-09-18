@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import NotificationBell from './NotificationBell';
+import Logo from './Logo';
 
 export default function Navbar() {
   const { user, logout } = useAuthStore();
@@ -10,7 +11,7 @@ export default function Navbar() {
 
   return (
     <div className="navbar">
-      <Link className="brand" to={user ? home : '/'}>🚖 TaxiHub</Link>
+      <Link className="brand" to={user ? home : '/'}><Logo size={30} /></Link>
       <nav>
         {user ? (
           <>
@@ -26,6 +27,7 @@ export default function Navbar() {
                 <Link to="/driver/book">Book for passenger</Link>
                 <Link to="/driver/schedule">Schedule</Link>
                 <Link to="/driver/qr-code">My QR code</Link>
+                <Link to="/driver/documents">Documents</Link>
                 <Link to="/driver/billing">Fees</Link>
                 <Link to="/driver/complaints">Complaints</Link>
                 <Link to="/driver/reports">Reports</Link>

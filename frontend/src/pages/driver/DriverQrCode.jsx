@@ -35,8 +35,8 @@ export default function DriverQrCode() {
       {qr && (
         <PrintableQrCard
           qrCodeImage={qr.qrCodeImage}
-          driverName={profile?.userId?.name}
-          vehicleLabel={profile ? `${profile.vehicleType} · ${profile.vehicleNumber}` : ''}
+          vehicleNumber={profile?.vehicleNumber}
+          vehicleType={profile?.vehicleType}
         />
       )}
     </div>

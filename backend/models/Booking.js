@@ -3,11 +3,17 @@ const User = require('./User');
 const Driver = require('./Driver');
 
 // Fields: bookingId (human-readable "TRIP-YYYYMMDD-NNNNN", like Complaint's
-// complaintId), passengerId (-> User), driverId (-> Driver), pickupAddress,
-// pickupLat/Lng, dropAddress, dropLat/Lng, distanceKm, estimatedFare,
-// actualFare, status ('pending' | 'accepted' | 'in-progress' | 'completed'
-// | 'cancelled' | 'expired'), requestedAt, scheduledFor (optional - a
-// future date/time the passenger asked for instead of "now"), acceptedAt,
+// complaintId), passengerId (-> User), driverId (-> Driver, null while a
+// request is still an unclaimed broadcast - see routes/booking.js POST /),
+// declinedBy (driver ids who turned this request down, so it's never shown
+// to them again - see PUT /:id/decline), requestedVehicleType (the class
+// the passenger asked for, null = any - see config/vehicleTypes.js),
+// pickupAddress, pickupLat/Lng, dropAddress, dropLat/Lng, distanceKm,
+// estimatedFare, actualFare, status ('pending' | 'accepted' | 'in-progress'
+// | 'completed' | 'cancelled' | 'expired'), requestedAt, scheduledFor
+// (optional - a future date/time the passenger asked for instead of "now"),
+// acceptedAt, arrivedAt (driver reached the pickup point; status stays
+// 'accepted' - see PUT /:id/arrived),
 // completedAt, cancelledAt, cancelReason, paymentMethod ('cash' | 'card',
 // chosen at booking time), cardSurchargeAmount (payment-gateway fee
 // disclosed and added on top of the fare for card bookings only, 0 for

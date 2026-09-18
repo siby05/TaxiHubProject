@@ -13,6 +13,8 @@ const { getDriverBilling } = require('../utils/billing');
 const WeeklyPayment = require('../models/WeeklyPayment');
 const { getSettings, updateSettings } = require('../config/platformSettings');
 const { checkDriverCompliance } = require('../utils/compliance');
+const { isValidVehicleType } = require('../config/vehicleTypes');
+const { DRIVER_DOCUMENTS, isValidDocumentKey, documentLabel, allDocumentsVerified, outstandingDocuments } = require('../config/driverDocuments');
 const { getPassengerRatingAvg } = require('../utils/ratings');
 const Feedback = require('../models/Feedback');
 const { notifyUser } = require('../utils/notify');
@@ -110,6 +112,9 @@ router.post('/drivers', async (req, res) => {
     } = req.body;
     if (!name || !email || !licenseNumber || !vehicleNumber) {
       return res.status(400).json({ error: 'name, email, licenseNumber and vehicleNumber are required' });
+    }
+    if (vehicleType && !isValidVehicleType(vehicleType)) {
+      return res.status(400).json({ error: 'Unknown vehicle type' });
     }
     const existing = await User.findOne({ email: email.toLowerCase() });
     if (existing) return res.status(409).json({ error: 'An account with this email already exists' });
@@ -212,6 +217,9 @@ router.put('/drivers/:id', async (req, res) => {
   if (licenseNumber && await isLicenseTaken(licenseNumber, driver._id)) {
     return res.status(409).json({ error: 'This license number is already registered to another driver' });
   }
+  if (vehicleType && !isValidVehicleType(vehicleType)) {
+    return res.status(400).json({ error: 'Unknown vehicle type' });
+  }
 
   if (name || mobile) {
     await User.findByIdAndUpdate(driver.userId, {
@@ -235,8 +243,63 @@ router.put('/drivers/:id', async (req, res) => {
   res.json(withCompliance(updated));
 });
 
-// PUT /api/admin/drivers/:id/approve
+// GET /api/admin/document-types - the compliance documents every driver
+// must supply, so the review UI renders the same set the backend validates.
+router.get('/document-types', (req, res) => res.json(DRIVER_DOCUMENTS.map(({ key, label }) => ({ key, label }))));
+
+// PUT /api/admin/drivers/:id/verify-document - mark one uploaded document
+// verified or rejected. Rejecting requires a reason, which is shown to the
+// driver so they know what to fix before re-uploading (see routes/driver.js
+// POST /documents/:key). Documents an admin created by hand (no self-signup
+// upload) can't be reviewed - there's nothing to look at.
+router.put('/drivers/:id/verify-document', async (req, res) => {
+  const { documentKey, status, reason } = req.body;
+  if (!isValidDocumentKey(documentKey)) return res.status(400).json({ error: 'Unknown document' });
+  if (!['verified', 'rejected'].includes(status)) return res.status(400).json({ error: 'status must be "verified" or "rejected"' });
+  if (status === 'rejected' && !reason?.trim()) return res.status(400).json({ error: 'A reason is required when rejecting a document' });
+
+  const driver = await Driver.findById(req.params.id);
+  if (!driver) return res.status(404).json({ error: 'Driver not found' });
+  const existing = driver.documents?.[documentKey];
+  if (!existing?.url) return res.status(400).json({ error: `No ${documentLabel(documentKey)} has been uploaded yet` });
+
+  const updated = await Driver.findByIdAndUpdate(driver._id, {
+    documents: {
+      ...driver.documents,
+      [documentKey]: {
+        ...existing,
+        status,
+        rejectionReason: status === 'rejected' ? reason.trim() : null,
+        reviewedAt: new Date(),
+      },
+    },
+  });
+
+  const driverUser = await User.findById(driver.userId);
+  if (driverUser) {
+    await notifyUser(driverUser._id, {
+      type: status === 'rejected' ? 'document-rejected' : 'document-verified',
+      title: status === 'rejected' ? `${documentLabel(documentKey)} needs re-uploading` : `${documentLabel(documentKey)} verified`,
+      message: status === 'rejected' ? reason.trim() : 'Thanks - this document has been checked and accepted.',
+      link: '/driver/documents',
+    });
+  }
+
+  res.json(updated);
+});
+
+// PUT /api/admin/drivers/:id/approve - gated on every document being
+// verified first, so a driver can never go live on unchecked paperwork.
 router.put('/drivers/:id/approve', async (req, res) => {
+  const existing = await Driver.findById(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Driver not found' });
+  if (existing.documents && !allDocumentsVerified(existing)) {
+    return res.status(400).json({
+      error: `Verify every document before approving. Outstanding: ${outstandingDocuments(existing).join('; ')}`,
+      outstandingDocuments: outstandingDocuments(existing),
+    });
+  }
+
   const driver = await Driver.findByIdAndUpdate(req.params.id, { status: 'approved' });
   const driverUser = await User.findById(driver.userId);
   if (driverUser) {

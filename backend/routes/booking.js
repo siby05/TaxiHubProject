@@ -5,7 +5,9 @@ const Driver = require('../models/Driver');
 const User = require('../models/User');
 const { auth, roleMiddleware } = require('../middleware/auth');
 const { emailService } = require('../services/emailService');
+const { whatsappService } = require('../services/whatsappService');
 const { haversineKm, calculateFare } = require('../utils/distance');
+const { VEHICLE_TYPES, isValidVehicleType } = require('../config/vehicleTypes');
 const { notifyUser, notifyAdmins } = require('../utils/notify');
 const { getPassengerRatingAvg } = require('../utils/ratings');
 const { isWithinSchedule } = require('../utils/schedule');
@@ -45,16 +47,19 @@ function emitToUser(req, userId, event, payload) {
 // gates the auto-match fallback below (no specific driver requested, or
 // the requested one isn't usable for this booking).
 // Auto-match candidate pool: drivers who are toggled online, approved,
-// within their declared schedule, and - for a card booking - willing to
+// within their declared schedule, driving the requested class of vehicle
+// (when the passenger asked for one), and - for a card booking - willing to
 // accept online payment. Shared by the /quote estimate, the broadcast
 // booking flow below, GET /driver's live request list, and the notify-others
 // step on accept.
-async function findEligibleCandidates(paymentMethod) {
+async function findEligibleCandidates(paymentMethod, vehicleType) {
   const candidates = await Driver.find({ isAvailable: true, status: 'approved' });
-  return candidates.filter((d) => isWithinSchedule(d) && (paymentMethod !== 'card' || d.acceptsOnlinePayment !== false));
+  return candidates.filter((d) => isWithinSchedule(d)
+    && (paymentMethod !== 'card' || d.acceptsOnlinePayment !== false)
+    && (!vehicleType || d.vehicleType === vehicleType));
 }
 
-async function resolveDriver(driverId, paymentMethod) {
+async function resolveDriver(driverId, paymentMethod, vehicleType) {
   let requestedUnavailable = false;
   let requestedCashOnly = false;
   let requestedName = null;
@@ -73,18 +78,41 @@ async function resolveDriver(driverId, paymentMethod) {
     }
   }
 
-  const usable = await findEligibleCandidates(paymentMethod);
+  const usable = await findEligibleCandidates(paymentMethod, vehicleType);
   return { driver: usable[0] || null, usedFallback: !!driverId, requestedUnavailable, requestedCashOnly, requestedName };
 }
 
-function noDriverError(requestedUnavailable, requestedName, requestedCashOnly) {
+function noDriverError(requestedUnavailable, requestedName, requestedCashOnly, vehicleType) {
   if (requestedCashOnly) {
     return `${requestedName || 'That driver'} only accepts cash, and no other drivers are available for online payment right now. Choose cash, or try again shortly.`;
   }
-  return requestedUnavailable
-    ? `${requestedName || 'That driver'} isn't currently active, and no other drivers are available right now. Please try again shortly.`
+  if (requestedUnavailable) {
+    return `${requestedName || 'That driver'} isn't currently active, and no other drivers are available right now. Please try again shortly.`;
+  }
+  return vehicleType
+    ? `No ${vehicleType} drivers are available right now. Try another vehicle type, or try again shortly.`
     : 'No drivers are available right now. Please try again shortly.';
 }
+
+// Notifies one driver of a new request across every channel: real-time
+// socket event, stored in-app notification, email, and WhatsApp.
+async function alertDriverOfBooking(req, driverUserId, booking, passengerName, passengerRatingAvg) {
+  const driverUser = await User.findById(driverUserId);
+  if (!driverUser) return;
+  await emailService.sendDriverBookingAlert(driverUser.email, booking);
+  await whatsappService.sendDriverBookingAlert(driverUser.mobile, booking, passengerName);
+  emitToUser(req, driverUserId, 'booking:new', { ...booking, passengerName, passengerRatingAvg });
+  await notifyUser(driverUserId, {
+    type: 'booking-new',
+    title: 'New ride request',
+    message: `${passengerName} (${passengerRatingAvg ? `⭐${passengerRatingAvg}` : 'no ratings yet'}) · ${booking.pickupAddress} → ${booking.dropAddress} - $${booking.estimatedFare}`,
+    link: '/driver',
+  });
+}
+
+// GET /api/booking/vehicle-types - public so the pre-login QR landing page
+// and signup forms can render the same list the backend validates against.
+router.get('/vehicle-types', (req, res) => res.json(VEHICLE_TYPES));
 
 // GET /api/booking/driver-preview/:id - unauthenticated, minimal driver info
 // for the QR landing page shown before a scanning passenger has signed in.
@@ -122,9 +150,12 @@ router.get('/driver-info/:id', auth, roleMiddleware(['passenger']), async (req, 
 // rate rather than auto-matching/falling back.
 router.post('/quote', auth, roleMiddleware(['passenger', 'driver']), async (req, res) => {
   try {
-    const { pickupLat, pickupLng, dropLat, dropLng, driverId, paymentMethod } = req.body;
+    const { pickupLat, pickupLng, dropLat, dropLng, driverId, paymentMethod, vehicleType } = req.body;
     if (pickupLat == null || pickupLng == null || dropLat == null || dropLng == null) {
       return res.status(400).json({ error: 'pickup and drop coordinates are required' });
+    }
+    if (vehicleType && !isValidVehicleType(vehicleType)) {
+      return res.status(400).json({ error: 'Unknown vehicle type' });
     }
 
     let driver;
@@ -137,8 +168,8 @@ router.post('/quote', auth, roleMiddleware(['passenger', 'driver']), async (req,
       driver = await Driver.findOne({ userId: req.user.id });
       if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
     } else {
-      ({ driver, usedFallback, requestedUnavailable, requestedCashOnly, requestedName } = await resolveDriver(driverId, paymentMethod));
-      if (!driver) return res.status(404).json({ error: noDriverError(requestedUnavailable, requestedName, requestedCashOnly), requestedUnavailable, requestedCashOnly });
+      ({ driver, usedFallback, requestedUnavailable, requestedCashOnly, requestedName } = await resolveDriver(driverId, paymentMethod, vehicleType));
+      if (!driver) return res.status(404).json({ error: noDriverError(requestedUnavailable, requestedName, requestedCashOnly, vehicleType), requestedUnavailable, requestedCashOnly });
     }
 
     const distanceKm = Math.round(haversineKm(pickupLat, pickupLng, dropLat, dropLng) * 100) / 100;
@@ -169,7 +200,7 @@ router.post('/quote', auth, roleMiddleware(['passenger', 'driver']), async (req,
 // which also tells the others' dashboards to drop the request in real time.
 router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
   try {
-    const { pickupAddress, pickupLat, pickupLng, dropAddress, dropLat, dropLng, driverId, scheduledFor, paymentMethod } = req.body;
+    const { pickupAddress, pickupLat, pickupLng, dropAddress, dropLat, dropLng, driverId, scheduledFor, paymentMethod, vehicleType } = req.body;
     if (!pickupAddress || !dropAddress || pickupLat == null || dropLat == null) {
       return res.status(400).json({ error: 'pickupAddress, dropAddress and lat/lng for both are required' });
     }
@@ -178,6 +209,9 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
     }
     if (paymentMethod && !['cash', 'card'].includes(paymentMethod)) {
       return res.status(400).json({ error: 'paymentMethod must be "cash" or "card"' });
+    }
+    if (vehicleType && !isValidVehicleType(vehicleType)) {
+      return res.status(400).json({ error: 'Unknown vehicle type' });
     }
 
     const requestingPassenger = await User.findById(req.user.id);
@@ -198,15 +232,15 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
     let ratePerKmForEstimate;
 
     if (driverId) {
-      const resolved = await resolveDriver(driverId, paymentMethod);
-      if (!resolved.driver) return res.status(404).json({ error: noDriverError(resolved.requestedUnavailable, resolved.requestedName, resolved.requestedCashOnly), requestedUnavailable: resolved.requestedUnavailable, requestedCashOnly: resolved.requestedCashOnly });
+      const resolved = await resolveDriver(driverId, paymentMethod, vehicleType);
+      if (!resolved.driver) return res.status(404).json({ error: noDriverError(resolved.requestedUnavailable, resolved.requestedName, resolved.requestedCashOnly, vehicleType), requestedUnavailable: resolved.requestedUnavailable, requestedCashOnly: resolved.requestedCashOnly });
       ({ usedFallback, requestedUnavailable, requestedCashOnly, requestedName } = resolved);
       targetDriverId = resolved.driver._id;
       ratePerKmForEstimate = resolved.driver.ratePerKm;
     } else {
-      broadcastCandidates = await findEligibleCandidates(paymentMethod);
+      broadcastCandidates = await findEligibleCandidates(paymentMethod, vehicleType);
       if (broadcastCandidates.length === 0) {
-        return res.status(404).json({ error: noDriverError(false, null, false), requestedUnavailable: false, requestedCashOnly: false });
+        return res.status(404).json({ error: noDriverError(false, null, false, vehicleType), requestedUnavailable: false, requestedCashOnly: false });
       }
       ratePerKmForEstimate = broadcastCandidates.reduce((sum, d) => sum + d.ratePerKm, 0) / broadcastCandidates.length;
     }
@@ -226,30 +260,23 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
       distanceKm,
       estimatedFare,
       cardSurchargeAmount,
+      requestedVehicleType: vehicleType || null,
       status: 'pending',
       paymentMethod: paymentMethod || 'cash',
       paymentStatus: 'unpaid',
+      declinedBy: [],
       requestedAt: new Date(),
       scheduledFor: scheduledFor ? new Date(scheduledFor) : null,
     });
 
     await emailService.sendBookingConfirmation(passenger.email, booking);
 
-    const notifyDrivers = targetDriverId
-      ? [{ userId: (await Driver.findById(targetDriverId)).userId }]
-      : broadcastCandidates.map((d) => ({ userId: d.userId }));
+    const notifyDriverIds = targetDriverId
+      ? [(await Driver.findById(targetDriverId)).userId]
+      : broadcastCandidates.map((d) => d.userId);
 
-    for (const { userId } of notifyDrivers) {
-      const driverUser = await User.findById(userId);
-      if (!driverUser) continue;
-      await emailService.sendDriverBookingAlert(driverUser.email, booking);
-      emitToUser(req, userId, 'booking:new', { ...booking, passengerName: passenger.name, passengerRatingAvg });
-      await notifyUser(userId, {
-        type: 'booking-new',
-        title: 'New ride request',
-        message: `${passenger.name} (${passengerRatingAvg ? `⭐${passengerRatingAvg}` : 'no ratings yet'}) · ${booking.pickupAddress} → ${booking.dropAddress} - $${booking.estimatedFare}`,
-        link: '/driver',
-      });
+    for (const driverUserId of notifyDriverIds) {
+      await alertDriverOfBooking(req, driverUserId, booking, passenger.name, passengerRatingAvg);
     }
 
     res.status(201).json({ ...booking, usedFallback, requestedUnavailable, requestedCashOnly, requestedName, broadcast: !targetDriverId });
@@ -287,7 +314,9 @@ router.get('/driver', auth, roleMiddleware(['driver']), async (req, res) => {
   let broadcastPending = [];
   if (driver.isAvailable && driver.status === 'approved' && isWithinSchedule(driver)) {
     broadcastPending = (await Booking.find({ driverId: null, status: 'pending' }).populate('passengerId', 'name mobile'))
-      .filter((b) => b.paymentMethod !== 'card' || driver.acceptsOnlinePayment !== false);
+      .filter((b) => (b.paymentMethod !== 'card' || driver.acceptsOnlinePayment !== false)
+        && (!b.requestedVehicleType || b.requestedVehicleType === driver.vehicleType)
+        && !(b.declinedBy || []).some((id) => String(id) === String(driver._id)));
   }
 
   const bookings = [...broadcastPending, ...assigned].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -363,17 +392,95 @@ router.put('/:id/accept', auth, roleMiddleware(['driver']), async (req, res) => 
   });
 
   if (isBroadcast) {
-    const others = (await findEligibleCandidates(booking.paymentMethod)).filter((d) => String(d._id) !== String(driver._id));
+    const others = (await findEligibleCandidates(booking.paymentMethod, booking.requestedVehicleType)).filter((d) => String(d._id) !== String(driver._id));
     for (const d of others) emitToUser(req, d.userId, 'booking:claimed', { bookingId: booking._id });
   }
 
   const driverUser = await User.findById(driver.userId);
+  await whatsappService.sendPassengerBookingAccepted(
+    passenger.mobile, updated, driverUser?.name || 'Your driver',
+    `${driver.vehicleType} · ${driver.vehicleNumber}`,
+  );
+
   await notifyAdmins({
     type: 'driver-action',
     title: 'Driver accepted a trip',
     message: `${driverUser?.name || 'A driver'} accepted booking ${updated._id}`,
     link: '/admin',
   });
+
+  res.json(updated);
+});
+
+// PUT /api/booking/:id/decline - driver turns a pending request down. It
+// leaves their list for good (they're added to declinedBy, so it won't come
+// back around as a broadcast either). A request that was assigned directly
+// to them is released back to the pool as a broadcast, so the passenger
+// still gets a ride from whoever else is eligible rather than being stuck.
+router.put('/:id/decline', auth, roleMiddleware(['driver']), async (req, res) => {
+  const driver = await Driver.findOne({ userId: req.user.id });
+  if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
+
+  const booking = await Booking.findById(req.params.id);
+  if (!booking) return res.status(404).json({ error: 'Booking not found' });
+  if (booking.status !== 'pending') return res.status(400).json({ error: `Booking already ${booking.status}` });
+
+  const wasAssignedToMe = booking.driverId != null && String(booking.driverId) === String(driver._id);
+  const updated = await Booking.findByIdAndUpdate(req.params.id, {
+    $push: { declinedBy: driver._id },
+    ...(wasAssignedToMe && { driverId: null }),
+  });
+
+  if (wasAssignedToMe) {
+    const passenger = await User.findById(booking.passengerId);
+    const passengerRatingAvg = await getPassengerRatingAvg(passenger._id);
+    const others = (await findEligibleCandidates(booking.paymentMethod, booking.requestedVehicleType))
+      .filter((d) => !(updated.declinedBy || []).some((id) => String(id) === String(d._id)));
+
+    for (const d of others) {
+      await alertDriverOfBooking(req, d.userId, updated, passenger.name, passengerRatingAvg);
+    }
+
+    await notifyUser(booking.passengerId, {
+      type: 'booking-declined',
+      title: others.length ? 'Finding you another driver' : 'No driver available yet',
+      message: others.length
+        ? `${booking.pickupAddress} → ${booking.dropAddress} - your first driver couldn't take it, so we've sent it to other available drivers.`
+        : `${booking.pickupAddress} → ${booking.dropAddress} - no drivers are free right now. We'll keep the request open.`,
+      link: '/passenger',
+    });
+    emitToUser(req, booking.passengerId, 'booking:declined', updated);
+  }
+
+  res.json(updated);
+});
+
+// PUT /api/booking/:id/arrived - driver is at the pickup point. Keeps the
+// booking 'accepted' (the trip hasn't started) and just stamps arrivedAt,
+// so the passenger can be told to come out to the car.
+router.put('/:id/arrived', auth, roleMiddleware(['driver']), async (req, res) => {
+  const driver = await Driver.findOne({ userId: req.user.id });
+  if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
+
+  const booking = await Booking.findById(req.params.id);
+  if (!booking) return res.status(404).json({ error: 'Booking not found' });
+  if (String(booking.driverId) !== String(driver._id)) return res.status(403).json({ error: 'Not your booking' });
+  if (booking.status !== 'accepted') return res.status(400).json({ error: `Booking is ${booking.status}` });
+
+  const updated = await Booking.findByIdAndUpdate(req.params.id, { arrivedAt: new Date() });
+
+  const passenger = await User.findById(booking.passengerId);
+  const driverUser = await User.findById(driver.userId);
+  const vehicleLabel = `${driver.vehicleType} · ${driver.vehicleNumber}`;
+
+  emitToUser(req, booking.passengerId, 'booking:arrived', updated);
+  await notifyUser(booking.passengerId, {
+    type: 'booking-arrived',
+    title: 'Your driver has arrived',
+    message: `${driverUser?.name || 'Your driver'} (${vehicleLabel}) is waiting at ${booking.pickupAddress}.`,
+    link: '/passenger',
+  });
+  await whatsappService.sendPassengerDriverArrived(passenger.mobile, updated, driverUser?.name || 'Your driver', vehicleLabel);
 
   res.json(updated);
 });

@@ -18,6 +18,7 @@ import DriverQrCode from './pages/driver/DriverQrCode';
 import DriverBilling from './pages/driver/DriverBilling';
 import DriverBookForPassenger from './pages/driver/DriverBookForPassenger';
 import DriverReports from './pages/driver/DriverReports';
+import DriverDocuments from './pages/driver/DriverDocuments';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminComplaints from './pages/admin/AdminComplaints';
 import AdminDriverReport from './pages/admin/AdminDriverReport';
@@ -50,6 +51,7 @@ export default function App() {
         <Route path="/driver/book" element={<ProtectedRoute roles={['driver']}><DriverBookForPassenger /></ProtectedRoute>} />
         <Route path="/driver/complaints" element={<ProtectedRoute roles={['driver']}><DriverComplaints /></ProtectedRoute>} />
         <Route path="/driver/reports" element={<ProtectedRoute roles={['driver']}><DriverReports /></ProtectedRoute>} />
+        <Route path="/driver/documents" element={<ProtectedRoute roles={['driver']}><DriverDocuments /></ProtectedRoute>} />
 
         <Route path="/admin" element={<ProtectedRoute roles={['admin']}><AdminDashboard /></ProtectedRoute>} />
         <Route path="/admin/complaints" element={<ProtectedRoute roles={['admin']}><AdminComplaints /></ProtectedRoute>} />

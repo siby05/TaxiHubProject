@@ -14,9 +14,14 @@ const User = require('./User');
 // fields (see utils/compliance.js): serviceCategory ('private-hire' |
 // 'taxi', default 'private-hire'), hasSecurityCamera, tslNumber (Transport
 // Service Licence), passengerEndorsementNumber, passengerEndorsementExpiry,
-// vehicleCofExpiry. Driver signup documents (see routes/driverSignup.js):
-// licenseDocUrl, tslDocUrl, cofDocUrl, regoDocUrl, documentsSubmitted
-// (bool), termsAcceptedAt (Date the driver accepted the T&Cs at signup).
+// vehicleCofExpiry. Compliance documents (see config/driverDocuments.js):
+// documents - a map keyed by license/tsl/cof/rego, each
+// {url, status: 'pending'|'verified'|'rejected', rejectionReason,
+// uploadedAt, reviewedAt}. An admin reviews each one individually
+// (routes/admin.js PUT /drivers/:id/verify-document); a rejection sends it
+// back with a reason for the driver to re-upload (routes/driver.js POST
+// /documents/:key), and approval is blocked until all four are verified.
+// termsAcceptedAt (Date the driver accepted the T&Cs at signup).
 // Stripe Connect (see routes/stripeConnect.js): stripeAccountId (Express
 // connected account id, null until onboarding starts), stripeChargesEnabled
 // (bool - true once Stripe has verified them enough to receive payouts).

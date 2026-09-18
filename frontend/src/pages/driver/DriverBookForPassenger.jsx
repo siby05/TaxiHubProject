@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import client from '../../api/client';
 import AddressAutocomplete from '../../components/AddressAutocomplete';
+import PhoneField from '../../components/PhoneField';
 import ScheduleField from '../../components/ScheduleField';
 
 export default function DriverBookForPassenger() {
@@ -119,7 +120,7 @@ export default function DriverBookForPassenger() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <p className="muted">This creates a new passenger account on the spot - no email verification or password needed to book right now.</p>
             <div><label>Full name</label><input value={newPassenger.name} onChange={(e) => setNewPassenger((p) => ({ ...p, name: e.target.value }))} required /></div>
-            <div><label>Mobile</label><input value={newPassenger.mobile} onChange={(e) => setNewPassenger((p) => ({ ...p, mobile: e.target.value }))} required /></div>
+            <PhoneField value={newPassenger.mobile} onChange={(v) => setNewPassenger((p) => ({ ...p, mobile: v }))} required hint="Their booking confirmation is sent here on WhatsApp." />
             <AddressAutocomplete label="Address" placeholder="For trip records" onSelect={(r) => setNewPassenger((p) => ({ ...p, address: r ? r.label : '' }))} required />
             <div><label>Email (optional)</label><input type="email" value={newPassenger.email} onChange={(e) => setNewPassenger((p) => ({ ...p, email: e.target.value }))} /></div>
           </div>

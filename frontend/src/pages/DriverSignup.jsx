@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import { useAuthStore } from '../store/authStore';
 import Modal from '../components/Modal';
 import TermsContent from '../components/TermsContent';
 import AddressAutocomplete from '../components/AddressAutocomplete';
+import PhoneField from '../components/PhoneField';
 
 const emptyForm = {
   name: '', email: '', password: '', mobile: '', address: '',
@@ -22,6 +23,11 @@ export default function DriverSignup() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [vehicleTypes, setVehicleTypes] = useState([]);
+
+  useEffect(() => {
+    client.get('/booking/vehicle-types').then((r) => setVehicleTypes(r.data)).catch(() => {});
+  }, []);
 
   function update(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
@@ -83,7 +89,7 @@ export default function DriverSignup() {
             <div><label>Full name</label><input value={form.name} onChange={(e) => update('name', e.target.value)} required /></div>
             <div><label>Email</label><input type="email" value={form.email} onChange={(e) => update('email', e.target.value)} required /></div>
             <div><label>Password</label><input type="password" value={form.password} onChange={(e) => update('password', e.target.value)} required minLength={6} /></div>
-            <div><label>Mobile</label><input value={form.mobile} onChange={(e) => update('mobile', e.target.value)} required /></div>
+            <PhoneField value={form.mobile} onChange={(v) => update('mobile', v)} required hint="Trip requests are sent to this number on WhatsApp. Leave off the leading 0." />
           </div>
           <AddressAutocomplete label="Address" onSelect={(r) => update('address', r ? r.label : '')} />
 
@@ -96,7 +102,7 @@ export default function DriverSignup() {
             <div>
               <label>Vehicle type</label>
               <select value={form.vehicleType} onChange={(e) => update('vehicleType', e.target.value)}>
-                <option>Economy</option><option>Comfort</option><option>Premium</option>
+                {vehicleTypes.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </div>
             <div><label>Vehicle number (rego)</label><input value={form.vehicleNumber} onChange={(e) => update('vehicleNumber', e.target.value)} required /></div>

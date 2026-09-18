@@ -1,6 +1,9 @@
 import { Fragment, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import client, { fileOrigin } from '../../api/client';
+import PhoneField from '../../components/PhoneField';
+
+const DOC_STATUS_CLASS = { verified: 'approved', rejected: 'rejected', pending: 'pending' };
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
@@ -26,8 +29,13 @@ export default function AdminDashboard() {
   const [tripDateFrom, setTripDateFrom] = useState('');
   const [tripDateTo, setTripDateTo] = useState('');
   const [feedback, setFeedback] = useState([]);
+  const [vehicleTypes, setVehicleTypes] = useState([]);
+  const [vehicleDocuments, setVehicleDocuments] = useState([]);
+  const [docError, setDocError] = useState('');
 
   function load() {
+    client.get('/booking/vehicle-types').then((r) => setVehicleTypes(r.data)).catch(() => {});
+    client.get('/admin/document-types').then((r) => setVehicleDocuments(r.data)).catch(() => {});
     client.get('/admin/stats').then((r) => setStats(r.data));
     client.get('/admin/drivers').then((r) => setDrivers(r.data));
     client.get('/admin/settings').then((r) => setSettings(r.data));
@@ -59,8 +67,32 @@ export default function AdminDashboard() {
     }
   }
 
-  async function approve(id) { await client.put(`/admin/drivers/${id}/approve`); load(); }
+  async function approve(id) {
+    setError('');
+    try {
+      await client.put(`/admin/drivers/${id}/approve`);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not approve driver');
+      setDocsFor(id);
+    }
+    load();
+  }
   async function reject(id) { await client.put(`/admin/drivers/${id}/reject`); load(); }
+
+  async function reviewDocument(driverId, documentKey, status) {
+    setDocError('');
+    let reason;
+    if (status === 'rejected') {
+      reason = window.prompt('Why is this document being rejected? The driver sees this reason.');
+      if (!reason?.trim()) return;
+    }
+    try {
+      await client.put(`/admin/drivers/${driverId}/verify-document`, { documentKey, status, reason });
+      load();
+    } catch (err) {
+      setDocError(err.response?.data?.error || 'Could not update this document');
+    }
+  }
   async function deactivate(id) { await client.put(`/admin/drivers/${id}/deactivate`); load(); }
   async function reactivate(id) { await client.put(`/admin/drivers/${id}/reactivate`); load(); }
   async function approveRate(id) { await client.put(`/admin/drivers/${id}/rate/approve`); load(); }
@@ -189,8 +221,8 @@ export default function AdminDashboard() {
                       {d.status === 'rejected' && <button className="btn" onClick={() => reactivate(d._id)}>Reactivate</button>}
                       <button className="btn secondary" onClick={() => startEdit(d)}>{editFor === d._id ? 'Cancel' : 'Edit'}</button>
                       <button className="btn secondary" onClick={() => viewQr(d._id)}>{qrFor?.id === d._id ? 'Hide QR' : 'View QR'}</button>
-                      {d.documentsSubmitted && (
-                        <button className="btn secondary" onClick={() => setDocsFor(docsFor === d._id ? null : d._id)}>{docsFor === d._id ? 'Hide docs' : 'View docs'}</button>
+                      {d.documents && (
+                        <button className="btn secondary" onClick={() => setDocsFor(docsFor === d._id ? null : d._id)}>{docsFor === d._id ? 'Hide docs' : 'Review docs'}</button>
                       )}
                       <Link className="btn secondary" to={`/admin/drivers/${d._id}/report`}>Report</Link>
                     </td>
@@ -206,13 +238,35 @@ export default function AdminDashboard() {
                   {docsFor === d._id && (
                     <tr>
                       <td colSpan={5} style={{ padding: 16 }}>
-                        <strong>Submitted documents</strong> (self-signup on {d.termsAcceptedAt ? new Date(d.termsAcceptedAt).toLocaleDateString() : '-'}, T&amp;Cs accepted)
-                        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 8 }}>
-                          {d.licenseDocUrl && <a href={`${fileOrigin}${d.licenseDocUrl}`} target="_blank" rel="noreferrer" className="btn secondary">Driver license</a>}
-                          {d.tslDocUrl && <a href={`${fileOrigin}${d.tslDocUrl}`} target="_blank" rel="noreferrer" className="btn secondary">TSL</a>}
-                          {d.cofDocUrl && <a href={`${fileOrigin}${d.cofDocUrl}`} target="_blank" rel="noreferrer" className="btn secondary">CoF</a>}
-                          {d.regoDocUrl && <a href={`${fileOrigin}${d.regoDocUrl}`} target="_blank" rel="noreferrer" className="btn secondary">Rego</a>}
-                        </div>
+                        <strong>Documents</strong> (self-signup on {d.termsAcceptedAt ? new Date(d.termsAcceptedAt).toLocaleDateString() : '-'}, T&amp;Cs accepted)
+                        <p className="muted" style={{ marginTop: 4 }}>Every document must be verified before this driver can be approved.</p>
+                        {docError && <p className="error-text">{docError}</p>}
+                        <table>
+                          <tbody>
+                            {vehicleDocuments.map((doc) => {
+                              const record = d.documents?.[doc.key];
+                              return (
+                                <tr key={doc.key}>
+                                  <td>
+                                    <strong>{doc.label}</strong>
+                                    {record?.status === 'rejected' && <div className="error-text">Rejected: {record.rejectionReason}</div>}
+                                    {record?.uploadedAt && <div className="muted">Uploaded {new Date(record.uploadedAt).toLocaleDateString()}</div>}
+                                  </td>
+                                  <td><span className={`badge ${DOC_STATUS_CLASS[record?.status] || 'closed'}`}>{record?.status || 'not supplied'}</span></td>
+                                  <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                    {record?.url && <a className="btn secondary" href={`${fileOrigin}${record.url}`} target="_blank" rel="noreferrer">View</a>}
+                                    {record?.url && record.status !== 'verified' && (
+                                      <button className="btn" onClick={() => reviewDocument(d._id, doc.key, 'verified')}>Verify</button>
+                                    )}
+                                    {record?.url && record.status !== 'rejected' && (
+                                      <button className="btn danger" onClick={() => reviewDocument(d._id, doc.key, 'rejected')}>Reject</button>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
                       </td>
                     </tr>
                   )}
@@ -221,12 +275,12 @@ export default function AdminDashboard() {
                       <td colSpan={5} style={{ padding: 16 }}>
                         <div className="grid cols-2">
                           <div><label>Name</label><input value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} /></div>
-                          <div><label>Mobile</label><input value={editForm.mobile} onChange={(e) => setEditForm((f) => ({ ...f, mobile: e.target.value }))} /></div>
+                          <PhoneField value={editForm.mobile} onChange={(v) => setEditForm((f) => ({ ...f, mobile: v }))} />
                           <div><label>License number</label><input value={editForm.licenseNumber} onChange={(e) => setEditForm((f) => ({ ...f, licenseNumber: e.target.value }))} /></div>
                           <div>
                             <label>Vehicle type</label>
                             <select value={editForm.vehicleType} onChange={(e) => setEditForm((f) => ({ ...f, vehicleType: e.target.value }))}>
-                              <option>Economy</option><option>Comfort</option><option>Premium</option>
+                              {vehicleTypes.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                             </select>
                           </div>
                           <div><label>Vehicle number</label><input value={editForm.vehicleNumber} onChange={(e) => setEditForm((f) => ({ ...f, vehicleNumber: e.target.value }))} /></div>
@@ -270,12 +324,12 @@ export default function AdminDashboard() {
           <form onSubmit={addDriver}>
             <div><label>Full name</label><input value={form.name} onChange={(e) => update('name', e.target.value)} required /></div>
             <div><label>Email</label><input type="email" value={form.email} onChange={(e) => update('email', e.target.value)} required /></div>
-            <div><label>Mobile</label><input value={form.mobile} onChange={(e) => update('mobile', e.target.value)} /></div>
+            <PhoneField value={form.mobile} onChange={(v) => update('mobile', v)} hint="Trip requests are sent here on WhatsApp." />
             <div><label>License number</label><input value={form.licenseNumber} onChange={(e) => update('licenseNumber', e.target.value)} required /></div>
             <div>
               <label>Vehicle type</label>
               <select value={form.vehicleType} onChange={(e) => update('vehicleType', e.target.value)}>
-                <option>Economy</option><option>Comfort</option><option>Premium</option>
+                {vehicleTypes.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </div>
             <div><label>Vehicle number</label><input value={form.vehicleNumber} onChange={(e) => update('vehicleNumber', e.target.value)} required /></div>

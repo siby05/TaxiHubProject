@@ -10,9 +10,12 @@ const { ensureDriverQrCode } = require('../utils/qrcode');
 const { getDriverBilling } = require('../utils/billing');
 const { haversineKm, calculateFare, calculateCardSurcharge } = require('../utils/distance');
 const { emailService } = require('../services/emailService');
+const { whatsappService } = require('../services/whatsappService');
 const { notifyUser, notifyAdmins } = require('../utils/notify');
 const { checkDriverCompliance } = require('../utils/compliance');
 const { getSettings } = require('../config/platformSettings');
+const { DRIVER_DOCUMENTS, isValidDocumentKey, documentLabel, allDocumentsVerified } = require('../config/driverDocuments');
+const { documentUpload, documentUrl } = require('../utils/documentUpload');
 
 async function getDriverProfile(userId) {
   return Driver.findOne({ userId }).populate('userId', 'name email mobile');
@@ -23,6 +26,56 @@ router.get('/profile', auth, roleMiddleware(['driver']), async (req, res) => {
   const driver = await getDriverProfile(req.user.id);
   if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
   res.json({ ...driver, compliance: checkDriverCompliance(driver) });
+});
+
+// GET /api/driver/documents - the driver's own view of each compliance
+// document: whether it's still pending review, verified, or rejected (with
+// the admin's reason so they know what to fix).
+router.get('/documents', auth, roleMiddleware(['driver']), async (req, res) => {
+  const driver = await Driver.findOne({ userId: req.user.id });
+  if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
+
+  const documents = DRIVER_DOCUMENTS.map((d) => ({
+    key: d.key,
+    label: d.label,
+    ...(driver.documents?.[d.key] || { url: null, status: 'not-supplied', rejectionReason: null, uploadedAt: null, reviewedAt: null }),
+  }));
+  res.json({ documents, allVerified: allDocumentsVerified(driver), driverStatus: driver.status });
+});
+
+// POST /api/driver/documents/:key - re-upload a single document after an
+// admin rejected it. Puts it straight back to 'pending' for another review
+// and clears the old reason.
+router.post('/documents/:key', auth, roleMiddleware(['driver']), documentUpload.single('document'), async (req, res) => {
+  const { key } = req.params;
+  if (!isValidDocumentKey(key)) return res.status(400).json({ error: 'Unknown document' });
+  if (!req.file) return res.status(400).json({ error: 'A document file is required' });
+
+  const driver = await Driver.findOne({ userId: req.user.id });
+  if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
+
+  const updated = await Driver.findByIdAndUpdate(driver._id, {
+    documents: {
+      ...driver.documents,
+      [key]: {
+        url: documentUrl(req.file),
+        status: 'pending',
+        rejectionReason: null,
+        uploadedAt: new Date(),
+        reviewedAt: null,
+      },
+    },
+  });
+
+  const driverUser = await User.findById(req.user.id);
+  await notifyAdmins({
+    type: 'driver-document',
+    title: 'Driver re-uploaded a document',
+    message: `${driverUser?.name || 'A driver'} re-uploaded their ${documentLabel(key)} for review.`,
+    link: '/admin',
+  });
+
+  res.json(updated);
 });
 
 // PUT /api/driver/availability - toggle available for bookings
@@ -242,6 +295,13 @@ router.post('/bookings', auth, roleMiddleware(['driver']), async (req, res) => {
     }
 
     const driverUser = await User.findById(req.user.id);
+    // Phone/walk-up bookings go out already accepted, so the passenger gets
+    // the same WhatsApp confirmation they'd get from a driver accepting.
+    await whatsappService.sendPassengerBookingAccepted(
+      passenger.mobile, booking, driverUser?.name || 'Your driver',
+      `${driver.vehicleType} · ${driver.vehicleNumber}`,
+    );
+
     await notifyAdmins({
       type: 'driver-action',
       title: 'Driver booked a trip for a passenger',

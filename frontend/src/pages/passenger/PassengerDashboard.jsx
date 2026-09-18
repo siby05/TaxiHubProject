@@ -17,6 +17,8 @@ export default function PassengerDashboard() {
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [previousDrivers, setPreviousDrivers] = useState([]);
   const [preferredDriverId, setPreferredDriverId] = useState('');
+  const [vehicleTypes, setVehicleTypes] = useState([]);
+  const [vehicleType, setVehicleType] = useState('');
   const [formKey, setFormKey] = useState(0); // bump to reset the autocomplete inputs after booking
   const [payingId, setPayingId] = useState(null);
   const [payError, setPayError] = useState('');
@@ -33,13 +35,18 @@ export default function PassengerDashboard() {
     client.get('/booking/previous-drivers').then((r) => setPreviousDrivers(r.data)).catch(() => {});
   }
 
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => {
+    refresh();
+    client.get('/booking/vehicle-types').then((r) => setVehicleTypes(r.data)).catch(() => {});
+  }, []);
 
   useSocket({
     'booking:accepted': () => { setNotice('A driver accepted your ride!'); refresh(); },
+    'booking:arrived': () => { setNotice('Your driver has arrived at the pickup point.'); refresh(); },
     'booking:started': () => { setNotice('Your trip has started.'); refresh(); },
     'booking:completed': () => { setNotice('Your trip is complete.'); refresh(); },
     'booking:cancelled': () => { setNotice('A booking was cancelled.'); refresh(); },
+    'booking:declined': () => { setNotice('Your driver couldn\'t take the trip - finding you another one.'); refresh(); },
   });
 
   useEffect(() => {
@@ -48,12 +55,12 @@ export default function PassengerDashboard() {
     if (!pickup || !drop) return;
     let cancelled = false;
     setQuoteLoading(true);
-    client.post('/booking/quote', { driverId: preferredDriverId || undefined, pickupLat: pickup.lat, pickupLng: pickup.lng, dropLat: drop.lat, dropLng: drop.lng, paymentMethod })
+    client.post('/booking/quote', { driverId: preferredDriverId || undefined, pickupLat: pickup.lat, pickupLng: pickup.lng, dropLat: drop.lat, dropLng: drop.lng, paymentMethod, vehicleType: vehicleType || undefined })
       .then((r) => { if (!cancelled) setQuote(r.data); })
       .catch((err) => { if (!cancelled) setError(err.response?.data?.error || 'Could not calculate fare'); })
       .finally(() => { if (!cancelled) setQuoteLoading(false); });
     return () => { cancelled = true; };
-  }, [pickup, drop, preferredDriverId, paymentMethod]);
+  }, [pickup, drop, preferredDriverId, paymentMethod, vehicleType]);
 
   async function rateDriver(bookingId, rating, review) {
     await client.put(`/booking/${bookingId}/rate`, { rating, review });
@@ -66,6 +73,7 @@ export default function PassengerDashboard() {
     try {
       await createBooking({
         driverId: preferredDriverId || undefined,
+        vehicleType: vehicleType || undefined,
         pickupAddress: pickup.label, pickupLat: pickup.lat, pickupLng: pickup.lng,
         dropAddress: drop.label, dropLat: drop.lat, dropLng: drop.lng,
         scheduledFor,
@@ -125,6 +133,21 @@ export default function PassengerDashboard() {
             <AddressAutocomplete label="Pickup address" onSelect={setPickup} required allowLocate />
             <AddressAutocomplete label="Drop address" onSelect={setDrop} required />
             <ScheduleField onChange={setScheduledFor} />
+
+            {vehicleTypes.length > 0 && !preferredDriverId && (
+              <div>
+                <label>Vehicle type</label>
+                <select value={vehicleType} onChange={(e) => setVehicleType(e.target.value)}>
+                  <option value="">Any vehicle</option>
+                  {vehicleTypes.map((t) => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </select>
+                {vehicleType && (
+                  <p className="muted" style={{ marginTop: 4 }}>{vehicleTypes.find((t) => t.value === vehicleType)?.description}</p>
+                )}
+              </div>
+            )}
 
             {previousDrivers.length > 0 && (
               <div>
@@ -195,6 +218,9 @@ export default function PassengerDashboard() {
                       {b.distanceKm} km · ${b.actualFare ?? b.estimatedFare} · {b.paymentMethod === 'card' ? (b.paymentStatus === 'paid' ? 'paid online' : 'unpaid (online)') : 'cash'}
                     </div>
                     {b.scheduledFor && <div className="muted">Scheduled: {new Date(b.scheduledFor).toLocaleString()}</div>}
+                    {b.arrivedAt && b.status === 'accepted' && (
+                      <div style={{ color: '#16a34a', fontWeight: 600 }}>🚕 Your driver has arrived - head out to the car.</div>
+                    )}
                     {b.paymentMethod === 'card' && b.paymentStatus !== 'paid' && (!b.scheduledFor || b.status !== 'pending') && !['cancelled'].includes(b.status) && (
                       <button className="btn secondary" style={{ marginTop: 4 }} onClick={() => payNow(b)} disabled={payingId === b._id}>
                         {payingId === b._id ? 'Paying...' : 'Pay now'}

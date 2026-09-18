@@ -1,21 +1,14 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const multer = require('multer');
 const router = express.Router();
 const User = require('../models/User');
 const Driver = require('../models/Driver');
 const { emailService } = require('../services/emailService');
 const { notifyAdmins } = require('../utils/notify');
-
-const upload = multer({
-  dest: 'uploads/driver-documents/',
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = ['image/jpeg', 'image/png', 'application/pdf'];
-    cb(allowedTypes.includes(file.mimetype) ? null : new Error('Documents must be JPG, PNG or PDF'), allowedTypes.includes(file.mimetype));
-  },
-  limits: { fileSize: 8 * 1024 * 1024 },
-});
+const { isValidVehicleType } = require('../config/vehicleTypes');
+const { DRIVER_DOCUMENTS } = require('../config/driverDocuments');
+const { documentUpload, documentUrl } = require('../utils/documentUpload');
 
 function signToken(user) {
   return jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, {
@@ -35,12 +28,7 @@ async function isLicenseTaken(licenseNumber) {
 // acceptance (see frontend/src/pages/DriverSignup.jsx for the popup).
 router.post(
   '/',
-  upload.fields([
-    { name: 'licenseDoc', maxCount: 1 },
-    { name: 'tslDoc', maxCount: 1 },
-    { name: 'cofDoc', maxCount: 1 },
-    { name: 'regoDoc', maxCount: 1 },
-  ]),
+  documentUpload.fields(DRIVER_DOCUMENTS.map((d) => ({ name: d.field, maxCount: 1 }))),
   async (req, res) => {
     try {
       const {
@@ -56,9 +44,13 @@ router.post(
       if (termsAccepted !== 'true' && termsAccepted !== true) {
         return res.status(400).json({ error: 'You must accept the Terms & Conditions to sign up' });
       }
+      if (vehicleType && !isValidVehicleType(vehicleType)) {
+        return res.status(400).json({ error: 'Unknown vehicle type' });
+      }
       const files = req.files || {};
-      if (!files.licenseDoc || !files.tslDoc || !files.cofDoc || !files.regoDoc) {
-        return res.status(400).json({ error: 'License, TSL, CoF and vehicle registration documents are all required' });
+      const missing = DRIVER_DOCUMENTS.filter((d) => !files[d.field]);
+      if (missing.length) {
+        return res.status(400).json({ error: `These documents are required: ${missing.map((d) => d.label).join(', ')}` });
       }
 
       const existingUser = await User.findOne({ email: email.toLowerCase() });
@@ -72,7 +64,14 @@ router.post(
         name, email: email.toLowerCase(), password: hashed, mobile, address, role: 'driver', isActive: true, emailVerified: true,
       });
 
-      const docUrl = (f) => `/uploads/driver-documents/${f[0].filename}`;
+      const documents = Object.fromEntries(DRIVER_DOCUMENTS.map((d) => [d.key, {
+        url: documentUrl(files[d.field][0]),
+        status: 'pending',
+        rejectionReason: null,
+        uploadedAt: new Date(),
+        reviewedAt: null,
+      }]));
+
       const driver = await Driver.create({
         userId: user._id,
         licenseNumber,
@@ -94,11 +93,7 @@ router.post(
         passengerEndorsementNumber: passengerEndorsementNumber || null,
         passengerEndorsementExpiry: passengerEndorsementExpiry || null,
         vehicleCofExpiry: vehicleCofExpiry || null,
-        licenseDocUrl: docUrl(files.licenseDoc),
-        tslDocUrl: docUrl(files.tslDoc),
-        cofDocUrl: docUrl(files.cofDoc),
-        regoDocUrl: docUrl(files.regoDoc),
-        documentsSubmitted: true,
+        documents,
         termsAcceptedAt: new Date(),
       });
 
