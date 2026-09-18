@@ -10,7 +10,6 @@ const { ensureDriverQrCode } = require('../utils/qrcode');
 const { getDriverBilling } = require('../utils/billing');
 const { haversineKm, calculateFare, calculateCardSurcharge } = require('../utils/distance');
 const { emailService } = require('../services/emailService');
-const { whatsappService } = require('../services/whatsappService');
 const { notifyUser, notifyAdmins } = require('../utils/notify');
 const { checkDriverCompliance } = require('../utils/compliance');
 const { getSettings } = require('../config/platformSettings');
@@ -295,12 +294,6 @@ router.post('/bookings', auth, roleMiddleware(['driver']), async (req, res) => {
     }
 
     const driverUser = await User.findById(req.user.id);
-    // Phone/walk-up bookings go out already accepted, so the passenger gets
-    // the same WhatsApp confirmation they'd get from a driver accepting.
-    await whatsappService.sendPassengerBookingAccepted(
-      passenger.mobile, booking, driverUser?.name || 'Your driver',
-      `${driver.vehicleType} · ${driver.vehicleNumber}`,
-    );
 
     await notifyAdmins({
       type: 'driver-action',

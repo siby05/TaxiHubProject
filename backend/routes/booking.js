@@ -5,7 +5,6 @@ const Driver = require('../models/Driver');
 const User = require('../models/User');
 const { auth, roleMiddleware } = require('../middleware/auth');
 const { emailService } = require('../services/emailService');
-const { whatsappService } = require('../services/whatsappService');
 const { haversineKm, calculateFare } = require('../utils/distance');
 const { VEHICLE_TYPES, isValidVehicleType } = require('../config/vehicleTypes');
 const { notifyUser, notifyAdmins } = require('../utils/notify');
@@ -94,13 +93,17 @@ function noDriverError(requestedUnavailable, requestedName, requestedCashOnly, v
     : 'No drivers are available right now. Please try again shortly.';
 }
 
-// Notifies one driver of a new request across every channel: real-time
-// socket event, stored in-app notification, email, and WhatsApp.
+// Notifies one driver of a new request across every automatic channel:
+// real-time socket event, stored in-app notification, and email. WhatsApp
+// isn't sent automatically here - it's a free wa.me link the frontend
+// renders as a "Message on WhatsApp" button (opens WhatsApp with the trip
+// details pre-filled, one tap to send) rather than a server-pushed message,
+// since that needs a paid WhatsApp Business API account. See
+// frontend/src/utils/whatsapp.js.
 async function alertDriverOfBooking(req, driverUserId, booking, passengerName, passengerRatingAvg) {
   const driverUser = await User.findById(driverUserId);
   if (!driverUser) return;
   await emailService.sendDriverBookingAlert(driverUser.email, booking);
-  await whatsappService.sendDriverBookingAlert(driverUser.mobile, booking, passengerName);
   emitToUser(req, driverUserId, 'booking:new', { ...booking, passengerName, passengerRatingAvg });
   await notifyUser(driverUserId, {
     type: 'booking-new',
@@ -290,6 +293,21 @@ router.get('/mine', auth, roleMiddleware(['passenger']), async (req, res) => {
   const bookings = await Booking.find({ passengerId: req.user.id })
     .populate('driverId')
     .sort({ createdAt: -1 });
+
+  // driverId is populated as the Driver doc, but its own userId field stays
+  // an unresolved id - fetch each driver's name/mobile once so the frontend
+  // can offer a "Message driver on WhatsApp" wa.me link (see
+  // frontend/src/utils/whatsapp.js), same as the driver already gets for
+  // the passenger via GET /driver's passengerId populate.
+  const driverUserCache = new Map();
+  for (const b of bookings) {
+    if (!b.driverId) continue;
+    const uid = String(b.driverId.userId);
+    if (!driverUserCache.has(uid)) driverUserCache.set(uid, await User.findById(uid));
+    const driverUser = driverUserCache.get(uid);
+    if (driverUser) b.driverContact = { name: driverUser.name, mobile: driverUser.mobile };
+  }
+
   res.json(bookings.map(hidePassengerRating));
 });
 
@@ -397,10 +415,6 @@ router.put('/:id/accept', auth, roleMiddleware(['driver']), async (req, res) => 
   }
 
   const driverUser = await User.findById(driver.userId);
-  await whatsappService.sendPassengerBookingAccepted(
-    passenger.mobile, updated, driverUser?.name || 'Your driver',
-    `${driver.vehicleType} · ${driver.vehicleNumber}`,
-  );
 
   await notifyAdmins({
     type: 'driver-action',
@@ -469,7 +483,6 @@ router.put('/:id/arrived', auth, roleMiddleware(['driver']), async (req, res) =>
 
   const updated = await Booking.findByIdAndUpdate(req.params.id, { arrivedAt: new Date() });
 
-  const passenger = await User.findById(booking.passengerId);
   const driverUser = await User.findById(driver.userId);
   const vehicleLabel = `${driver.vehicleType} · ${driver.vehicleNumber}`;
 
@@ -480,7 +493,6 @@ router.put('/:id/arrived', auth, roleMiddleware(['driver']), async (req, res) =>
     message: `${driverUser?.name || 'Your driver'} (${vehicleLabel}) is waiting at ${booking.pickupAddress}.`,
     link: '/passenger',
   });
-  await whatsappService.sendPassengerDriverArrived(passenger.mobile, updated, driverUser?.name || 'Your driver', vehicleLabel);
 
   res.json(updated);
 });

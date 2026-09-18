@@ -7,6 +7,7 @@ import AddressAutocomplete from '../../components/AddressAutocomplete';
 import ScheduleField from '../../components/ScheduleField';
 import StarRating from '../../components/StarRating';
 import StripePaymentModal from '../../components/StripePaymentModal';
+import { waLink, bookingAcceptedMessage } from '../../utils/whatsapp';
 
 export default function PassengerDashboard() {
   const { bookings, fetchMine, createBooking } = useBookingStore();
@@ -220,6 +221,12 @@ export default function PassengerDashboard() {
                     {b.scheduledFor && <div className="muted">Scheduled: {new Date(b.scheduledFor).toLocaleString()}</div>}
                     {b.arrivedAt && b.status === 'accepted' && (
                       <div style={{ color: '#16a34a', fontWeight: 600 }}>🚕 Your driver has arrived - head out to the car.</div>
+                    )}
+                    {['accepted', 'in-progress'].includes(b.status) && waLink(b.driverContact?.mobile, bookingAcceptedMessage(b, b.driverContact?.name, `${b.driverId?.vehicleType} · ${b.driverId?.vehicleNumber}`)) && (
+                      <a className="btn secondary" style={{ marginTop: 4, display: 'inline-block' }} target="_blank" rel="noreferrer"
+                        href={waLink(b.driverContact?.mobile, bookingAcceptedMessage(b, b.driverContact?.name, `${b.driverId?.vehicleType} · ${b.driverId?.vehicleNumber}`))}>
+                        WhatsApp driver
+                      </a>
                     )}
                     {b.paymentMethod === 'card' && b.paymentStatus !== 'paid' && (!b.scheduledFor || b.status !== 'pending') && !['cancelled'].includes(b.status) && (
                       <button className="btn secondary" style={{ marginTop: 4 }} onClick={() => payNow(b)} disabled={payingId === b._id}>

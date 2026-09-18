@@ -4,6 +4,7 @@ import client from '../../api/client';
 import AddressAutocomplete from '../../components/AddressAutocomplete';
 import PhoneField from '../../components/PhoneField';
 import ScheduleField from '../../components/ScheduleField';
+import { waLink } from '../../utils/whatsapp';
 
 export default function DriverBookForPassenger() {
   const navigate = useNavigate();
@@ -82,7 +83,15 @@ export default function DriverBookForPassenger() {
         <div className="card" style={{ maxWidth: 480, background: '#dcfce7' }}>
           <h3>Booking created</h3>
           <p>For {success.passenger.name} ({success.passenger.mobile}) - ${success.booking.estimatedFare} estimated, already marked accepted.</p>
-          <button className="btn" onClick={() => navigate('/driver')}>Back to trips</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn" onClick={() => navigate('/driver')}>Back to trips</button>
+            {waLink(success.passenger.mobile, `Hi ${success.passenger.name}, your TaxiHub ride is booked (${success.booking.bookingId}). Pickup: ${success.booking.pickupAddress}, drop: ${success.booking.dropAddress}. Estimated fare: $${success.booking.estimatedFare}.`) && (
+              <a className="btn secondary" target="_blank" rel="noreferrer"
+                href={waLink(success.passenger.mobile, `Hi ${success.passenger.name}, your TaxiHub ride is booked (${success.booking.bookingId}). Pickup: ${success.booking.pickupAddress}, drop: ${success.booking.dropAddress}. Estimated fare: $${success.booking.estimatedFare}.`)}>
+                WhatsApp passenger
+              </a>
+            )}
+          </div>
         </div>
       </div>
     );

@@ -4,6 +4,7 @@ import { useBookingStore } from '../../store/bookingStore';
 import { useSocket } from '../../hooks/useSocket';
 import StarRating from '../../components/StarRating';
 import { notificationPermission, requestNotificationPermission, showBrowserNotification } from '../../utils/browserNotify';
+import { waLink, newTripMessage, driverArrivedMessage } from '../../utils/whatsapp';
 
 export default function DriverDashboard() {
   const { bookings, fetchDriverBookings } = useBookingStore();
@@ -192,15 +193,23 @@ export default function DriverDashboard() {
                 <td><span className={`badge ${b.status}`}>{b.status}</span></td>
                 <td>
                   {b.status === 'pending' && (
-                    <div style={{ display: 'flex', gap: 6 }}>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       <button className="btn" onClick={() => accept(b._id)}>Accept</button>
                       <button className="btn secondary" onClick={() => decline(b._id)}>Decline</button>
+                      {waLink(b.passengerId?.mobile, newTripMessage(b, b.passengerId?.name)) && (
+                        <a className="btn secondary" target="_blank" rel="noreferrer"
+                          href={waLink(b.passengerId?.mobile, newTripMessage(b, b.passengerId?.name))}>WhatsApp passenger</a>
+                      )}
                     </div>
                   )}
                   {(b.status === 'accepted' || b.status === 'in-progress') && (
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       {b.status === 'accepted' && !b.arrivedAt && (
                         <button className="btn secondary" onClick={() => markArrived(b._id)}>I've arrived</button>
+                      )}
+                      {b.status === 'accepted' && b.arrivedAt && waLink(b.passengerId?.mobile, driverArrivedMessage(b, profile?.userId?.name, `${profile?.vehicleType} · ${profile?.vehicleNumber}`)) && (
+                        <a className="btn secondary" target="_blank" rel="noreferrer"
+                          href={waLink(b.passengerId?.mobile, driverArrivedMessage(b, profile?.userId?.name, `${profile?.vehicleType} · ${profile?.vehicleNumber}`))}>WhatsApp "I've arrived"</a>
                       )}
                       <input style={{ width: 90 }} type="number" step="0.01" placeholder="Actual $"
                         value={fareInputs[b._id] || ''} onChange={(e) => setFareInputs((f) => ({ ...f, [b._id]: e.target.value }))} />
