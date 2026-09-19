@@ -1,7 +1,4 @@
-const { createModel } = require('../lib/MemoryStore');
-const User = require('./User');
-const Driver = require('./Driver');
-const Booking = require('./Booking');
+const { createModel } = require('../lib/createModel');
 
 /**
  * Carried over from the previous session's Complaint.js (Mongoose schema),
@@ -18,11 +15,11 @@ const Booking = require('./Booking');
  * status: 'open' | 'investigating' | 'resolved' | 'closed' | 'escalated'
  */
 const Complaint = createModel('Complaint', {
-  complainantId: () => User.collection,
-  driverId: () => Driver.collection,
-  bookingId: () => Booking.collection,
-  'driverComments.commentedBy': () => User.collection,
-  'adminNotes.noteBy': () => User.collection,
+  complainantId: 'User',
+  driverId: 'Driver',
+  bookingId: 'Booking',
+  'driverComments.commentedBy': 'User',
+  'adminNotes.noteBy': 'User',
 });
 
 const SERIOUS_TYPES = ['assault-violence', 'sexual-offence', 'dui-drugs'];

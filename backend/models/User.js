@@ -1,4 +1,4 @@
-const { createModel } = require('../lib/MemoryStore');
+const { createModel } = require('../lib/createModel');
 
 // Fields: name, email, password (bcrypt hash), mobile, address, role
 // ('passenger' | 'driver' | 'admin'), isActive (false = can't log in at

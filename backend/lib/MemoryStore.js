@@ -5,7 +5,8 @@
  *
  * Why: lets the app run instantly with `npm start` and no database install,
  * while keeping route code shaped exactly like it would against real
- * Mongoose models - swapping in real MongoDB later means replacing this
+ * Mongoose models - swapping in real MongoDB (see lib/MongooseStore.js,
+ * selected via DB_MODE=mongo in lib/createModel.js) means replacing this
  * file's model wiring, not rewriting every route.
  */
 const crypto = require('crypto');
@@ -13,6 +14,14 @@ const crypto = require('crypto');
 function generateId() {
   return crypto.randomBytes(12).toString('hex');
 }
+
+// Every collection registers itself here by name so refs can be declared
+// as plain model-name strings ({ userId: 'User' }) - the same format
+// lib/MongooseStore.js's schemas use for their `ref:` option - instead of
+// each model file importing every other model just to close over its
+// collection. Looked up lazily (inside resolveRef, at query time), so
+// require order between model files no longer matters.
+const registry = new Map();
 
 function clone(doc) {
   return doc ? JSON.parse(JSON.stringify(doc)) : doc;
@@ -151,16 +160,16 @@ class Collection {
   }
 
   applyPopulate(doc, path, select) {
-    const refGetter = this.refs[path];
-    if (!refGetter) return doc;
+    const modelName = this.refs[path];
+    if (!modelName) return doc;
     const parts = path.split('.');
     if (parts.length === 1) {
       const field = parts[0];
       const val = doc[field];
       if (val == null) return doc;
       doc[field] = Array.isArray(val)
-        ? val.map((v) => this.resolveRef(refGetter, v, select) || v)
-        : (this.resolveRef(refGetter, val, select) || val);
+        ? val.map((v) => this.resolveRef(modelName, v, select) || v)
+        : (this.resolveRef(modelName, val, select) || val);
     } else {
       const [arrField, subField] = parts;
       const arr = doc[arrField];
@@ -168,15 +177,16 @@ class Collection {
         doc[arrField] = arr.map((item) => {
           const val = item[subField];
           if (val == null) return item;
-          return { ...item, [subField]: this.resolveRef(refGetter, val, select) || val };
+          return { ...item, [subField]: this.resolveRef(modelName, val, select) || val };
         });
       }
     }
     return doc;
   }
 
-  resolveRef(refGetter, id, select) {
-    const refCollection = refGetter();
+  resolveRef(modelName, id, select) {
+    const refCollection = registry.get(modelName);
+    if (!refCollection) return null;
     const found = refCollection.docs.find((d) => String(d._id) === String(id));
     if (!found) return null;
     let cloned = clone(found);
@@ -221,6 +231,7 @@ class Collection {
 
 function createModel(name, refs = {}) {
   const collection = new Collection(name, refs);
+  registry.set(name, collection);
   return {
     collection,
     pre: (fn) => collection.pre(fn),

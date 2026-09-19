@@ -1,6 +1,4 @@
-const { createModel } = require('../lib/MemoryStore');
-const User = require('./User');
-const Driver = require('./Driver');
+const { createModel } = require('../lib/createModel');
 
 // Fields: bookingId (human-readable "TRIP-YYYYMMDD-NNNNN", like Complaint's
 // complaintId), passengerId (-> User), driverId (-> Driver, null while a
@@ -28,8 +26,8 @@ const Driver = require('./Driver');
 // /bookings), reminderDayEmailSent/reminderHourEmailSent (scheduled-trip
 // reminder flags - see utils/reminders.js).
 const Booking = createModel('Booking', {
-  passengerId: () => User.collection,
-  driverId: () => Driver.collection,
+  passengerId: 'User',
+  driverId: 'Driver',
 });
 
 Booking.pre(async (doc, collection) => {

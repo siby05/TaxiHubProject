@@ -1,5 +1,4 @@
-const { createModel } = require('../lib/MemoryStore');
-const User = require('./User');
+const { createModel } = require('../lib/createModel');
 
 // Fields: userId (-> User), licenseNumber (globally unique - enforced in
 // routes/admin.js), vehicleType, vehicleNumber, ratePerKm, pendingRatePerKm
@@ -30,7 +29,7 @@ const User = require('./User');
 // excluded from auto-match for card bookings, and a direct QR hail with
 // paymentMethod:'card' is rejected instead of silently charging them.
 const Driver = createModel('Driver', {
-  userId: () => User.collection,
+  userId: 'User',
 });
 
 module.exports = Driver;

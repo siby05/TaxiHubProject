@@ -72,9 +72,17 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 5000;
 
 connectDatabase().then(async () => {
-  if ((process.env.DB_MODE || 'memory') === 'memory') {
+  // Memory mode always starts empty, so this reseeds fresh demo/test
+  // accounts on every restart exactly as before. A real (mongo) database
+  // only gets seeded once, the first time it's ever genuinely empty -
+  // real data added after that is never touched again.
+  const User = require('./models/User');
+  if ((await User.countDocuments()) === 0) {
     await require('./utils/seed')();
   }
   server.listen(PORT, () => console.log(`EasyRide API listening on http://localhost:${PORT}`));
   startReminderScheduler();
+}).catch((err) => {
+  console.error('[startup] failed to start:', err.message);
+  process.exit(1);
 });
