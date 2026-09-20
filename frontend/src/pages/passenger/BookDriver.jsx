@@ -20,6 +20,7 @@ export default function BookDriver() {
   const [quote, setQuote] = useState(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [error, setError] = useState('');
+  const [nextAvailableTime, setNextAvailableTime] = useState(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -41,15 +42,20 @@ export default function BookDriver() {
   useEffect(() => {
     setQuote(null);
     setError('');
+    setNextAvailableTime(null);
     if (!pickup || !drop) return;
     let cancelled = false;
     setQuoteLoading(true);
-    client.post('/booking/quote', { driverId: effectiveDriverId, pickupLat: pickup.lat, pickupLng: pickup.lng, dropLat: drop.lat, dropLng: drop.lng, paymentMethod })
+    client.post('/booking/quote', { driverId: effectiveDriverId, pickupLat: pickup.lat, pickupLng: pickup.lng, dropLat: drop.lat, dropLng: drop.lng, paymentMethod, scheduledFor })
       .then((r) => { if (!cancelled) setQuote(r.data); })
-      .catch((err) => { if (!cancelled) setError(err.response?.data?.error || 'Could not calculate fare'); })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err.response?.data?.error || 'Could not calculate fare');
+        setNextAvailableTime(err.response?.data?.nextAvailableTime || null);
+      })
       .finally(() => { if (!cancelled) setQuoteLoading(false); });
     return () => { cancelled = true; };
-  }, [pickup, drop, effectiveDriverId, paymentMethod]);
+  }, [pickup, drop, effectiveDriverId, paymentMethod, scheduledFor]);
 
   async function confirmBooking() {
     setError('');
@@ -65,6 +71,7 @@ export default function BookDriver() {
       navigate('/passenger');
     } catch (err) {
       setError(err.response?.data?.error || 'Could not create booking');
+      setNextAvailableTime(err.response?.data?.nextAvailableTime || null);
     } finally {
       setLoading(false);
     }
@@ -85,6 +92,7 @@ export default function BookDriver() {
   const [guestQuote, setGuestQuote] = useState(null);
   const [guestQuoteLoading, setGuestQuoteLoading] = useState(false);
   const [guestError, setGuestError] = useState('');
+  const [guestNextAvailable, setGuestNextAvailable] = useState(null);
   const [guestLoading, setGuestLoading] = useState(false);
   const [guestSuccess, setGuestSuccess] = useState(null);
 
@@ -110,15 +118,20 @@ export default function BookDriver() {
   useEffect(() => {
     setGuestQuote(null);
     setGuestError('');
+    setGuestNextAvailable(null);
     if (!guestPickup || !guestDrop) return;
     let cancelled = false;
     setGuestQuoteLoading(true);
-    client.post('/booking/guest-quote', { driverId, pickupLat: guestPickup.lat, pickupLng: guestPickup.lng, dropLat: guestDrop.lat, dropLng: guestDrop.lng, paymentMethod: guestPaymentMethod })
+    client.post('/booking/guest-quote', { driverId, pickupLat: guestPickup.lat, pickupLng: guestPickup.lng, dropLat: guestDrop.lat, dropLng: guestDrop.lng, paymentMethod: guestPaymentMethod, scheduledFor: guestScheduledFor })
       .then((r) => { if (!cancelled) setGuestQuote(r.data); })
-      .catch((err) => { if (!cancelled) setGuestError(err.response?.data?.error || 'Could not calculate fare'); })
+      .catch((err) => {
+        if (cancelled) return;
+        setGuestError(err.response?.data?.error || 'Could not calculate fare');
+        setGuestNextAvailable(err.response?.data?.nextAvailableTime || null);
+      })
       .finally(() => { if (!cancelled) setGuestQuoteLoading(false); });
     return () => { cancelled = true; };
-  }, [guestPickup, guestDrop, guestPaymentMethod, driverId]);
+  }, [guestPickup, guestDrop, guestPaymentMethod, guestScheduledFor, driverId]);
 
   async function confirmGuestBooking() {
     setGuestError('');
@@ -135,6 +148,7 @@ export default function BookDriver() {
       setGuestSuccess(data);
     } catch (err) {
       setGuestError(err.response?.data?.error || 'Could not create booking');
+      setGuestNextAvailable(err.response?.data?.nextAvailableTime || null);
     } finally {
       setGuestLoading(false);
     }
@@ -221,7 +235,17 @@ export default function BookDriver() {
                   </button>
                 </div>
               )}
-              {!guestQuote && !guestQuoteLoading && guestError && <p className="error-text">{guestError}</p>}
+              {!guestQuote && !guestQuoteLoading && guestError && (
+                <div>
+                  <p className="error-text">{guestError}</p>
+                  {guestNextAvailable && (
+                    <p className="muted">
+                      Next available: <strong>{new Date(guestNextAvailable).toLocaleString()}</strong> - toggle
+                      "Schedule for later" above and enter this time instead.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -320,7 +344,14 @@ export default function BookDriver() {
             </div>
           )}
 
-          {!quote && !quoteLoading && error && <p className="error-text">{error}</p>}
+          {!quote && !quoteLoading && error && (
+            <div>
+              <p className="error-text">{error}</p>
+              {nextAvailableTime && (
+                <p className="muted">Next available: <strong>{new Date(nextAvailableTime).toLocaleString()}</strong> - toggle "Schedule for later" above and enter this time instead.</p>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

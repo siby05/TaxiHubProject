@@ -11,7 +11,9 @@ const { createModel } = require('../lib/createModel');
 // | 'completed' | 'cancelled' | 'expired'), requestedAt, scheduledFor
 // (optional - a future date/time the passenger asked for instead of "now"),
 // acceptedAt, arrivedAt (driver reached the pickup point; status stays
-// 'accepted' - see PUT /:id/arrived),
+// 'accepted' - see PUT /:id/arrived), startedAt (driver began the trip
+// itself, see PUT /:id/start - used as the reference point for
+// utils/driverAvailability.js's next-available-time estimate),
 // completedAt, cancelledAt, cancelReason, paymentMethod ('cash' | 'card',
 // chosen at booking time), cardSurchargeAmount (payment-gateway fee
 // disclosed and added on top of the fare for card bookings only, 0 for

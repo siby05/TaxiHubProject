@@ -14,6 +14,7 @@ const { getPassengerRatingAvg } = require('../utils/ratings');
 const { isWithinSchedule } = require('../utils/schedule');
 const { getDriverBilling } = require('../utils/billing');
 const { getSettings } = require('../config/platformSettings');
+const { getDriverReadyTime, isReadyInTime } = require('../utils/driverAvailability');
 
 // Passengers should never see the rating a driver gave them (they can only
 // see driver ratings) - strip it before sending any booking list/detail
@@ -59,18 +60,60 @@ async function findEligibleCandidates(paymentMethod, vehicleType) {
     && (!vehicleType || d.vehicleType === vehicleType));
 }
 
-async function resolveDriver(driverId, paymentMethod, vehicleType) {
+// Same eligibility filter as findEligibleCandidates, plus a turnaround-time
+// check: a driver who's mid-trip is only usable if utils/driverAvailability
+// says they'd realistically be free (finish their current trip, drive to
+// this new pickup, plus a buffer) by the time this trip actually needs
+// them - "now" for an immediate request, or the requested scheduledFor.
+// Used only where a NEW booking is actually being placed (quote/create/
+// edit/guest) - not the passive "what's in my pending list" queries, which
+// keep using the plain version above so a driver isn't confusingly hidden
+// from their own already-broadcast requests.
+//
+// Returns the usable drivers plus, when any candidate was excluded purely
+// for timing, the earliest any of them would actually be ready - so the
+// caller can offer "try scheduling for then" instead of a flat rejection
+// when that's genuinely the only blocker.
+async function findEligibleCandidatesWithTiming(paymentMethod, vehicleType, pickup, requestedTime) {
+  const scheduleOk = await findEligibleCandidates(paymentMethod, vehicleType);
+  if (!pickup) return { usable: scheduleOk, nextAvailableTime: null };
+
+  const when = requestedTime || new Date();
+  const checked = await Promise.all(scheduleOk.map(async (d) => {
+    const { busy, readyAt } = await getDriverReadyTime(d._id, pickup.lat, pickup.lng);
+    return { driver: d, ready: !busy || isReadyInTime(readyAt, when), readyAt };
+  }));
+  const usable = checked.filter((c) => c.ready).map((c) => c.driver);
+  const busyReadyTimes = checked.filter((c) => !c.ready).map((c) => c.readyAt);
+  const nextAvailableTime = busyReadyTimes.length ? new Date(Math.min(...busyReadyTimes.map((d) => d.getTime()))) : null;
+  return { usable, nextAvailableTime };
+}
+
+// pickup ({lat,lng}) and requestedTime (Date, defaults to now) are optional
+// - omit them (as GET /driver and the accept/decline notify-others steps
+// do) to skip the busy/turnaround check entirely and keep the original
+// approval/payment/schedule-only resolution.
+async function resolveDriver(driverId, paymentMethod, vehicleType, pickup, requestedTime) {
   let requestedUnavailable = false;
   let requestedCashOnly = false;
   let requestedName = null;
+  let requestedBusyReadyAt = null;
 
   if (driverId) {
     const requested = await Driver.findById(driverId).populate('userId', 'name');
     if (requested && requested.status === 'approved') {
       if (paymentMethod !== 'card' || requested.acceptsOnlinePayment !== false) {
-        return { driver: requested, usedFallback: false, requestedUnavailable: false, requestedCashOnly: false, requestedName: null };
+        if (!pickup) {
+          return { driver: requested, usedFallback: false, requestedUnavailable: false, requestedCashOnly: false, requestedName: null, nextAvailableTime: null };
+        }
+        const { busy, readyAt } = await getDriverReadyTime(requested._id, pickup.lat, pickup.lng);
+        if (!busy || isReadyInTime(readyAt, requestedTime || new Date())) {
+          return { driver: requested, usedFallback: false, requestedUnavailable: false, requestedCashOnly: false, requestedName: null, nextAvailableTime: null };
+        }
+        requestedBusyReadyAt = readyAt;
+      } else {
+        requestedCashOnly = true;
       }
-      requestedCashOnly = true;
     }
     if (requested) {
       requestedUnavailable = true;
@@ -78,13 +121,29 @@ async function resolveDriver(driverId, paymentMethod, vehicleType) {
     }
   }
 
-  const usable = await findEligibleCandidates(paymentMethod, vehicleType);
-  return { driver: usable[0] || null, usedFallback: !!driverId, requestedUnavailable, requestedCashOnly, requestedName };
+  const { usable, nextAvailableTime: fallbackNextAvailable } = await findEligibleCandidatesWithTiming(paymentMethod, vehicleType, pickup, requestedTime);
+  const driver = usable[0] || null;
+
+  // Only surface a reschedule suggestion when nobody usable was actually
+  // found - if the fallback pool turned up a different free driver, the
+  // passenger still gets a ride right now and timing was never their
+  // problem to know about.
+  const candidateTimes = [requestedBusyReadyAt, fallbackNextAvailable].filter(Boolean);
+  const nextAvailableTime = !driver && candidateTimes.length
+    ? new Date(Math.min(...candidateTimes.map((d) => d.getTime())))
+    : null;
+
+  return { driver, usedFallback: !!driverId, requestedUnavailable, requestedCashOnly, requestedName, nextAvailableTime };
 }
 
-function noDriverError(requestedUnavailable, requestedName, requestedCashOnly, vehicleType) {
+function noDriverError(requestedUnavailable, requestedName, requestedCashOnly, vehicleType, nextAvailableTime) {
   if (requestedCashOnly) {
     return `${requestedName || 'That driver'} only accepts cash, and no other drivers are available for online payment right now. Choose cash, or try again shortly.`;
+  }
+  if (nextAvailableTime) {
+    return requestedName
+      ? `${requestedName} is still finishing another trip and won't be free in time for this request. See the suggested time below to reschedule.`
+      : 'No driver will be free in time for this request. See the suggested time below to reschedule.';
   }
   if (requestedUnavailable) {
     return `${requestedName || 'That driver'} isn't currently active, and no other drivers are available right now. Please try again shortly.`;
@@ -185,14 +244,17 @@ function buildQuote(distanceKm, ratePerKm, paymentMethod) {
 // specific scanned driver, never an open auto-match.
 router.post('/guest-quote', async (req, res) => {
   try {
-    const { pickupLat, pickupLng, dropLat, dropLng, driverId, paymentMethod, vehicleType } = req.body;
+    const { pickupLat, pickupLng, dropLat, dropLng, driverId, paymentMethod, vehicleType, scheduledFor } = req.body;
     if (!driverId) return res.status(400).json({ error: 'driverId is required' });
     if (pickupLat == null || pickupLng == null || dropLat == null || dropLng == null) {
       return res.status(400).json({ error: 'pickup and drop coordinates are required' });
     }
-    const resolved = await resolveDriver(driverId, paymentMethod, vehicleType);
+    const resolved = await resolveDriver(driverId, paymentMethod, vehicleType, { lat: pickupLat, lng: pickupLng }, scheduledFor ? new Date(scheduledFor) : undefined);
     if (!resolved.driver) {
-      return res.status(404).json({ error: noDriverError(resolved.requestedUnavailable, resolved.requestedName, resolved.requestedCashOnly, vehicleType), requestedUnavailable: resolved.requestedUnavailable, requestedCashOnly: resolved.requestedCashOnly });
+      return res.status(404).json({
+        error: noDriverError(resolved.requestedUnavailable, resolved.requestedName, resolved.requestedCashOnly, vehicleType, resolved.nextAvailableTime),
+        requestedUnavailable: resolved.requestedUnavailable, requestedCashOnly: resolved.requestedCashOnly, nextAvailableTime: resolved.nextAvailableTime,
+      });
     }
     const distanceKm = Math.round(haversineKm(pickupLat, pickupLng, dropLat, dropLng) * 100) / 100;
     res.json({
@@ -212,7 +274,7 @@ router.post('/guest-quote', async (req, res) => {
 // rate rather than auto-matching/falling back.
 router.post('/quote', auth, roleMiddleware(['passenger', 'driver']), async (req, res) => {
   try {
-    const { pickupLat, pickupLng, dropLat, dropLng, driverId, paymentMethod, vehicleType } = req.body;
+    const { pickupLat, pickupLng, dropLat, dropLng, driverId, paymentMethod, vehicleType, scheduledFor } = req.body;
     if (pickupLat == null || pickupLng == null || dropLat == null || dropLng == null) {
       return res.status(400).json({ error: 'pickup and drop coordinates are required' });
     }
@@ -225,13 +287,19 @@ router.post('/quote', auth, roleMiddleware(['passenger', 'driver']), async (req,
     let requestedUnavailable = false;
     let requestedCashOnly = false;
     let requestedName = null;
+    let nextAvailableTime = null;
 
     if (req.user.role === 'driver') {
       driver = await Driver.findOne({ userId: req.user.id });
       if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
     } else {
-      ({ driver, usedFallback, requestedUnavailable, requestedCashOnly, requestedName } = await resolveDriver(driverId, paymentMethod, vehicleType));
-      if (!driver) return res.status(404).json({ error: noDriverError(requestedUnavailable, requestedName, requestedCashOnly, vehicleType), requestedUnavailable, requestedCashOnly });
+      ({ driver, usedFallback, requestedUnavailable, requestedCashOnly, requestedName, nextAvailableTime } = await resolveDriver(driverId, paymentMethod, vehicleType, { lat: pickupLat, lng: pickupLng }, scheduledFor ? new Date(scheduledFor) : undefined));
+      if (!driver) {
+        return res.status(404).json({
+          error: noDriverError(requestedUnavailable, requestedName, requestedCashOnly, vehicleType, nextAvailableTime),
+          requestedUnavailable, requestedCashOnly, nextAvailableTime,
+        });
+      }
     }
 
     const distanceKm = Math.round(haversineKm(pickupLat, pickupLng, dropLat, dropLng) * 100) / 100;
@@ -294,16 +362,28 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
     let requestedName = null;
     let ratePerKmForEstimate;
 
+    const requestedTime = scheduledFor ? new Date(scheduledFor) : new Date();
+    const pickup = { lat: pickupLat, lng: pickupLng };
+
     if (driverId) {
-      const resolved = await resolveDriver(driverId, paymentMethod, vehicleType);
-      if (!resolved.driver) return res.status(404).json({ error: noDriverError(resolved.requestedUnavailable, resolved.requestedName, resolved.requestedCashOnly, vehicleType), requestedUnavailable: resolved.requestedUnavailable, requestedCashOnly: resolved.requestedCashOnly });
+      const resolved = await resolveDriver(driverId, paymentMethod, vehicleType, pickup, requestedTime);
+      if (!resolved.driver) {
+        return res.status(404).json({
+          error: noDriverError(resolved.requestedUnavailable, resolved.requestedName, resolved.requestedCashOnly, vehicleType, resolved.nextAvailableTime),
+          requestedUnavailable: resolved.requestedUnavailable, requestedCashOnly: resolved.requestedCashOnly, nextAvailableTime: resolved.nextAvailableTime,
+        });
+      }
       ({ usedFallback, requestedUnavailable, requestedCashOnly, requestedName } = resolved);
       targetDriverId = resolved.driver._id;
       ratePerKmForEstimate = resolved.driver.ratePerKm;
     } else {
-      broadcastCandidates = await findEligibleCandidates(paymentMethod, vehicleType);
+      const { usable, nextAvailableTime } = await findEligibleCandidatesWithTiming(paymentMethod, vehicleType, pickup, requestedTime);
+      broadcastCandidates = usable;
       if (broadcastCandidates.length === 0) {
-        return res.status(404).json({ error: noDriverError(false, null, false, vehicleType), requestedUnavailable: false, requestedCashOnly: false });
+        return res.status(404).json({
+          error: noDriverError(false, null, false, vehicleType, nextAvailableTime),
+          requestedUnavailable: false, requestedCashOnly: false, nextAvailableTime,
+        });
       }
       ratePerKmForEstimate = broadcastCandidates.reduce((sum, d) => sum + d.ratePerKm, 0) / broadcastCandidates.length;
     }
@@ -413,9 +493,12 @@ router.post('/guest', async (req, res) => {
     const distanceKm = Math.round(haversineKm(pickupLat, pickupLng, dropLat, dropLng) * 100) / 100;
     const passengerRatingAvg = await getPassengerRatingAvg(passenger._id);
 
-    const resolved = await resolveDriver(driverId, paymentMethod, vehicleType);
+    const resolved = await resolveDriver(driverId, paymentMethod, vehicleType, { lat: pickupLat, lng: pickupLng }, scheduledFor ? new Date(scheduledFor) : undefined);
     if (!resolved.driver) {
-      return res.status(404).json({ error: noDriverError(resolved.requestedUnavailable, resolved.requestedName, resolved.requestedCashOnly, vehicleType), requestedUnavailable: resolved.requestedUnavailable, requestedCashOnly: resolved.requestedCashOnly });
+      return res.status(404).json({
+        error: noDriverError(resolved.requestedUnavailable, resolved.requestedName, resolved.requestedCashOnly, vehicleType, resolved.nextAvailableTime),
+        requestedUnavailable: resolved.requestedUnavailable, requestedCashOnly: resolved.requestedCashOnly, nextAvailableTime: resolved.nextAvailableTime,
+      });
     }
 
     const bookingSettings = getSettings();
@@ -503,24 +586,36 @@ router.put('/:id/edit', auth, roleMiddleware(['passenger']), async (req, res) =>
 
     const distanceKm = Math.round(haversineKm(nextPickupLat, nextPickupLng, nextDropLat, nextDropLng) * 100) / 100;
     const bookingSettings = getSettings();
+    const nextScheduledFor = scheduledFor !== undefined ? scheduledFor : booking.scheduledFor;
+    const nextRequestedTime = nextScheduledFor ? new Date(nextScheduledFor) : new Date();
+    const nextPickup = { lat: nextPickupLat, lng: nextPickupLng };
     let ratePerKmForEstimate;
     let oldEligible = [];
     let newEligible = [];
 
     if (booking.driverId) {
-      // Direct hail: driver is fixed. Only block the edit if it would
-      // require charging by card through a driver who doesn't take it.
+      // Direct hail: driver is fixed, no fallback to fall back to - block
+      // the edit outright (with a next-available-time suggestion) rather
+      // than silently reassigning someone else.
       const driver = await Driver.findById(booking.driverId);
       if (nextPaymentMethod === 'card' && driver?.acceptsOnlinePayment === false) {
         const driverUser = await User.findById(driver.userId);
         return res.status(400).json({ error: `${driverUser?.name || 'This driver'} only accepts cash. Switch back to cash, or cancel and request a different driver.` });
       }
+      const { busy, readyAt } = await getDriverReadyTime(driver._id, nextPickup.lat, nextPickup.lng);
+      if (busy && !isReadyInTime(readyAt, nextRequestedTime)) {
+        return res.status(400).json({
+          error: `This driver is still finishing another trip and won't be free in time for the new pickup. Next available: ${readyAt.toISOString()}.`,
+          nextAvailableTime: readyAt,
+        });
+      }
       ratePerKmForEstimate = driver.ratePerKm;
     } else {
       oldEligible = await findEligibleCandidates(booking.paymentMethod, oldVehicleType);
-      newEligible = await findEligibleCandidates(nextPaymentMethod, nextVehicleType);
+      const { usable, nextAvailableTime } = await findEligibleCandidatesWithTiming(nextPaymentMethod, nextVehicleType, nextPickup, nextRequestedTime);
+      newEligible = usable;
       if (newEligible.length === 0) {
-        return res.status(400).json({ error: noDriverError(false, null, false, nextVehicleType) });
+        return res.status(400).json({ error: noDriverError(false, null, false, nextVehicleType, nextAvailableTime), nextAvailableTime });
       }
       ratePerKmForEstimate = newEligible.reduce((sum, d) => sum + d.ratePerKm, 0) / newEligible.length;
     }
@@ -794,7 +889,7 @@ router.put('/:id/arrived', auth, roleMiddleware(['driver']), async (req, res) =>
 
 // PUT /api/booking/:id/start
 router.put('/:id/start', auth, roleMiddleware(['driver']), async (req, res) => {
-  const updated = await Booking.findByIdAndUpdate(req.params.id, { status: 'in-progress' });
+  const updated = await Booking.findByIdAndUpdate(req.params.id, { status: 'in-progress', startedAt: new Date() });
   emitToUser(req, updated.passengerId, 'booking:started', updated);
   res.json(updated);
 });

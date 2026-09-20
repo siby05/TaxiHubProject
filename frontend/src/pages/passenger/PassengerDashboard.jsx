@@ -29,6 +29,7 @@ export default function PassengerDashboard() {
   const [quote, setQuote] = useState(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [error, setError] = useState('');
+  const [nextAvailableTime, setNextAvailableTime] = useState(null);
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState('');
 
@@ -41,6 +42,7 @@ export default function PassengerDashboard() {
   const [editQuote, setEditQuote] = useState(null);
   const [editQuoteLoading, setEditQuoteLoading] = useState(false);
   const [editError, setEditError] = useState('');
+  const [editNextAvailableTime, setEditNextAvailableTime] = useState(null);
   const [editSaving, setEditSaving] = useState(false);
 
   function refresh() {
@@ -69,12 +71,17 @@ export default function PassengerDashboard() {
     if (!pickup || !drop) return;
     let cancelled = false;
     setQuoteLoading(true);
-    client.post('/booking/quote', { driverId: preferredDriverId || undefined, pickupLat: pickup.lat, pickupLng: pickup.lng, dropLat: drop.lat, dropLng: drop.lng, paymentMethod, vehicleType: vehicleType || undefined })
+    setNextAvailableTime(null);
+    client.post('/booking/quote', { driverId: preferredDriverId || undefined, pickupLat: pickup.lat, pickupLng: pickup.lng, dropLat: drop.lat, dropLng: drop.lng, paymentMethod, vehicleType: vehicleType || undefined, scheduledFor })
       .then((r) => { if (!cancelled) setQuote(r.data); })
-      .catch((err) => { if (!cancelled) setError(err.response?.data?.error || 'Could not calculate fare'); })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err.response?.data?.error || 'Could not calculate fare');
+        setNextAvailableTime(err.response?.data?.nextAvailableTime || null);
+      })
       .finally(() => { if (!cancelled) setQuoteLoading(false); });
     return () => { cancelled = true; };
-  }, [pickup, drop, preferredDriverId, paymentMethod, vehicleType]);
+  }, [pickup, drop, preferredDriverId, paymentMethod, vehicleType, scheduledFor]);
 
   async function rateDriver(bookingId, rating, review) {
     await client.put(`/booking/${bookingId}/rate`, { rating, review });
@@ -99,19 +106,24 @@ export default function PassengerDashboard() {
   useEffect(() => {
     setEditQuote(null);
     setEditError('');
+    setEditNextAvailableTime(null);
     if (!editingBooking || !editPickup || !editDrop) return;
     let cancelled = false;
     setEditQuoteLoading(true);
     client.post('/booking/quote', {
       driverId: editingBooking.driverId?._id || editingBooking.driverId || undefined,
       pickupLat: editPickup.lat, pickupLng: editPickup.lng, dropLat: editDrop.lat, dropLng: editDrop.lng,
-      paymentMethod: editPaymentMethod, vehicleType: editVehicleType || undefined,
+      paymentMethod: editPaymentMethod, vehicleType: editVehicleType || undefined, scheduledFor: editScheduledFor,
     })
       .then((r) => { if (!cancelled) setEditQuote(r.data); })
-      .catch((err) => { if (!cancelled) setEditError(err.response?.data?.error || 'Could not calculate fare'); })
+      .catch((err) => {
+        if (cancelled) return;
+        setEditError(err.response?.data?.error || 'Could not calculate fare');
+        setEditNextAvailableTime(err.response?.data?.nextAvailableTime || null);
+      })
       .finally(() => { if (!cancelled) setEditQuoteLoading(false); });
     return () => { cancelled = true; };
-  }, [editingBooking, editPickup, editDrop, editPaymentMethod, editVehicleType]);
+  }, [editingBooking, editPickup, editDrop, editPaymentMethod, editVehicleType, editScheduledFor]);
 
   async function saveEdit() {
     setEditError('');
@@ -128,6 +140,7 @@ export default function PassengerDashboard() {
       refresh();
     } catch (err) {
       setEditError(err.response?.data?.error || 'Could not save changes');
+      setEditNextAvailableTime(err.response?.data?.nextAvailableTime || null);
     } finally {
       setEditSaving(false);
     }
@@ -152,6 +165,7 @@ export default function PassengerDashboard() {
       setFormKey((k) => k + 1);
     } catch (err) {
       setError(err.response?.data?.error || 'Could not create booking');
+      setNextAvailableTime(err.response?.data?.nextAvailableTime || null);
     } finally {
       setLoading(false);
     }
@@ -265,7 +279,14 @@ export default function PassengerDashboard() {
               </div>
             )}
 
-            {!quote && !quoteLoading && error && <p className="error-text">{error}</p>}
+            {!quote && !quoteLoading && error && (
+              <div>
+                <p className="error-text">{error}</p>
+                {nextAvailableTime && (
+                  <p className="muted">Next available: <strong>{new Date(nextAvailableTime).toLocaleString()}</strong> - toggle "Schedule for later" above and enter this time instead.</p>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -370,7 +391,14 @@ export default function PassengerDashboard() {
                 <div className="muted">{editQuote.distanceKm} km{editScheduledFor && ` · scheduled for ${new Date(editScheduledFor).toLocaleString()}`}</div>
               </div>
             )}
-            {editError && <p className="error-text">{editError}</p>}
+            {editError && (
+              <div>
+                <p className="error-text">{editError}</p>
+                {editNextAvailableTime && (
+                  <p className="muted">Next available: <strong>{new Date(editNextAvailableTime).toLocaleString()}</strong> - set "Schedule for later" above to this time instead.</p>
+                )}
+              </div>
+            )}
 
             <div style={{ display: 'flex', gap: 8 }}>
               <button className="btn" onClick={saveEdit} disabled={editSaving || editQuoteLoading || !editQuote}>
