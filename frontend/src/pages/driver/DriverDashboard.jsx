@@ -7,9 +7,11 @@ import { notificationPermission, requestNotificationPermission, showBrowserNotif
 import { waLink, driverPendingMessage, driverConfirmedMessage, driverArrivedMessage, driverCancelledMessage, paymentReminderMessage } from '../../utils/whatsapp';
 import WhatsAppIcon from '../../components/WhatsAppIcon';
 import PhoneField from '../../components/PhoneField';
+import { useAuthStore } from '../../store/authStore';
 
 export default function DriverDashboard() {
   const { bookings, fetchDriverBookings } = useBookingStore();
+  const { token, setSession } = useAuthStore();
   const [profile, setProfile] = useState(null);
   const [earnings, setEarnings] = useState(null);
   const [fareInputs, setFareInputs] = useState({});
@@ -20,7 +22,7 @@ export default function DriverDashboard() {
   const [showAllTrips, setShowAllTrips] = useState(false);
   const [notifPermission, setNotifPermission] = useState(notificationPermission());
   const [editingProfile, setEditingProfile] = useState(false);
-  const [profileForm, setProfileForm] = useState({ name: '', mobile: '', vehicleNumber: '' });
+  const [profileForm, setProfileForm] = useState({ name: '', email: '', mobile: '', vehicleNumber: '', currentPassword: '' });
   const [profileMsg, setProfileMsg] = useState('');
 
   function load() {
@@ -69,7 +71,10 @@ export default function DriverDashboard() {
 
   function startEditProfile() {
     setProfileMsg('');
-    setProfileForm({ name: profile.userId?.name || '', mobile: profile.userId?.mobile || '', vehicleNumber: profile.vehicleNumber || '' });
+    setProfileForm({
+      name: profile.userId?.name || '', email: profile.userId?.email || '', mobile: profile.userId?.mobile || '',
+      vehicleNumber: profile.vehicleNumber || '', currentPassword: '',
+    });
     setEditingProfile(true);
   }
 
@@ -77,7 +82,15 @@ export default function DriverDashboard() {
     e.preventDefault();
     setProfileMsg('');
     try {
+      // Name/mobile/vehicle number are driver-managed (PUT /driver/profile);
+      // email is a login credential, so it goes through the same
+      // self-service account endpoint admin uses (PUT /api/auth/me),
+      // which requires the current password to confirm identity.
       await client.put('/driver/profile', profileForm);
+      if (profileForm.email && profileForm.email !== profile.userId?.email) {
+        const { data } = await client.put('/auth/me', { email: profileForm.email, currentPassword: profileForm.currentPassword });
+        setSession(token, data);
+      }
       setEditingProfile(false);
       load();
     } catch (err) {
@@ -254,9 +267,11 @@ export default function DriverDashboard() {
             ) : (
               <form onSubmit={saveProfile} style={{ maxWidth: 320 }}>
                 <div><label>Name</label><input value={profileForm.name} onChange={(e) => setProfileForm((f) => ({ ...f, name: e.target.value }))} required /></div>
+                <div><label>Email</label><input type="email" value={profileForm.email} onChange={(e) => setProfileForm((f) => ({ ...f, email: e.target.value }))} required /></div>
                 <PhoneField value={profileForm.mobile} onChange={(v) => setProfileForm((f) => ({ ...f, mobile: v }))} hint="Trip requests are sent here on WhatsApp." />
                 <div><label>Vehicle number</label><input value={profileForm.vehicleNumber} onChange={(e) => setProfileForm((f) => ({ ...f, vehicleNumber: e.target.value }))} required /></div>
-                <p className="muted" style={{ marginTop: 4 }}>Email, license and compliance documents can only be changed by an admin.</p>
+                <div><label>Current password</label><input type="password" value={profileForm.currentPassword} onChange={(e) => setProfileForm((f) => ({ ...f, currentPassword: e.target.value }))} placeholder="Only required if changing email" /></div>
+                <p className="muted" style={{ marginTop: 4 }}>License and compliance documents can only be changed by an admin.</p>
                 {profileMsg && <p className="error-text">{profileMsg}</p>}
                 <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                   <button className="btn">Save</button>
