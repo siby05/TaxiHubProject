@@ -73,7 +73,7 @@ export default function DriverDashboard() {
     setProfileMsg('');
     setProfileForm({
       name: profile.userId?.name || '', email: profile.userId?.email || '', mobile: profile.userId?.mobile || '',
-      vehicleNumber: profile.vehicleNumber || '', currentPassword: '',
+      vehicleNumber: profile.vehicleNumber || '', currentPassword: '', newPassword: '',
     });
     setEditingProfile(true);
   }
@@ -83,12 +83,17 @@ export default function DriverDashboard() {
     setProfileMsg('');
     try {
       // Name/mobile/vehicle number are driver-managed (PUT /driver/profile);
-      // email is a login credential, so it goes through the same
-      // self-service account endpoint admin uses (PUT /api/auth/me),
+      // email and password are login credentials, so they go through the
+      // same self-service account endpoint admin uses (PUT /api/auth/me),
       // which requires the current password to confirm identity.
       await client.put('/driver/profile', profileForm);
-      if (profileForm.email && profileForm.email !== profile.userId?.email) {
-        const { data } = await client.put('/auth/me', { email: profileForm.email, currentPassword: profileForm.currentPassword });
+      const emailChanged = profileForm.email && profileForm.email !== profile.userId?.email;
+      if (emailChanged || profileForm.newPassword) {
+        const { data } = await client.put('/auth/me', {
+          email: emailChanged ? profileForm.email : undefined,
+          newPassword: profileForm.newPassword || undefined,
+          currentPassword: profileForm.currentPassword,
+        });
         setSession(token, data);
       }
       setEditingProfile(false);
@@ -270,7 +275,8 @@ export default function DriverDashboard() {
                 <div><label>Email</label><input type="email" value={profileForm.email} onChange={(e) => setProfileForm((f) => ({ ...f, email: e.target.value }))} required /></div>
                 <PhoneField value={profileForm.mobile} onChange={(v) => setProfileForm((f) => ({ ...f, mobile: v }))} hint="Trip requests are sent here on WhatsApp." />
                 <div><label>Vehicle number</label><input value={profileForm.vehicleNumber} onChange={(e) => setProfileForm((f) => ({ ...f, vehicleNumber: e.target.value }))} required /></div>
-                <div><label>Current password</label><input type="password" value={profileForm.currentPassword} onChange={(e) => setProfileForm((f) => ({ ...f, currentPassword: e.target.value }))} placeholder="Only required if changing email" /></div>
+                <div><label>New password (optional)</label><input type="password" value={profileForm.newPassword} onChange={(e) => setProfileForm((f) => ({ ...f, newPassword: e.target.value }))} placeholder="Leave blank to keep current password" /></div>
+                <div><label>Current password</label><input type="password" value={profileForm.currentPassword} onChange={(e) => setProfileForm((f) => ({ ...f, currentPassword: e.target.value }))} placeholder="Only required if changing email or password" /></div>
                 <p className="muted" style={{ marginTop: 4 }}>License and compliance documents can only be changed by an admin.</p>
                 {profileMsg && <p className="error-text">{profileMsg}</p>}
                 <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>

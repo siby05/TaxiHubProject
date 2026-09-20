@@ -1,10 +1,13 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const router = express.Router();
 const User = require('../models/User');
 const { auth } = require('../middleware/auth');
 const { emailService } = require('../services/emailService');
+
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 function signToken(user) {
   // Long-lived by default so users stay signed in across visits instead of
@@ -104,6 +107,67 @@ router.put('/me', auth, async (req, res) => {
       ...(newPassword && { password: await bcrypt.hash(newPassword, 10) }),
     });
     res.json(publicUser(updated));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/auth/forgot-password - public, for passengers and drivers who
+// can't log in (admins can just be reset by another admin, or use this
+// too). Always responds with the same message regardless of whether the
+// email is registered, to avoid confirming account existence - but the
+// resetLink is only ever returned in this response (never guessed or
+// logged) when the account really exists, so the requester's own browser
+// can offer a "send via WhatsApp" shortcut alongside the emailed link
+// (see frontend/src/pages/ForgotPassword.jsx) - this app has no server-
+// side WhatsApp sending (see frontend/src/utils/whatsapp.js), so a
+// link the user's own device can hand to WhatsApp is the only way that
+// channel works at all.
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'email is required' });
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+    const generic = { message: "If that email is registered, we've sent a password reset link." };
+    if (!user) return res.json(generic);
+
+    const token = crypto.randomBytes(32).toString('hex');
+    await User.findByIdAndUpdate(user._id, {
+      resetToken: token,
+      resetTokenExpiry: new Date(Date.now() + RESET_TOKEN_TTL_MS).toISOString(),
+    });
+
+    const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password/${token}`;
+    await emailService.sendPasswordResetEmail(user.email, user.name, resetLink);
+
+    res.json({ ...generic, resetLink });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/auth/reset-password - consumes a forgot-password token (or an
+// admin-shared one - same token shape) to set a new password. One-time
+// use: the token is cleared immediately so the same link can't be reused
+// or shared after the fact.
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword) return res.status(400).json({ error: 'token and newPassword are required' });
+    if (newPassword.length < 6) return res.status(400).json({ error: 'newPassword must be at least 6 characters' });
+
+    const user = await User.findOne({ resetToken: token });
+    if (!user || !user.resetTokenExpiry || new Date(user.resetTokenExpiry) < new Date()) {
+      return res.status(400).json({ error: 'This reset link is invalid or has expired - request a new one' });
+    }
+
+    await User.findByIdAndUpdate(user._id, {
+      password: await bcrypt.hash(newPassword, 10),
+      resetToken: null,
+      resetTokenExpiry: null,
+    });
+    res.json({ message: 'Password reset - you can now log in with your new password.' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -4,6 +4,8 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Home from './pages/Home';
 import About from './pages/About';
 import Login from './pages/Login';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import Register from './pages/Register';
 import DriverSignup from './pages/DriverSignup';
 import Terms from './pages/Terms';
@@ -37,6 +39,8 @@ export default function App() {
         <Route path="/" element={user ? <Navigate to={home} replace /> : <Home />} />
         <Route path="/about" element={<About />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password/:token" element={<ResetPassword />} />
         <Route path="/register" element={<Register />} />
         <Route path="/driver-signup" element={<DriverSignup />} />
         <Route path="/terms" element={<Terms />} />

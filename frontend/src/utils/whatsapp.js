@@ -10,6 +10,16 @@ export function waLink(mobile, text) {
   return `https://wa.me/${digits}${text ? `?text=${encodeURIComponent(text)}` : ''}`;
 }
 
+// No fixed recipient - opens WhatsApp's own contact picker with the text
+// pre-filled, so the sender chooses who to forward it to (often "Message
+// Yourself", or a family member helping them). Used where there's no
+// specific mobile number to address (e.g. sharing a password-reset link
+// - see pages/ForgotPassword.jsx and pages/admin/AdminDashboard.jsx's
+// reset-password action, which does have a number and uses waLink instead).
+export function waShareLink(text) {
+  return `https://wa.me/?text=${encodeURIComponent(text)}`;
+}
+
 // Each message below is pre-filled text for the SENDER to send - so it must
 // read naturally in that person's voice, addressed to the other party. Mixing
 // these up (e.g. giving the passenger a message written as if the driver

@@ -105,6 +105,26 @@ router.put('/users/:id/unblock-booking', async (req, res) => {
   res.json(publicUser(user));
 });
 
+// PUT /api/admin/users/:id/reset-password - generate a new temporary
+// password for any user (driver or passenger) who's lost access - e.g.
+// no working email on file for the self-service flow (routes/auth.js
+// POST /forgot-password), or they just need it done immediately. Same
+// pattern as creating a new driver (POST /drivers below): a random
+// password is returned once, for the admin to relay directly (not
+// emailed) - never stored or shown again after this response, and
+// display of it is gated client-side by the admin's tempPasswordVisible
+// setting.
+router.put('/users/:id/reset-password', async (req, res) => {
+  const user = await User.findById(req.params.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  const tempPassword = crypto.randomBytes(4).toString('hex');
+  const hashed = await bcrypt.hash(tempPassword, 10);
+  await User.findByIdAndUpdate(user._id, { password: hashed, resetToken: null, resetTokenExpiry: null });
+
+  res.json({ temporaryPassword: tempPassword, note: 'Send this temporary password to the user securely (SMS/WhatsApp) - not emailed for security.' });
+});
+
 // DELETE /api/admin/users/:id - permanently remove a passenger account.
 // Restricted to role:'passenger' - drivers have their own dedicated
 // DELETE /drivers/:id (which also removes the Driver record), and an

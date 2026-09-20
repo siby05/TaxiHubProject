@@ -113,6 +113,10 @@ const emailService = {
       attachments,
     ),
 
+  sendPasswordResetEmail: (to, name, resetLink) =>
+    send(to, 'Reset your EasyRide password',
+      `Hi ${name}, click the link below to reset your password (expires in 1 hour):\n${resetLink}\n\nIf you didn't ask for this, you can ignore this email - your password stays unchanged.`),
+
   // Homepage "get in touch" form (routes/enquiry.js) - goes straight to the
   // admin inbox since these are pre-signup visitors, not yet in-app users.
   sendEnquiryEmail: (enquiry) =>

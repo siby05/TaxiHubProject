@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import client, { fileOrigin } from '../../api/client';
 import PhoneField from '../../components/PhoneField';
 import { useAuthStore } from '../../store/authStore';
+import { waLink } from '../../utils/whatsapp';
 
 const DOC_STATUS_CLASS = { verified: 'approved', rejected: 'rejected', pending: 'pending' };
 
@@ -21,6 +22,7 @@ export default function AdminDashboard() {
     serviceCategory: 'private-hire', hasSecurityCamera: false, tslNumber: '', passengerEndorsementNumber: '', passengerEndorsementExpiry: '', vehicleCofExpiry: '',
   });
   const [createdInfo, setCreatedInfo] = useState(null);
+  const [resetPasswordInfo, setResetPasswordInfo] = useState(null);
   const [error, setError] = useState('');
   const [qrFor, setQrFor] = useState(null);
   const [docsFor, setDocsFor] = useState(null);
@@ -122,6 +124,16 @@ export default function AdminDashboard() {
   async function toggleBookingBlock(p) {
     await client.put(`/admin/users/${p._id}/${p.bookingBlocked ? 'unblock-booking' : 'block-booking'}`);
     load();
+  }
+
+  async function resetPassword(userId, name, mobile) {
+    if (!window.confirm(`Reset ${name || 'this user'}'s password? They'll need the new temporary password to log in.`)) return;
+    try {
+      const { data } = await client.put(`/admin/users/${userId}/reset-password`);
+      setResetPasswordInfo({ name, mobile, ...data });
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not reset password');
+    }
   }
 
   async function deletePassenger(p) {
@@ -236,6 +248,25 @@ export default function AdminDashboard() {
     <div className="container">
       <h1>Admin dashboard</h1>
 
+      {resetPasswordInfo && (
+        <div className="card" style={{ background: '#fef3c7' }}>
+          <strong>Password reset for {resetPasswordInfo.name}.</strong>{' '}
+          {settings?.tempPasswordVisible !== false
+            ? <>Temporary password: <code>{resetPasswordInfo.temporaryPassword}</code></>
+            : 'Temporary password generated (hidden - see admin settings to show it here).'}
+          <p className="muted">{resetPasswordInfo.note}</p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {settings?.tempPasswordVisible !== false && waLink(resetPasswordInfo.mobile, `Hi ${resetPasswordInfo.name}, your EasyRide password was reset. Temporary password: ${resetPasswordInfo.temporaryPassword} - please log in and change it.`) && (
+              <a className="btn whatsapp" target="_blank" rel="noreferrer"
+                href={waLink(resetPasswordInfo.mobile, `Hi ${resetPasswordInfo.name}, your EasyRide password was reset. Temporary password: ${resetPasswordInfo.temporaryPassword} - please log in and change it.`)}>
+                Send via WhatsApp
+              </a>
+            )}
+            <button className="btn secondary" onClick={() => setResetPasswordInfo(null)}>Dismiss</button>
+          </div>
+        </div>
+      )}
+
       {stats && (
         <div className="grid cols-4">
           <div className="card stat clickable" onClick={() => focusTab('passengers')}>
@@ -320,6 +351,7 @@ export default function AdminDashboard() {
                       {d.status === 'approved' && <button className="btn secondary" onClick={() => deactivate(d._id)}>Deactivate</button>}
                       {d.status === 'rejected' && <button className="btn" onClick={() => reactivate(d._id)}>Reactivate</button>}
                       <button className="btn secondary" onClick={() => startEdit(d)}>{editFor === d._id ? 'Cancel' : 'Edit'}</button>
+                      <button className="btn secondary" onClick={() => resetPassword(d.userId?._id, d.userId?.name, d.userId?.mobile)}>Reset password</button>
                       <button className="btn secondary" onClick={() => viewQr(d._id)}>{qrFor?.id === d._id ? 'Hide QR' : 'View QR'}</button>
                       {d.documents && (
                         <button className="btn secondary" onClick={() => setDocsFor(docsFor === d._id ? null : d._id)}>{docsFor === d._id ? 'Hide docs' : 'Review docs'}</button>
@@ -495,6 +527,7 @@ export default function AdminDashboard() {
                 >
                   {p.bookingBlocked ? 'Unblock booking' : 'Block from booking'}
                 </button>
+                <button className="btn secondary" onClick={() => resetPassword(p._id, p.name, p.mobile)}>Reset password</button>
                 <button className="btn danger" onClick={() => deletePassenger(p)}>Delete</button>
               </div>
             </div>
