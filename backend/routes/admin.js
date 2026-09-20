@@ -18,6 +18,7 @@ const { DRIVER_DOCUMENTS, isValidDocumentKey, documentLabel, allDocumentsVerifie
 const { getPassengerRatingAvg } = require('../utils/ratings');
 const Feedback = require('../models/Feedback');
 const { notifyUser } = require('../utils/notify');
+const { runBackup } = require('../utils/backup');
 
 function withCompliance(driver) {
   return { ...driver, compliance: checkDriverCompliance(driver) };
@@ -388,8 +389,14 @@ router.get('/settings', async (req, res) => {
 
 // PUT /api/admin/settings - update commission/fee policy
 router.put('/settings', async (req, res) => {
-  const { commissionType, commissionPercent, weeklyFlatFee, outstandingFeeLimit, cardSurchargePercent, minimumFare, fareRanges, driverSignupEnabled } = req.body;
+  const {
+    commissionType, commissionPercent, weeklyFlatFee, outstandingFeeLimit, cardSurchargePercent, minimumFare, fareRanges,
+    driverSignupEnabled, adminEmail, backupFrequency,
+  } = req.body;
   try {
+    if (adminEmail != null && adminEmail && !/^\S+@\S+\.\S+$/.test(adminEmail)) {
+      return res.status(400).json({ error: 'adminEmail must be a valid email address' });
+    }
     const updated = updateSettings({
       ...(commissionType && { commissionType }),
       ...(commissionPercent != null && { commissionPercent: Number(commissionPercent) }),
@@ -399,8 +406,25 @@ router.put('/settings', async (req, res) => {
       ...(minimumFare != null && { minimumFare: Number(minimumFare) }),
       ...(fareRanges && { fareRanges: fareRanges.map((r) => ({ maxKm: Number(r.maxKm), price: Number(r.price) })) }),
       ...(driverSignupEnabled != null && { driverSignupEnabled: !!driverSignupEnabled }),
+      ...(adminEmail != null && { adminEmail: adminEmail.toLowerCase() }),
+      ...(backupFrequency && { backupFrequency }),
     });
     res.json(updated);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/backup/run - send a data backup (passengers, trips,
+// complaints as CSV attachments) to adminEmail right now, regardless of
+// the scheduled weekly/monthly cadence in utils/backup.js. Used by the
+// "Run backup now" button, and handy for confirming the whole pipeline
+// (including real SMTP, once configured) actually works before waiting
+// for the schedule.
+router.post('/backup/run', async (req, res) => {
+  try {
+    const counts = await runBackup();
+    res.json({ message: 'Backup sent.', counts });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

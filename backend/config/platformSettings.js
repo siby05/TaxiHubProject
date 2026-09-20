@@ -36,6 +36,18 @@ let settings = {
   // blocked server-side (see routes/driverSignup.js) when false, so it
   // can't be reached by a stale bookmark either.
   driverSignupEnabled: true,
+  // Real inbox for admin-facing email: serious-complaint/escalation alerts
+  // (see services/emailService.js) and the scheduled data backup below -
+  // replaces the admin@easyride.local seed login, which is just a login
+  // identity, not a real mailbox anyone reads.
+  adminEmail: 'easyridenz@gmail.com',
+  // How often utils/backup.js emails the admin a CSV export of passengers,
+  // trips and complaints. lastBackupAt (ISO string, null until the first
+  // run) is how the scheduler knows one is actually due - same
+  // tracked-timestamp idempotency utils/reminders.js already uses, just at
+  // a much coarser grain.
+  backupFrequency: 'weekly',
+  lastBackupAt: null,
 };
 
 function getSettings() {
@@ -45,6 +57,9 @@ function getSettings() {
 function updateSettings(patch) {
   if (patch.commissionType && !['per-trip-percent', 'weekly-flat'].includes(patch.commissionType)) {
     throw new Error('commissionType must be "per-trip-percent" or "weekly-flat"');
+  }
+  if (patch.backupFrequency && !['weekly', 'monthly'].includes(patch.backupFrequency)) {
+    throw new Error('backupFrequency must be "weekly" or "monthly"');
   }
   if (patch.fareRanges) {
     if (!Array.isArray(patch.fareRanges) || patch.fareRanges.some((r) => typeof r.maxKm !== 'number' || typeof r.price !== 'number' || r.maxKm <= 0 || r.price < 0)) {

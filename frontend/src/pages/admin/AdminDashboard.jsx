@@ -22,6 +22,7 @@ export default function AdminDashboard() {
   const [editError, setEditError] = useState('');
   const [settings, setSettings] = useState(null);
   const [settingsMsg, setSettingsMsg] = useState('');
+  const [backupMsg, setBackupMsg] = useState('');
   const [passengers, setPassengers] = useState([]);
   const [trips, setTrips] = useState([]);
   const [tripFilter, setTripFilter] = useState('');
@@ -146,6 +147,17 @@ export default function AdminDashboard() {
       setSettingsMsg('Saved.');
     } catch (err) {
       setSettingsMsg(err.response?.data?.error || 'Could not save settings');
+    }
+  }
+
+  async function runBackupNow() {
+    setBackupMsg('Sending...');
+    try {
+      const { data } = await client.post('/admin/backup/run');
+      setBackupMsg(`Sent: ${data.counts.passengers} passengers, ${data.counts.bookings} trips, ${data.counts.complaints} complaints.`);
+      client.get('/admin/settings').then((r) => setSettings(r.data));
+    } catch (err) {
+      setBackupMsg(err.response?.data?.error || 'Could not send backup');
     }
   }
 
@@ -530,6 +542,38 @@ export default function AdminDashboard() {
             {settingsMsg && <p className="muted">{settingsMsg}</p>}
             <button className="btn" style={{ marginTop: 12 }}>Save</button>
           </form>
+        </div>
+      )}
+
+      {tab === 'settings' && settings && (
+        <div className="card" style={{ maxWidth: 480 }}>
+          <h3>Admin email &amp; data backups</h3>
+          <p className="muted">
+            Serious-complaint alerts and scheduled backups go to this address. A CSV export of passengers, trips and
+            complaints is emailed here automatically on the schedule below.
+          </p>
+          <form onSubmit={saveSettings}>
+            <div>
+              <label>Admin email</label>
+              <input type="email" value={settings.adminEmail || ''} onChange={(e) => setSettings((s) => ({ ...s, adminEmail: e.target.value }))} required />
+            </div>
+            <div>
+              <label>Backup frequency</label>
+              <select value={settings.backupFrequency} onChange={(e) => setSettings((s) => ({ ...s, backupFrequency: e.target.value }))}>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </div>
+            {settingsMsg && <p className="muted">{settingsMsg}</p>}
+            <button className="btn" style={{ marginTop: 12 }}>Save</button>
+          </form>
+          <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+            <p className="muted" style={{ marginTop: 0 }}>
+              {settings.lastBackupAt ? `Last backup: ${new Date(settings.lastBackupAt).toLocaleString()}` : 'No backup has been sent yet.'}
+            </p>
+            <button type="button" className="btn secondary" onClick={runBackupNow}>Run backup now</button>
+            {backupMsg && <p className="muted" style={{ marginTop: 8 }}>{backupMsg}</p>}
+          </div>
         </div>
       )}
 

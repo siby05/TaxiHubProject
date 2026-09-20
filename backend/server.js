@@ -23,6 +23,7 @@ const feedbackRoutes = require('./routes/feedback');
 const stripeConnectRoutes = require('./routes/stripeConnect');
 const { setIo } = require('./utils/notify');
 const { startReminderScheduler } = require('./utils/reminders');
+const { startBackupScheduler } = require('./utils/backup');
 
 const app = express();
 const server = http.createServer(app);
@@ -82,6 +83,7 @@ connectDatabase().then(async () => {
   }
   server.listen(PORT, () => console.log(`EasyRide API listening on http://localhost:${PORT}`));
   startReminderScheduler();
+  startBackupScheduler();
 }).catch((err) => {
   console.error('[startup] failed to start:', err.message);
   process.exit(1);
