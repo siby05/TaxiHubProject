@@ -1,11 +1,57 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import client from '../api/client';
+
+const HERO_IMAGE = 'https://images.unsplash.com/photo-1449824913935-59a10b8d2000?auto=format&fit=crop&w=1800&q=80';
+const SHOWCASE_IMAGES = [
+  { src: 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=900&q=80', alt: 'Taxi parked on a city street' },
+  { src: 'https://images.unsplash.com/photo-1502877338535-766e1452684a?auto=format&fit=crop&w=900&q=80', alt: 'Driver behind the wheel on a trip' },
+  { src: 'https://images.unsplash.com/photo-1519003722824-194d4455a60c?auto=format&fit=crop&w=900&q=80', alt: 'Open road heading toward the coast' },
+];
+
+function EnquiryForm() {
+  const [form, setForm] = useState({ name: '', email: '', phone: '', message: '' });
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  async function submit(e) {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      await client.post('/enquiry', form);
+      setSent(true);
+      setForm({ name: '', email: '', phone: '', message: '' });
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not send your enquiry - please try again');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (sent) {
+    return <p className="muted" style={{ color: 'var(--success)' }}>Thanks - we've received your enquiry and will be in touch soon.</p>;
+  }
+
+  return (
+    <form onSubmit={submit}>
+      <div><label>Name</label><input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} required /></div>
+      <div><label>Email</label><input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} required /></div>
+      <div><label>Phone (optional)</label><input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} /></div>
+      <div><label>Message</label><textarea value={form.message} onChange={(e) => setForm((f) => ({ ...f, message: e.target.value }))} required minLength={5} /></div>
+      {error && <p className="error-text">{error}</p>}
+      <button className="btn" disabled={loading}>{loading ? 'Sending...' : 'Send enquiry'}</button>
+    </form>
+  );
+}
 
 export default function Home() {
   return (
     <div>
-      <div className="hero-band">
+      <div className="hero-band" style={{ backgroundImage: `linear-gradient(rgba(7,26,44,0.82), rgba(7,26,44,0.92)), url(${HERO_IMAGE})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
         <div className="hero-band-inner">
-          <span className="eyebrow-pill">New Plymouth · expanding across NZ</span>
+          <span className="eyebrow-pill">New Plymouth</span>
           <h1>A private taxi you can <span className="accent-word">actually see coming</span>.</h1>
           <p className="tagline">
             Scan the QR code on a driver's car, or book from the app - either way you get an upfront fare, a real
@@ -92,6 +138,22 @@ export default function Home() {
 
       <div className="home-section">
         <div className="container">
+          <div className="section-head">
+            <div className="eyebrow">On the road</div>
+            <h2>Real drivers, real trips, right around New Plymouth</h2>
+          </div>
+          <div className="photo-grid">
+            {SHOWCASE_IMAGES.map((img) => (
+              <div className="photo-grid-item" key={img.src}>
+                <img src={img.src} alt={img.alt} loading="lazy" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="home-section alt">
+        <div className="container">
           <div className="pricing-card">
             <div>
               <h2>Pricing you can actually predict</h2>
@@ -107,7 +169,7 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="home-section alt">
+      <div className="home-section">
         <div className="container">
           <div className="section-head">
             <div className="eyebrow">Get started</div>
@@ -138,6 +200,19 @@ export default function Home() {
           <p className="muted" style={{ textAlign: 'center', marginTop: 28 }}>
             Want the full story? Read <Link to="/about">About EasyRide</Link>, or check our <Link to="/terms">Terms &amp; Conditions</Link>.
           </p>
+        </div>
+      </div>
+
+      <div className="home-section alt">
+        <div className="container">
+          <div className="section-head">
+            <div className="eyebrow">Get in touch</div>
+            <h2>Have a question? Send us an enquiry</h2>
+            <p>Whether it's about booking, becoming a driver, or bringing EasyRide to another town - we read every message.</p>
+          </div>
+          <div className="card" style={{ maxWidth: 480, margin: '0 auto' }}>
+            <EnquiryForm />
+          </div>
         </div>
       </div>
     </div>

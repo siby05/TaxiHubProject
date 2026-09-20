@@ -4,8 +4,9 @@ import { useBookingStore } from '../../store/bookingStore';
 import { useSocket } from '../../hooks/useSocket';
 import StarRating from '../../components/StarRating';
 import { notificationPermission, requestNotificationPermission, showBrowserNotification } from '../../utils/browserNotify';
-import { waLink, driverPendingMessage, driverConfirmedMessage, driverArrivedMessage, paymentReminderMessage } from '../../utils/whatsapp';
+import { waLink, driverPendingMessage, driverConfirmedMessage, driverArrivedMessage, driverCancelledMessage, paymentReminderMessage } from '../../utils/whatsapp';
 import WhatsAppIcon from '../../components/WhatsAppIcon';
+import PhoneField from '../../components/PhoneField';
 
 export default function DriverDashboard() {
   const { bookings, fetchDriverBookings } = useBookingStore();
@@ -18,6 +19,9 @@ export default function DriverDashboard() {
   const [rateMsg, setRateMsg] = useState('');
   const [showAllTrips, setShowAllTrips] = useState(false);
   const [notifPermission, setNotifPermission] = useState(notificationPermission());
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({ name: '', mobile: '', vehicleNumber: '' });
+  const [profileMsg, setProfileMsg] = useState('');
 
   function load() {
     fetchDriverBookings(showAllTrips ? { all: true } : undefined);
@@ -63,6 +67,24 @@ export default function DriverDashboard() {
     setProfile(data);
   }
 
+  function startEditProfile() {
+    setProfileMsg('');
+    setProfileForm({ name: profile.userId?.name || '', mobile: profile.userId?.mobile || '', vehicleNumber: profile.vehicleNumber || '' });
+    setEditingProfile(true);
+  }
+
+  async function saveProfile(e) {
+    e.preventDefault();
+    setProfileMsg('');
+    try {
+      await client.put('/driver/profile', profileForm);
+      setEditingProfile(false);
+      load();
+    } catch (err) {
+      setProfileMsg(err.response?.data?.error || 'Could not save your details');
+    }
+  }
+
   async function requestRate(e) {
     e.preventDefault();
     setRateMsg('');
@@ -81,10 +103,17 @@ export default function DriverDashboard() {
     // await - browsers only allow window.open without a popup-blocker
     // prompt when it's called directly inside a user gesture's call stack.
     // Booking details are already in state, so the link doesn't need to
-    // wait on the accept API call.
-    const booking = bookings.find((b) => b._id === id);
-    const link = booking && waLink(booking.passengerId?.mobile, driverConfirmedMessage(booking, profile?.userId?.name, profile ? `${profile.vehicleType} · ${profile.vehicleNumber}` : ''));
-    const popup = link ? window.open(link, '_blank') : null;
+    // wait on the accept API call. Guarded in its own try/catch: a popup
+    // blocked/throwing here must never stop the actual Accept call below -
+    // that was the cause of Accept appearing to need two clicks.
+    let popup = null;
+    try {
+      const booking = bookings.find((b) => b._id === id);
+      const link = booking && waLink(booking.passengerId?.mobile, driverConfirmedMessage(booking, profile?.userId?.name, profile ? `${profile.vehicleType} · ${profile.vehicleNumber}` : ''));
+      popup = link ? window.open(link, '_blank') : null;
+    } catch {
+      popup = null;
+    }
 
     try {
       await client.put(`/booking/${id}/accept`);
@@ -100,6 +129,35 @@ export default function DriverDashboard() {
     load();
   }
 
+  // Cancelling an already-accepted trip is more disruptive than declining
+  // one that's still pending - the passenger is expecting this driver, so
+  // they're told twice: an immediate WhatsApp heads-up (opened here, same
+  // synchronous-before-await trick as accept()/complete()) and an email
+  // from the backend (see routes/booking.js PUT /:id/cancel), which works
+  // even if the driver doesn't have the passenger's number confirmed.
+  async function cancelTrip(id) {
+    const reason = window.prompt("Why are you cancelling this trip? The passenger will see this reason.");
+    if (reason === null) return; // dismissed the prompt - don't cancel
+    if (!window.confirm('Cancel this trip? The passenger will be notified by email and WhatsApp.')) return;
+
+    let popup = null;
+    try {
+      const booking = bookings.find((b) => b._id === id);
+      const link = booking && waLink(booking.passengerId?.mobile, driverCancelledMessage(booking, profile?.userId?.name, reason));
+      popup = link ? window.open(link, '_blank') : null;
+    } catch {
+      popup = null;
+    }
+
+    try {
+      await client.put(`/booking/${id}/cancel`, { reason });
+    } catch (err) {
+      setAlert(err.response?.data?.error || 'Could not cancel this trip');
+      if (popup) popup.close();
+    }
+    load();
+  }
+
   async function markArrived(id) {
     await client.put(`/booking/${id}/arrived`);
     load();
@@ -112,12 +170,18 @@ export default function DriverDashboard() {
     // Same synchronous-before-await trick as accept(): if this is a card
     // trip that's still unpaid, open WhatsApp with a payment-reminder link
     // right away, in this click, before the popup-blocker window closes.
+    // Guarded the same way too, so a blocked/throwing popup can never stop
+    // the actual Complete call below.
     let popup = null;
-    if (booking && booking.paymentMethod === 'card' && booking.paymentStatus !== 'paid') {
-      const payLink = `${window.location.origin}/pay/${id}`;
-      const finalBooking = { ...booking, actualFare: actualFare || booking.estimatedFare };
-      const link = waLink(booking.passengerId?.mobile, paymentReminderMessage(finalBooking, profile?.userId?.name, payLink));
-      popup = link ? window.open(link, '_blank') : null;
+    try {
+      if (booking && booking.paymentMethod === 'card' && booking.paymentStatus !== 'paid') {
+        const payLink = `${window.location.origin}/pay/${id}`;
+        const finalBooking = { ...booking, actualFare: actualFare || booking.estimatedFare };
+        const link = waLink(booking.passengerId?.mobile, paymentReminderMessage(finalBooking, profile?.userId?.name, payLink));
+        popup = link ? window.open(link, '_blank') : null;
+      }
+    } catch {
+      popup = null;
     }
 
     try {
@@ -183,6 +247,24 @@ export default function DriverDashboard() {
             <button className="btn secondary">Submit for approval</button>
           </form>
           {rateMsg && <p className="muted" style={{ marginTop: 6 }}>{rateMsg}</p>}
+
+          <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+            {!editingProfile ? (
+              <button type="button" className="btn secondary" onClick={startEditProfile}>Edit my details</button>
+            ) : (
+              <form onSubmit={saveProfile} style={{ maxWidth: 320 }}>
+                <div><label>Name</label><input value={profileForm.name} onChange={(e) => setProfileForm((f) => ({ ...f, name: e.target.value }))} required /></div>
+                <PhoneField value={profileForm.mobile} onChange={(v) => setProfileForm((f) => ({ ...f, mobile: v }))} hint="Trip requests are sent here on WhatsApp." />
+                <div><label>Vehicle number</label><input value={profileForm.vehicleNumber} onChange={(e) => setProfileForm((f) => ({ ...f, vehicleNumber: e.target.value }))} required /></div>
+                <p className="muted" style={{ marginTop: 4 }}>Email, license and compliance documents can only be changed by an admin.</p>
+                {profileMsg && <p className="error-text">{profileMsg}</p>}
+                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <button className="btn">Save</button>
+                  <button type="button" className="btn secondary" onClick={() => setEditingProfile(false)}>Cancel</button>
+                </div>
+              </form>
+            )}
+          </div>
         </div>
       )}
 
@@ -248,6 +330,7 @@ export default function DriverDashboard() {
                 <input style={{ width: 90 }} type="number" step="0.01" placeholder="Actual $"
                   value={fareInputs[b._id] || ''} onChange={(e) => setFareInputs((f) => ({ ...f, [b._id]: e.target.value }))} />
                 <button className="btn" onClick={() => complete(b._id)}>Complete</button>
+                <button className="btn danger" onClick={() => cancelTrip(b._id)}>Cancel trip</button>
               </div>
             )}
           </div>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import client from '../../api/client';
+import AddressAutocomplete from '../../components/AddressAutocomplete';
 
 const COMPLAINT_TYPES = [
   'driver-behaviour', 'vehicle-condition', 'safety-concern', 'route-issue', 'payment-issue',
@@ -28,6 +29,10 @@ export default function LodgeComplaint() {
   async function onSubmit(e) {
     e.preventDefault();
     setError('');
+    if (!form.incidentLocation) {
+      setError('Pick an incident location from the address suggestions');
+      return;
+    }
     setLoading(true);
     try {
       await client.post('/complaints', form);
@@ -63,7 +68,7 @@ export default function LodgeComplaint() {
             <div><label>Incident date</label><input type="date" value={form.incidentDate} onChange={(e) => update('incidentDate', e.target.value)} required /></div>
             <div><label>Incident time</label><input type="time" value={form.incidentTime} onChange={(e) => update('incidentTime', e.target.value)} required /></div>
           </div>
-          <div><label>Incident location</label><input value={form.incidentLocation} onChange={(e) => update('incidentLocation', e.target.value)} required /></div>
+          <AddressAutocomplete label="Incident location" placeholder="Start typing an address..." onSelect={(r) => update('incidentLocation', r ? r.label : '')} required allowLocate />
           {error && <p className="error-text">{error}</p>}
           <button className="btn" disabled={loading}>{loading ? 'Submitting...' : 'Submit complaint'}</button>
         </form>

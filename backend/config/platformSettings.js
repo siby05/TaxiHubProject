@@ -44,6 +44,12 @@ let settings = {
   // as /api/driver-signup/enabled - the booking form needs this before/without
   // an admin session).
   vehicleSelectionEnabled: true,
+  // Whether the one-time temporary password is shown on screen right after
+  // an admin creates a driver (see routes/admin.js POST /drivers and
+  // AdminDashboard.jsx's createdInfo card). Some admins share a screen or
+  // want it off entirely and rely on another channel - this is a toggle
+  // instead of a code change so that preference never needs a redeploy.
+  tempPasswordVisible: true,
   // Real inbox for admin-facing email: serious-complaint/escalation alerts
   // (see services/emailService.js) and the scheduled data backup below -
   // replaces the admin@easyride.local seed login, which is just a login

@@ -27,6 +27,29 @@ router.get('/profile', auth, roleMiddleware(['driver']), async (req, res) => {
   res.json({ ...driver, compliance: checkDriverCompliance(driver) });
 });
 
+// PUT /api/driver/profile - a driver updating their own contact/vehicle
+// details. Deliberately narrower than what an admin can change (see PUT
+// /api/admin/drivers/:id): no email, license, TSL or compliance-document
+// fields here - those stay admin/compliance-controlled since they're
+// either a login identity or something an admin has to verify anyway.
+router.put('/profile', auth, roleMiddleware(['driver']), async (req, res) => {
+  const { name, mobile, vehicleNumber } = req.body;
+  const driver = await Driver.findOne({ userId: req.user.id });
+  if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
+
+  if (name || mobile) {
+    await User.findByIdAndUpdate(req.user.id, {
+      ...(name && { name }),
+      ...(mobile && { mobile }),
+    });
+  }
+  const updated = vehicleNumber
+    ? await Driver.findByIdAndUpdate(driver._id, { vehicleNumber })
+    : driver;
+
+  res.json(await getDriverProfile(req.user.id) || updated);
+});
+
 // GET /api/driver/documents - the driver's own view of each compliance
 // document: whether it's still pending review, verified, or rejected (with
 // the admin's reason so they know what to fix).

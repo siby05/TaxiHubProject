@@ -40,6 +40,16 @@ export function driverArrivedMessage(booking, driverName, vehicleLabel) {
   return `Hi, this is ${driverName || 'your EasyRide driver'}${vehicleLabel ? ` (${vehicleLabel})` : ''} - I've arrived at ${booking.pickupAddress}. Whenever you're ready.`;
 }
 
+// Driver -> passenger, opened automatically the moment the driver cancels
+// an accepted/in-progress trip (see pages/driver/DriverDashboard.jsx
+// cancelTrip()) - the backend also emails the passenger the same news
+// (see routes/booking.js PUT /:id/cancel), so this is the immediate,
+// no-delay heads-up on top of that.
+export function driverCancelledMessage(booking, driverName, reason) {
+  return `Hi, this is ${driverName || 'your EasyRide driver'} - I'm sorry, I have to cancel your trip (${booking.bookingId}: ${booking.pickupAddress} → ${booking.dropAddress}).` +
+    `${reason ? `\nReason: ${reason}` : ''}\nPlease rebook in the app - you'll be matched with another driver.`;
+}
+
 // Passenger -> driver, once the driver has accepted the ride. Deliberately
 // just a greeting - the passenger types their own message rather than
 // getting a wall of booking details dropped into the compose box.

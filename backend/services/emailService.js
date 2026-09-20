@@ -20,13 +20,25 @@ if (process.env.SMTP_HOST && process.env.SMTP_USER) {
   }
 }
 
+// Never throws: a booking/complaint/enquiry must never fail (or, worse,
+// crash the whole process via an unhandled rejection - see the SMTP
+// ENETUNREACH incident) just because a courtesy email couldn't be sent.
+// Most callers fire-and-forget this; runBackup() is the one exception that
+// needs to know about a real failure, so it's told via the return value
+// instead of a thrown error.
 async function send(to, subject, text, attachments) {
   if (transporter) {
-    await transporter.sendMail({ from: process.env.EMAIL_FROM, to, subject, text, ...(attachments && { attachments }) });
-    return;
+    try {
+      await transporter.sendMail({ from: process.env.EMAIL_FROM, to, subject, text, ...(attachments && { attachments }) });
+      return { ok: true };
+    } catch (err) {
+      console.error(`[email] send to ${to} failed: ${err.message}`);
+      return { ok: false, error: err.message };
+    }
   }
   const attachmentNote = attachments ? `\nAttachments: ${attachments.map((a) => a.filename).join(', ')}` : '';
   console.log(`\n[EMAIL MOCK] To: ${to}\nSubject: ${subject}\n${text}${attachmentNote}\n`);
+  return { ok: true };
 }
 
 // The admin's real inbox (config/platformSettings.js adminEmail) - falls
@@ -57,6 +69,11 @@ const emailService = {
 
   sendBookingCompleted: (to, booking) =>
     send(to, 'Trip completed', `Your trip is complete. Final fare: $${booking.actualFare}.`),
+
+  sendBookingCancelledByDriver: (to, booking, reason) =>
+    send(to, `Your driver cancelled trip ${booking.bookingId}`,
+      `Your trip from ${booking.pickupAddress} to ${booking.dropAddress} was cancelled by the driver.` +
+      `${reason ? `\nReason: ${reason}` : ''}\nPlease rebook in the app - you'll be matched with another driver.`),
 
   sendComplaintAcknowledgement: (to, complaint) =>
     send(to, `Complaint received (${complaint.complaintId})`, `We've received your complaint and will investigate. Reference: ${complaint.complaintId}.`),
@@ -94,6 +111,15 @@ const emailService = {
       `EasyRide data backup - ${new Date().toLocaleDateString()}`,
       `Attached: ${counts.passengers} passengers, ${counts.bookings} trips, ${counts.complaints} complaints (CSV files).`,
       attachments,
+    ),
+
+  // Homepage "get in touch" form (routes/enquiry.js) - goes straight to the
+  // admin inbox since these are pre-signup visitors, not yet in-app users.
+  sendEnquiryEmail: (enquiry) =>
+    send(
+      adminInbox(),
+      `New website enquiry from ${enquiry.name}`,
+      `Name: ${enquiry.name}\nEmail: ${enquiry.email}\nPhone: ${enquiry.phone || '-'}\n\nMessage:\n${enquiry.message}`,
     ),
 };
 

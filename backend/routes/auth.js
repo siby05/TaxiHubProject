@@ -74,4 +74,39 @@ router.get('/me', auth, async (req, res) => {
   res.json(publicUser(user));
 });
 
+// PUT /api/auth/me - self-service account update, any role (passenger,
+// driver or admin). Name can always change; email or password (actual
+// login credentials, not profile details like PUT /api/passenger/profile
+// or PUT /api/driver/profile) require confirming the current password
+// first - this is the only place an admin can change their own login,
+// since they have no admin-managed equivalent the way a driver does.
+router.put('/me', auth, async (req, res) => {
+  try {
+    const { name, email, currentPassword, newPassword } = req.body;
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const changingEmail = email && email.toLowerCase() !== user.email;
+    if (changingEmail || newPassword) {
+      if (!currentPassword) return res.status(400).json({ error: 'Enter your current password to change email or password' });
+      const ok = await bcrypt.compare(currentPassword, user.password);
+      if (!ok) return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+    if (changingEmail) {
+      if (!/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: 'email must be a valid address' });
+      const existing = await User.findOne({ email: email.toLowerCase() });
+      if (existing) return res.status(409).json({ error: 'An account with this email already exists' });
+    }
+
+    const updated = await User.findByIdAndUpdate(user._id, {
+      ...(name && { name }),
+      ...(changingEmail && { email: email.toLowerCase() }),
+      ...(newPassword && { password: await bcrypt.hash(newPassword, 10) }),
+    });
+    res.json(publicUser(updated));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

@@ -6,7 +6,11 @@ const { createModel } = require('../lib/createModel');
 // declinedBy (driver ids who turned this request down, so it's never shown
 // to them again - see PUT /:id/decline), requestedVehicleType (the class
 // the passenger asked for, null = any - see config/vehicleTypes.js),
-// pickupAddress, pickupLat/Lng, dropAddress, dropLat/Lng, distanceKm,
+// pickupAddress, pickupLat/Lng, dropAddress, dropLat/Lng, stops (optional
+// array of {address, lat, lng} - intermediate waypoints visited in order
+// between pickup and drop, e.g. a multi-stop errand run; distanceKm sums
+// every leg pickup->stop1->...->drop, see utils/distance.js routeDistanceKm()
+// and routes/booking.js POST /quote, POST / and PUT /:id/edit), distanceKm,
 // estimatedFare, actualFare, status ('pending' | 'accepted' | 'in-progress'
 // | 'completed' | 'cancelled' | 'expired'), requestedAt, scheduledFor
 // (optional - a future date/time the passenger asked for instead of "now"),

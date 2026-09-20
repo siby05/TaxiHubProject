@@ -77,7 +77,8 @@ async function runBackup() {
   const settings = getSettings();
   if (!settings.adminEmail) throw new Error('No admin email set - add one on the Platform fee settings tab first.');
   const { counts, attachments } = await buildBackupAttachments();
-  await emailService.sendBackupEmail(settings.adminEmail, counts, attachments);
+  const result = await emailService.sendBackupEmail(settings.adminEmail, counts, attachments);
+  if (!result.ok) throw new Error(`Backup email could not be sent: ${result.error}`);
   updateSettings({ lastBackupAt: new Date().toISOString() });
   return counts;
 }

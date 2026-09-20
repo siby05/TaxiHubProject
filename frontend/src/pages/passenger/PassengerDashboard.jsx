@@ -11,11 +11,31 @@ import Modal from '../../components/Modal';
 import { waLink, passengerToDriverMessage } from '../../utils/whatsapp';
 import WhatsAppIcon from '../../components/WhatsAppIcon';
 
+let stopIdCounter = 0;
+
+// Shared add/remove/update handlers for a stops array (each entry
+// {id, selection}, selection null until the AddressAutocomplete resolves
+// a real address) - used by both the booking form and the edit modal.
+function makeStopHandlers(setStopsState) {
+  return {
+    add: () => setStopsState((s) => [...s, { id: ++stopIdCounter, selection: null }]),
+    remove: (id) => setStopsState((s) => s.filter((stop) => stop.id !== id)),
+    update: (id, selection) => setStopsState((s) => s.map((stop) => (stop.id === id ? { ...stop, selection } : stop))),
+  };
+}
+
+// stops with a resolved address, in the {address, lat, lng} shape the
+// backend expects (see routes/booking.js cleanStops()).
+function stopsPayload(stopsState) {
+  return stopsState.filter((s) => s.selection).map((s) => ({ address: s.selection.label, lat: s.selection.lat, lng: s.selection.lng }));
+}
+
 export default function PassengerDashboard() {
   const { bookings, fetchMine, createBooking } = useBookingStore();
   const [stats, setStats] = useState(null);
   const [pickup, setPickup] = useState(null);
   const [drop, setDrop] = useState(null);
+  const [stops, setStops] = useState([]);
   const [scheduledFor, setScheduledFor] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [previousDrivers, setPreviousDrivers] = useState([]);
@@ -37,6 +57,7 @@ export default function PassengerDashboard() {
   const [editingBooking, setEditingBooking] = useState(null);
   const [editPickup, setEditPickup] = useState(null);
   const [editDrop, setEditDrop] = useState(null);
+  const [editStops, setEditStops] = useState([]);
   const [editScheduledFor, setEditScheduledFor] = useState(null);
   const [editPaymentMethod, setEditPaymentMethod] = useState('cash');
   const [editVehicleType, setEditVehicleType] = useState('');
@@ -45,6 +66,9 @@ export default function PassengerDashboard() {
   const [editError, setEditError] = useState('');
   const [editNextAvailableTime, setEditNextAvailableTime] = useState(null);
   const [editSaving, setEditSaving] = useState(false);
+
+  const stopHandlers = makeStopHandlers(setStops);
+  const editStopHandlers = makeStopHandlers(setEditStops);
 
   function refresh() {
     fetchMine();
@@ -71,10 +95,11 @@ export default function PassengerDashboard() {
     setQuote(null);
     setError('');
     if (!pickup || !drop) return;
+    if (stops.some((s) => !s.selection)) return; // wait until every added stop has a resolved address
     let cancelled = false;
     setQuoteLoading(true);
     setNextAvailableTime(null);
-    client.post('/booking/quote', { driverId: preferredDriverId || undefined, pickupLat: pickup.lat, pickupLng: pickup.lng, dropLat: drop.lat, dropLng: drop.lng, paymentMethod, vehicleType: vehicleType || undefined, scheduledFor })
+    client.post('/booking/quote', { driverId: preferredDriverId || undefined, pickupLat: pickup.lat, pickupLng: pickup.lng, dropLat: drop.lat, dropLng: drop.lng, stops: stopsPayload(stops), paymentMethod, vehicleType: vehicleType || undefined, scheduledFor })
       .then((r) => { if (!cancelled) setQuote(r.data); })
       .catch((err) => {
         if (cancelled) return;
@@ -83,7 +108,7 @@ export default function PassengerDashboard() {
       })
       .finally(() => { if (!cancelled) setQuoteLoading(false); });
     return () => { cancelled = true; };
-  }, [pickup, drop, preferredDriverId, paymentMethod, vehicleType, scheduledFor]);
+  }, [pickup, drop, stops, preferredDriverId, paymentMethod, vehicleType, scheduledFor]);
 
   async function rateDriver(bookingId, rating, review) {
     await client.put(`/booking/${bookingId}/rate`, { rating, review });
@@ -95,6 +120,7 @@ export default function PassengerDashboard() {
     setEditingBooking(b);
     setEditPickup({ label: b.pickupAddress, lat: b.pickupLat, lng: b.pickupLng });
     setEditDrop({ label: b.dropAddress, lat: b.dropLat, lng: b.dropLng });
+    setEditStops((b.stops || []).map((s) => ({ id: ++stopIdCounter, selection: { label: s.address, lat: s.lat, lng: s.lng } })));
     setEditScheduledFor(b.scheduledFor || null);
     setEditPaymentMethod(b.paymentMethod);
     setEditVehicleType(b.requestedVehicleType || '');
@@ -110,11 +136,13 @@ export default function PassengerDashboard() {
     setEditError('');
     setEditNextAvailableTime(null);
     if (!editingBooking || !editPickup || !editDrop) return;
+    if (editStops.some((s) => !s.selection)) return;
     let cancelled = false;
     setEditQuoteLoading(true);
     client.post('/booking/quote', {
       driverId: editingBooking.driverId?._id || editingBooking.driverId || undefined,
       pickupLat: editPickup.lat, pickupLng: editPickup.lng, dropLat: editDrop.lat, dropLng: editDrop.lng,
+      stops: stopsPayload(editStops),
       paymentMethod: editPaymentMethod, vehicleType: editVehicleType || undefined, scheduledFor: editScheduledFor,
     })
       .then((r) => { if (!cancelled) setEditQuote(r.data); })
@@ -125,7 +153,7 @@ export default function PassengerDashboard() {
       })
       .finally(() => { if (!cancelled) setEditQuoteLoading(false); });
     return () => { cancelled = true; };
-  }, [editingBooking, editPickup, editDrop, editPaymentMethod, editVehicleType, editScheduledFor]);
+  }, [editingBooking, editPickup, editDrop, editStops, editPaymentMethod, editVehicleType, editScheduledFor]);
 
   async function saveEdit() {
     setEditError('');
@@ -134,6 +162,7 @@ export default function PassengerDashboard() {
       await client.put(`/booking/${editingBooking._id}/edit`, {
         pickupAddress: editPickup.label, pickupLat: editPickup.lat, pickupLng: editPickup.lng,
         dropAddress: editDrop.label, dropLat: editDrop.lat, dropLng: editDrop.lng,
+        stops: stopsPayload(editStops),
         scheduledFor: editScheduledFor,
         paymentMethod: editPaymentMethod,
         vehicleType: editVehicleType || null,
@@ -157,11 +186,13 @@ export default function PassengerDashboard() {
         vehicleType: vehicleType || undefined,
         pickupAddress: pickup.label, pickupLat: pickup.lat, pickupLng: pickup.lng,
         dropAddress: drop.label, dropLat: drop.lat, dropLng: drop.lng,
+        stops: stopsPayload(stops),
         scheduledFor,
         paymentMethod,
       });
       setPickup(null);
       setDrop(null);
+      setStops([]);
       setScheduledFor(null);
       setQuote(null);
       setFormKey((k) => k + 1);
@@ -213,6 +244,17 @@ export default function PassengerDashboard() {
           <h3>Book a ride</h3>
           <div key={formKey} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <AddressAutocomplete label="Pickup address" onSelect={setPickup} required allowLocate />
+
+            {stops.map((stop, i) => (
+              <div key={stop.id} style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
+                <div style={{ flex: 1 }}>
+                  <AddressAutocomplete label={`Stop ${i + 1}`} onSelect={(sel) => stopHandlers.update(stop.id, sel)} required />
+                </div>
+                <button type="button" className="btn danger" style={{ marginBottom: 1 }} onClick={() => stopHandlers.remove(stop.id)}>Remove</button>
+              </div>
+            ))}
+            <button type="button" className="btn secondary" style={{ alignSelf: 'flex-start' }} onClick={stopHandlers.add}>+ Add stop</button>
+
             <AddressAutocomplete label="Drop address" onSelect={setDrop} required />
             <ScheduleField onChange={setScheduledFor} />
 
@@ -273,7 +315,7 @@ export default function PassengerDashboard() {
                 {quote.cardSurchargeAmount > 0 && (
                   <div className="muted">+ ${quote.cardSurchargeAmount.toFixed(2)} online payment surcharge = <strong>${quote.total.toFixed(2)} total</strong></div>
                 )}
-                <div className="muted">{quote.distanceKm} km{scheduledFor && ` · scheduled for ${new Date(scheduledFor).toLocaleString()}`}</div>
+                <div className="muted">{quote.distanceKm} km{stops.length > 0 && ` · via ${stops.length} stop${stops.length > 1 ? 's' : ''}`}{scheduledFor && ` · scheduled for ${new Date(scheduledFor).toLocaleString()}`}</div>
                 {error && <p className="error-text">{error}</p>}
                 <button className="btn" style={{ marginTop: 8 }} onClick={confirmBooking} disabled={loading}>
                   {loading ? 'Booking...' : 'Confirm & request ride'}
@@ -301,7 +343,7 @@ export default function PassengerDashboard() {
               <div className="booking-row-top">
                 <div>
                   <div className="muted">{b.bookingId}</div>
-                  <div>{b.pickupAddress} → {b.dropAddress}</div>
+                  <div>{b.pickupAddress}{b.stops?.map((s, i) => <span key={i}> → {s.address}</span>)} → {b.dropAddress}</div>
                   <div className="muted">
                     {b.distanceKm} km · ${b.actualFare ?? b.estimatedFare} · {b.paymentMethod === 'card' ? (b.paymentStatus === 'paid' ? 'paid online' : 'unpaid (online)') : 'cash'}
                   </div>
@@ -358,6 +400,17 @@ export default function PassengerDashboard() {
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <AddressAutocomplete label="Pickup address" defaultValue={editPickup?.label} onSelect={setEditPickup} required allowLocate />
+
+            {editStops.map((stop, i) => (
+              <div key={stop.id} style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
+                <div style={{ flex: 1 }}>
+                  <AddressAutocomplete label={`Stop ${i + 1}`} defaultValue={stop.selection?.label} onSelect={(sel) => editStopHandlers.update(stop.id, sel)} required />
+                </div>
+                <button type="button" className="btn danger" style={{ marginBottom: 1 }} onClick={() => editStopHandlers.remove(stop.id)}>Remove</button>
+              </div>
+            ))}
+            <button type="button" className="btn secondary" style={{ alignSelf: 'flex-start' }} onClick={editStopHandlers.add}>+ Add stop</button>
+
             <AddressAutocomplete label="Drop address" defaultValue={editDrop?.label} onSelect={setEditDrop} required />
             <ScheduleField onChange={setEditScheduledFor} defaultValue={editScheduledFor} />
 
@@ -390,7 +443,7 @@ export default function PassengerDashboard() {
                 {editQuote.cardSurchargeAmount > 0 && (
                   <div className="muted">+ ${editQuote.cardSurchargeAmount.toFixed(2)} online payment surcharge = <strong>${editQuote.total.toFixed(2)} total</strong></div>
                 )}
-                <div className="muted">{editQuote.distanceKm} km{editScheduledFor && ` · scheduled for ${new Date(editScheduledFor).toLocaleString()}`}</div>
+                <div className="muted">{editQuote.distanceKm} km{editStops.length > 0 && ` · via ${editStops.length} stop${editStops.length > 1 ? 's' : ''}`}{editScheduledFor && ` · scheduled for ${new Date(editScheduledFor).toLocaleString()}`}</div>
               </div>
             )}
             {editError && (

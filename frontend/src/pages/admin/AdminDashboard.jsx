@@ -1,15 +1,30 @@
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import client, { fileOrigin } from '../../api/client';
 import PhoneField from '../../components/PhoneField';
+import { useAuthStore } from '../../store/authStore';
 
 const DOC_STATUS_CLASS = { verified: 'approved', rejected: 'rejected', pending: 'pending' };
 
+const NAV_ITEMS = [
+  { key: 'drivers', icon: '🚘', label: 'Drivers' },
+  { key: 'passengers', icon: '🧍', label: 'Passengers' },
+  { key: 'trips', icon: '🗺️', label: 'Trips' },
+  { key: 'settings', icon: '⚙️', label: 'Settings' },
+  { key: 'feedback', icon: '💬', label: 'Feedback' },
+  { key: 'enquiries', icon: '✉️', label: 'Enquiries' },
+];
+
 export default function AdminDashboard() {
   const navigate = useNavigate();
+  const { user, token, setSession } = useAuthStore();
+  const [accountForm, setAccountForm] = useState({ name: user?.name || '', email: user?.email || '', currentPassword: '', newPassword: '' });
+  const [accountMsg, setAccountMsg] = useState('');
+  const [accountSaving, setAccountSaving] = useState(false);
   const [stats, setStats] = useState(null);
   const [drivers, setDrivers] = useState([]);
   const [tab, setTab] = useState('drivers');
+  const [driverView, setDriverView] = useState('list');
   const [form, setForm] = useState({
     name: '', email: '', mobile: '', licenseNumber: '', vehicleType: 'Economy', vehicleNumber: '', ratePerKm: 1.8,
     serviceCategory: 'private-hire', hasSecurityCamera: false, tslNumber: '', passengerEndorsementNumber: '', passengerEndorsementExpiry: '', vehicleCofExpiry: '',
@@ -31,9 +46,11 @@ export default function AdminDashboard() {
   const [tripDateFrom, setTripDateFrom] = useState('');
   const [tripDateTo, setTripDateTo] = useState('');
   const [feedback, setFeedback] = useState([]);
+  const [enquiries, setEnquiries] = useState([]);
   const [vehicleTypes, setVehicleTypes] = useState([]);
   const [vehicleDocuments, setVehicleDocuments] = useState([]);
   const [docError, setDocError] = useState('');
+  const tabContentRef = useRef(null);
 
   function load() {
     client.get('/booking/vehicle-types').then((r) => setVehicleTypes(r.data)).catch(() => {});
@@ -43,6 +60,7 @@ export default function AdminDashboard() {
     client.get('/admin/settings').then((r) => setSettings(r.data));
     client.get('/admin/passengers').then((r) => setPassengers(r.data));
     client.get('/admin/feedback').then((r) => setFeedback(r.data));
+    client.get('/admin/enquiries').then((r) => setEnquiries(r.data)).catch(() => {});
     client.get('/admin/bookings').then((r) => setTrips(r.data));
   }
 
@@ -97,6 +115,16 @@ export default function AdminDashboard() {
   }
   async function deactivate(id) { await client.put(`/admin/drivers/${id}/deactivate`); load(); }
   async function reactivate(id) { await client.put(`/admin/drivers/${id}/reactivate`); load(); }
+
+  async function deleteDriver(d) {
+    if (!window.confirm(`Permanently delete ${d.userId?.name || 'this driver'}? This removes their account entirely and can't be undone.`)) return;
+    try {
+      await client.delete(`/admin/drivers/${d._id}`);
+      load();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not delete this driver');
+    }
+  }
   async function approveRate(id) { await client.put(`/admin/drivers/${id}/rate/approve`); load(); }
   async function rejectRate(id) { await client.put(`/admin/drivers/${id}/rate/reject`); load(); }
 
@@ -118,7 +146,8 @@ export default function AdminDashboard() {
     if (editFor === d._id) { setEditFor(null); return; }
     setEditFor(d._id);
     setEditForm({
-      name: d.userId?.name || '', mobile: d.userId?.mobile || '', licenseNumber: d.licenseNumber, vehicleType: d.vehicleType, vehicleNumber: d.vehicleNumber,
+      name: d.userId?.name || '', email: d.userId?.email || '', mobile: d.userId?.mobile || '', licenseNumber: d.licenseNumber, vehicleType: d.vehicleType, vehicleNumber: d.vehicleNumber,
+      ratePerKm: d.ratePerKm,
       serviceCategory: d.serviceCategory || 'private-hire',
       hasSecurityCamera: !!d.hasSecurityCamera,
       tslNumber: d.tslNumber || '',
@@ -136,6 +165,22 @@ export default function AdminDashboard() {
       load();
     } catch (err) {
       setEditError(err.response?.data?.error || 'Could not save changes');
+    }
+  }
+
+  async function saveAccount(e) {
+    e.preventDefault();
+    setAccountMsg('');
+    setAccountSaving(true);
+    try {
+      const { data } = await client.put('/auth/me', accountForm);
+      setSession(token, data);
+      setAccountForm((f) => ({ ...f, email: data.email, currentPassword: '', newPassword: '' }));
+      setAccountMsg('Saved.');
+    } catch (err) {
+      setAccountMsg(err.response?.data?.error || 'Could not save your account');
+    } finally {
+      setAccountSaving(false);
     }
   }
 
@@ -171,41 +216,64 @@ export default function AdminDashboard() {
     return true;
   });
 
+  function scrollToDetails() {
+    setTimeout(() => tabContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
+  }
+
+  function focusTab(tabName) {
+    setTab(tabName);
+    scrollToDetails();
+  }
+
   function goToTrips(filterValue) {
     setTab('trips');
     setTripFilter(filterValue);
+    scrollToDetails();
   }
 
   return (
     <div className="container">
       <h1>Admin dashboard</h1>
 
-      <div className="tabs main-menu">
-        <button className={tab === 'drivers' ? 'active' : ''} onClick={() => setTab('drivers')}>Drivers</button>
-        <button className={tab === 'add' ? 'active' : ''} onClick={() => setTab('add')}>Add driver</button>
-        <button className={tab === 'passengers' ? 'active' : ''} onClick={() => setTab('passengers')}>Passengers</button>
-        <button className={tab === 'trips' ? 'active' : ''} onClick={() => setTab('trips')}>Trips</button>
-        <button className={tab === 'settings' ? 'active' : ''} onClick={() => setTab('settings')}>Settings</button>
-        <button className={tab === 'feedback' ? 'active' : ''} onClick={() => setTab('feedback')}>Feedback</button>
+      <div className="grid cols-4 dashboard-menu">
+        {NAV_ITEMS.map((item) => (
+          <div
+            key={item.key}
+            className={`card nav-card ${tab === item.key ? 'active' : ''}`}
+            onClick={() => setTab(item.key)}
+          >
+            <div className="nav-icon">{item.icon}</div>
+            <div>{item.label}</div>
+          </div>
+        ))}
       </div>
 
       {stats && (
         <div className="grid cols-4">
-          <div className="card stat clickable" onClick={() => setTab('passengers')}><div className="value">{stats.totalPassengers}</div><div className="label">Passengers</div></div>
-          <div className="card stat clickable" onClick={() => setTab('drivers')}><div className="value">{stats.totalDrivers}</div><div className="label">Drivers</div></div>
+          <div className="card stat clickable" onClick={() => focusTab('passengers')}><div className="value">{stats.totalPassengers}</div><div className="label">Passengers</div></div>
+          <div className="card stat clickable" onClick={() => focusTab('drivers')}><div className="value">{stats.totalDrivers}</div><div className="label">Drivers</div></div>
           <div className="card stat clickable" onClick={() => goToTrips('completed')}><div className="value">{stats.completedTrips}</div><div className="label">Completed trips</div></div>
           <div className="card stat"><div className="value">${stats.totalRevenue.toFixed(2)}</div><div className="label">Revenue</div></div>
           <div className="card stat clickable" onClick={() => goToTrips('pending')}><div className="value">{stats.pendingTrips}</div><div className="label">Pending trips</div></div>
           <div className="card stat clickable" onClick={() => goToTrips('open')}><div className="value">{stats.openTrips}</div><div className="label">Open trips</div></div>
-          <div className="card stat clickable" onClick={() => setTab('drivers')}><div className="value">{stats.pendingDriverApprovals}</div><div className="label">Pending approvals</div></div>
+          <div className="card stat clickable" onClick={() => focusTab('drivers')}><div className="value">{stats.pendingDriverApprovals}</div><div className="label">Pending approvals</div></div>
           <div className="card stat clickable" onClick={() => navigate('/admin/complaints?status=open')}><div className="value">{stats.openComplaints}</div><div className="label">Open complaints</div></div>
           <div className="card stat clickable" onClick={() => navigate('/admin/complaints?serious=true')}><div className="value">{stats.seriousComplaints}</div><div className="label">Serious complaints</div></div>
           <div className="card stat"><Link to="/admin/complaints" className="btn">Manage complaints</Link></div>
         </div>
       )}
 
+      <div ref={tabContentRef} />
+
       {tab === 'drivers' && (
-        <div className="card">
+        <div>
+          <div className="tabs">
+            <button className={driverView === 'list' ? 'active' : ''} onClick={() => setDriverView('list')}>Driver list</button>
+            <button className={driverView === 'add' ? 'active' : ''} onClick={() => setDriverView('add')}>+ Add driver</button>
+          </div>
+
+          {driverView === 'list' && (
+          <div className="card">
           <table>
             <thead><tr><th>Driver</th><th>Vehicle</th><th>Rate/km</th><th>Status</th><th>Actions</th></tr></thead>
             <tbody>
@@ -245,6 +313,7 @@ export default function AdminDashboard() {
                         <button className="btn secondary" onClick={() => setDocsFor(docsFor === d._id ? null : d._id)}>{docsFor === d._id ? 'Hide docs' : 'Review docs'}</button>
                       )}
                       <Link className="btn secondary" to={`/admin/drivers/${d._id}/report`}>Report</Link>
+                      <button className="btn danger" onClick={() => deleteDriver(d)}>Delete</button>
                     </td>
                   </tr>
                   {qrFor?.id === d._id && (
@@ -295,8 +364,10 @@ export default function AdminDashboard() {
                       <td colSpan={5} style={{ padding: 16 }}>
                         <div className="grid cols-2">
                           <div><label>Name</label><input value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} /></div>
+                          <div><label>Email</label><input type="email" value={editForm.email} onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))} /></div>
                           <PhoneField value={editForm.mobile} onChange={(v) => setEditForm((f) => ({ ...f, mobile: v }))} />
                           <div><label>License number</label><input value={editForm.licenseNumber} onChange={(e) => setEditForm((f) => ({ ...f, licenseNumber: e.target.value }))} /></div>
+                          <div><label>Rate per km ($)</label><input type="number" step="0.1" min="0.1" value={editForm.ratePerKm} onChange={(e) => setEditForm((f) => ({ ...f, ratePerKm: e.target.value }))} /></div>
                           <div>
                             <label>Vehicle type</label>
                             <select value={editForm.vehicleType} onChange={(e) => setEditForm((f) => ({ ...f, vehicleType: e.target.value }))}>
@@ -335,10 +406,10 @@ export default function AdminDashboard() {
               ))}
             </tbody>
           </table>
-        </div>
-      )}
+          </div>
+          )}
 
-      {tab === 'add' && (
+          {driverView === 'add' && (
         <div className="card" style={{ maxWidth: 480 }}>
           <h3>Add a new driver (admin-managed signup)</h3>
           <form onSubmit={addDriver}>
@@ -380,9 +451,14 @@ export default function AdminDashboard() {
           </form>
           {createdInfo && (
             <div className="card" style={{ marginTop: 12, background: '#fef3c7' }}>
-              <strong>Driver created.</strong> Temporary password: <code>{createdInfo.temporaryPassword}</code>
+              <strong>Driver created.</strong>{' '}
+              {settings?.tempPasswordVisible !== false
+                ? <>Temporary password: <code>{createdInfo.temporaryPassword}</code></>
+                : 'Temporary password generated (hidden - see admin settings to show it here).'}
               <p className="muted">{createdInfo.note}</p>
             </div>
+          )}
+        </div>
           )}
         </div>
       )}
@@ -553,6 +629,21 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {tab === 'settings' && (
+        <div className="card" style={{ maxWidth: 480 }}>
+          <h3>My account</h3>
+          <p className="muted">Your own admin login. Changing email or password requires your current password.</p>
+          <form onSubmit={saveAccount}>
+            <div><label>Name</label><input value={accountForm.name} onChange={(e) => setAccountForm((f) => ({ ...f, name: e.target.value }))} required /></div>
+            <div><label>Email</label><input type="email" value={accountForm.email} onChange={(e) => setAccountForm((f) => ({ ...f, email: e.target.value }))} required /></div>
+            <div><label>Current password</label><input type="password" value={accountForm.currentPassword} onChange={(e) => setAccountForm((f) => ({ ...f, currentPassword: e.target.value }))} placeholder="Required to change email or password" /></div>
+            <div><label>New password (optional)</label><input type="password" value={accountForm.newPassword} onChange={(e) => setAccountForm((f) => ({ ...f, newPassword: e.target.value }))} placeholder="Leave blank to keep current password" /></div>
+            {accountMsg && <p className="muted">{accountMsg}</p>}
+            <button className="btn" disabled={accountSaving}>{accountSaving ? 'Saving...' : 'Save'}</button>
+          </form>
+        </div>
+      )}
+
       {tab === 'settings' && settings && (
         <div className="card" style={{ maxWidth: 480 }}>
           <h3>Vehicle selection</h3>
@@ -562,6 +653,26 @@ export default function AdminDashboard() {
               <input type="checkbox" style={{ width: 'auto' }} checked={settings.vehicleSelectionEnabled !== false}
                 onChange={(e) => setSettings((s) => ({ ...s, vehicleSelectionEnabled: e.target.checked }))} />
               Passengers can choose a vehicle type when booking
+            </label>
+            {settingsMsg && <p className="muted">{settingsMsg}</p>}
+            <button className="btn" style={{ marginTop: 12 }}>Save</button>
+          </form>
+        </div>
+      )}
+
+      {tab === 'settings' && settings && (
+        <div className="card" style={{ maxWidth: 480 }}>
+          <h3>Temporary password visibility</h3>
+          <p className="muted">
+            Controls whether the one-time temporary password is shown on screen right after a new driver is
+            created (Add driver tab). Turn off if the screen is shared - you'll still need another way to get the
+            password to the driver.
+          </p>
+          <form onSubmit={saveSettings}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input type="checkbox" style={{ width: 'auto' }} checked={settings.tempPasswordVisible !== false}
+                onChange={(e) => setSettings((s) => ({ ...s, tempPasswordVisible: e.target.checked }))} />
+              Show temporary password after creating a driver
             </label>
             {settingsMsg && <p className="muted">{settingsMsg}</p>}
             <button className="btn" style={{ marginTop: 12 }}>Save</button>
@@ -615,6 +726,28 @@ export default function AdminDashboard() {
                     <div className="muted">{f.message}</div>
                   </td>
                   <td className="muted">{new Date(f.createdAt).toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {tab === 'enquiries' && (
+        <div className="card">
+          <h3>Website enquiries</h3>
+          <p className="muted">Submitted from the "Get in touch" form on the homepage - each one is also emailed to the admin inbox.</p>
+          {enquiries.length === 0 && <p className="muted">No enquiries yet.</p>}
+          <table>
+            <tbody>
+              {enquiries.map((e) => (
+                <tr key={e._id}>
+                  <td>
+                    <strong>{e.name}</strong>
+                    <span className="muted"> · {e.email}{e.phone ? ` · ${e.phone}` : ''}</span>
+                    <div className="muted">{e.message}</div>
+                  </td>
+                  <td className="muted">{new Date(e.createdAt).toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>

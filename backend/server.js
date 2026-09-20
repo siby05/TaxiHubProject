@@ -20,10 +20,21 @@ const geocodeRoutes = require('./routes/geocode');
 const notificationRoutes = require('./routes/notifications');
 const driverSignupRoutes = require('./routes/driverSignup');
 const feedbackRoutes = require('./routes/feedback');
+const enquiryRoutes = require('./routes/enquiry');
 const stripeConnectRoutes = require('./routes/stripeConnect');
 const { setIo } = require('./utils/notify');
 const { startReminderScheduler } = require('./utils/reminders');
 const { startBackupScheduler } = require('./utils/backup');
+
+// Defense in depth: a single unhandled promise rejection anywhere (a
+// missed try/catch, a third-party call that throws unexpectedly) should
+// never take down the whole booking platform - see the SMTP ENETUNREACH
+// incident that crashed the process via an un-caught email send. Log it
+// and keep serving; the specific failure still needs fixing at its source,
+// but one bad request must not mean downtime for every other user.
+process.on('unhandledRejection', (err) => {
+  console.error('[unhandledRejection]', err);
+});
 
 const app = express();
 const server = http.createServer(app);
@@ -49,6 +60,7 @@ app.use('/api/geocode', geocodeRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/driver-signup', driverSignupRoutes);
 app.use('/api/feedback', feedbackRoutes);
+app.use('/api/enquiry', enquiryRoutes);
 app.use('/api/driver/stripe', stripeConnectRoutes);
 
 app.use(notFound);

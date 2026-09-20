@@ -7,7 +7,22 @@ const Driver = require('../models/Driver');
 const User = require('../models/User');
 const { auth, roleMiddleware } = require('../middleware/auth');
 const { emailService } = require('../services/emailService');
-const { haversineKm, calculateTripFare, calculateCardSurcharge } = require('../utils/distance');
+const { haversineKm, calculateTripFare, calculateCardSurcharge, routeDistanceKm } = require('../utils/distance');
+
+// Validates an optional multi-stop array: each entry needs numeric lat/lng
+// (address is free text, kept as-is). Returns an error string, or null if ok.
+function invalidStopsError(stops) {
+  if (stops === undefined || stops === null) return null;
+  if (!Array.isArray(stops)) return 'stops must be an array';
+  if (stops.some((s) => typeof s?.lat !== 'number' || typeof s?.lng !== 'number')) {
+    return 'Each stop needs numeric lat/lng';
+  }
+  return null;
+}
+
+function cleanStops(stops) {
+  return (stops || []).map((s) => ({ address: s.address || '', lat: s.lat, lng: s.lng }));
+}
 const { VEHICLE_TYPES, isValidVehicleType } = require('../config/vehicleTypes');
 const { notifyUser, notifyAdmins } = require('../utils/notify');
 const { getPassengerRatingAvg } = require('../utils/ratings');
@@ -279,13 +294,15 @@ router.post('/guest-quote', async (req, res) => {
 // rate rather than auto-matching/falling back.
 router.post('/quote', auth, roleMiddleware(['passenger', 'driver']), async (req, res) => {
   try {
-    const { pickupLat, pickupLng, dropLat, dropLng, driverId, paymentMethod, vehicleType, scheduledFor } = req.body;
+    const { pickupLat, pickupLng, dropLat, dropLng, driverId, paymentMethod, vehicleType, scheduledFor, stops } = req.body;
     if (pickupLat == null || pickupLng == null || dropLat == null || dropLng == null) {
       return res.status(400).json({ error: 'pickup and drop coordinates are required' });
     }
     if (vehicleType && !isValidVehicleType(vehicleType)) {
       return res.status(400).json({ error: 'Unknown vehicle type' });
     }
+    const stopsError = invalidStopsError(stops);
+    if (stopsError) return res.status(400).json({ error: stopsError });
 
     let driver;
     let usedFallback = false;
@@ -307,7 +324,7 @@ router.post('/quote', auth, roleMiddleware(['passenger', 'driver']), async (req,
       }
     }
 
-    const distanceKm = Math.round(haversineKm(pickupLat, pickupLng, dropLat, dropLng) * 100) / 100;
+    const distanceKm = routeDistanceKm({ lat: pickupLat, lng: pickupLng }, { lat: dropLat, lng: dropLng }, stops);
     const settings = getSettings();
     const estimatedFare = calculateTripFare(distanceKm, driver.ratePerKm, settings);
     const cardSurchargePercent = settings.cardSurchargePercent;
@@ -336,7 +353,7 @@ router.post('/quote', auth, roleMiddleware(['passenger', 'driver']), async (req,
 // which also tells the others' dashboards to drop the request in real time.
 router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
   try {
-    const { pickupAddress, pickupLat, pickupLng, dropAddress, dropLat, dropLng, driverId, scheduledFor, paymentMethod, vehicleType } = req.body;
+    const { pickupAddress, pickupLat, pickupLng, dropAddress, dropLat, dropLng, driverId, scheduledFor, paymentMethod, vehicleType, stops } = req.body;
     if (!pickupAddress || !dropAddress || pickupLat == null || dropLat == null) {
       return res.status(400).json({ error: 'pickupAddress, dropAddress and lat/lng for both are required' });
     }
@@ -349,13 +366,15 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
     if (vehicleType && !isValidVehicleType(vehicleType)) {
       return res.status(400).json({ error: 'Unknown vehicle type' });
     }
+    const stopsError = invalidStopsError(stops);
+    if (stopsError) return res.status(400).json({ error: stopsError });
 
     const requestingPassenger = await User.findById(req.user.id);
     if (requestingPassenger?.bookingBlocked) {
       return res.status(403).json({ error: 'Your account is restricted from making new bookings. Contact support.' });
     }
 
-    const distanceKm = Math.round(haversineKm(pickupLat, pickupLng, dropLat, dropLng) * 100) / 100;
+    const distanceKm = routeDistanceKm({ lat: pickupLat, lng: pickupLng }, { lat: dropLat, lng: dropLng }, stops);
     const passenger = await User.findById(req.user.id);
     const passengerRatingAvg = await getPassengerRatingAvg(passenger._id);
 
@@ -406,6 +425,7 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
       dropAddress,
       dropLat,
       dropLng,
+      stops: cleanStops(stops),
       distanceKm,
       estimatedFare,
       cardSurchargeAmount,
@@ -566,7 +586,7 @@ router.put('/:id/edit', auth, roleMiddleware(['passenger']), async (req, res) =>
 
     const {
       pickupAddress, pickupLat, pickupLng, dropAddress, dropLat, dropLng,
-      scheduledFor, paymentMethod, vehicleType,
+      scheduledFor, paymentMethod, vehicleType, stops,
     } = req.body;
 
     if (scheduledFor !== undefined && scheduledFor && new Date(scheduledFor) <= new Date()) {
@@ -578,6 +598,9 @@ router.put('/:id/edit', auth, roleMiddleware(['passenger']), async (req, res) =>
     if (vehicleType && !isValidVehicleType(vehicleType)) {
       return res.status(400).json({ error: 'Unknown vehicle type' });
     }
+    const stopsError = invalidStopsError(stops);
+    if (stopsError) return res.status(400).json({ error: stopsError });
+    const nextStops = stops !== undefined ? cleanStops(stops) : (booking.stops || []);
 
     const nextPickupAddress = pickupAddress ?? booking.pickupAddress;
     const nextPickupLat = pickupLat ?? booking.pickupLat;
@@ -589,7 +612,7 @@ router.put('/:id/edit', auth, roleMiddleware(['passenger']), async (req, res) =>
     const oldVehicleType = booking.requestedVehicleType;
     const nextVehicleType = vehicleType !== undefined ? (vehicleType || null) : oldVehicleType;
 
-    const distanceKm = Math.round(haversineKm(nextPickupLat, nextPickupLng, nextDropLat, nextDropLng) * 100) / 100;
+    const distanceKm = routeDistanceKm({ lat: nextPickupLat, lng: nextPickupLng }, { lat: nextDropLat, lng: nextDropLng }, nextStops);
     const bookingSettings = getSettings();
     const nextScheduledFor = scheduledFor !== undefined ? scheduledFor : booking.scheduledFor;
     const nextRequestedTime = nextScheduledFor ? new Date(nextScheduledFor) : new Date();
@@ -635,6 +658,7 @@ router.put('/:id/edit', auth, roleMiddleware(['passenger']), async (req, res) =>
       dropAddress: nextDropAddress,
       dropLat: nextDropLat,
       dropLng: nextDropLng,
+      stops: nextStops,
       scheduledFor: scheduledFor !== undefined ? (scheduledFor ? new Date(scheduledFor) : null) : booking.scheduledFor,
       paymentMethod: nextPaymentMethod,
       requestedVehicleType: nextVehicleType,
@@ -1002,6 +1026,12 @@ router.put('/:id/cancel', auth, roleMiddleware(['passenger', 'driver']), async (
       message: `${driverUser?.name || 'A driver'} cancelled booking ${updated._id}${reason ? ` - ${reason}` : ''}`,
       link: '/admin',
     });
+    // The in-app notification/socket event above only reaches the
+    // passenger while they have the app open - email is the channel that
+    // reaches them regardless (WhatsApp is handled client-side by the
+    // driver, see pages/driver/DriverDashboard.jsx cancelTrip()).
+    const passenger = await User.findById(booking.passengerId);
+    if (passenger) await emailService.sendBookingCancelledByDriver(passenger.email, updated, reason);
   }
 
   res.json(updated);

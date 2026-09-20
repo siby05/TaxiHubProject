@@ -32,7 +32,7 @@ export default function Register() {
 
   return (
     <div className="auth-shell card">
-      <h2>Create a passenger account</h2>
+      <h2>Passenger sign-up</h2>
       <p className="muted">Driver accounts <Link to="/driver-signup">apply here</Link> instead.</p>
       <form onSubmit={onSubmit}>
         <div><label>Full name</label><input value={form.name} onChange={(e) => update('name', e.target.value)} required /></div>

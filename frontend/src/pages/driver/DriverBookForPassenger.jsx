@@ -138,6 +138,7 @@ export default function DriverBookForPassenger() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
           <AddressAutocomplete label="Pickup address" onSelect={setPickup} required allowLocate />
           <AddressAutocomplete label="Drop address" onSelect={setDrop} required />
+          {(!pickup || !drop) && <p className="muted">Enter both pickup and drop address (pick a suggestion from the list) to see the fare and confirm.</p>}
           <ScheduleField onChange={setScheduledFor} />
 
           <div>

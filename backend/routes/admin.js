@@ -17,6 +17,7 @@ const { isValidVehicleType } = require('../config/vehicleTypes');
 const { DRIVER_DOCUMENTS, isValidDocumentKey, documentLabel, allDocumentsVerified, outstandingDocuments } = require('../config/driverDocuments');
 const { getPassengerRatingAvg } = require('../utils/ratings');
 const Feedback = require('../models/Feedback');
+const Enquiry = require('../models/Enquiry');
 const { notifyUser } = require('../utils/notify');
 const { runBackup } = require('../utils/backup');
 
@@ -211,7 +212,7 @@ router.delete('/drivers/:id/fee-settings', async (req, res) => {
 // PUT /api/admin/drivers/:id - edit driver/vehicle/NZTA compliance details
 router.put('/drivers/:id', async (req, res) => {
   const {
-    name, mobile, licenseNumber, vehicleType, vehicleNumber,
+    name, email, mobile, licenseNumber, vehicleType, vehicleNumber, ratePerKm,
     serviceCategory, hasSecurityCamera, tslNumber, passengerEndorsementNumber, passengerEndorsementExpiry, vehicleCofExpiry,
   } = req.body;
   const driver = await Driver.findById(req.params.id);
@@ -223,10 +224,21 @@ router.put('/drivers/:id', async (req, res) => {
   if (vehicleType && !isValidVehicleType(vehicleType)) {
     return res.status(400).json({ error: 'Unknown vehicle type' });
   }
+  if (email) {
+    if (!/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: 'email must be a valid address' });
+    const existing = await User.findOne({ email: email.toLowerCase() });
+    if (existing && String(existing._id) !== String(driver.userId)) {
+      return res.status(409).json({ error: 'An account with this email already exists' });
+    }
+  }
+  if (ratePerKm != null && Number(ratePerKm) <= 0) {
+    return res.status(400).json({ error: 'ratePerKm must be greater than 0' });
+  }
 
-  if (name || mobile) {
+  if (name || email || mobile) {
     await User.findByIdAndUpdate(driver.userId, {
       ...(name && { name }),
+      ...(email && { email: email.toLowerCase() }),
       ...(mobile && { mobile }),
     });
   }
@@ -235,6 +247,7 @@ router.put('/drivers/:id', async (req, res) => {
     ...(licenseNumber && { licenseNumber }),
     ...(vehicleType && { vehicleType }),
     ...(vehicleNumber && { vehicleNumber }),
+    ...(ratePerKm != null && { ratePerKm: Number(ratePerKm) }),
     ...(serviceCategory && { serviceCategory: serviceCategory === 'taxi' ? 'taxi' : 'private-hire' }),
     ...(hasSecurityCamera != null && { hasSecurityCamera: !!hasSecurityCamera }),
     ...(tslNumber !== undefined && { tslNumber }),
@@ -244,6 +257,26 @@ router.put('/drivers/:id', async (req, res) => {
   }).populate('userId', 'name email mobile isActive');
 
   res.json(withCompliance(updated));
+});
+
+// DELETE /api/admin/drivers/:id - permanently remove a driver account
+// (their User login too, since it has no other purpose). Blocked while
+// they have any live trip so a passenger/driver-in-progress is never left
+// pointing at a driver that no longer exists; completed/cancelled history
+// is left as-is (existing code already tolerates a driverId that no
+// longer resolves, same as any other stale ref).
+router.delete('/drivers/:id', async (req, res) => {
+  const driver = await Driver.findById(req.params.id);
+  if (!driver) return res.status(404).json({ error: 'Driver not found' });
+
+  const liveTrips = await Booking.find({ driverId: driver._id, status: { $in: ['pending', 'accepted', 'in-progress'] } });
+  if (liveTrips.length > 0) {
+    return res.status(400).json({ error: `This driver has ${liveTrips.length} live trip(s) - wait for them to complete or cancel first.` });
+  }
+
+  await Driver.deleteMany({ _id: driver._id });
+  await User.deleteMany({ _id: driver.userId });
+  res.json({ message: 'Driver deleted.' });
 });
 
 // GET /api/admin/document-types - the compliance documents every driver
@@ -393,7 +426,7 @@ router.get('/settings', async (req, res) => {
 router.put('/settings', async (req, res) => {
   const {
     commissionType, commissionPercent, weeklyFlatFee, outstandingFeeLimit, cardSurchargePercent, minimumFare, fareRanges,
-    driverSignupEnabled, vehicleSelectionEnabled, adminEmail, backupFrequency,
+    driverSignupEnabled, vehicleSelectionEnabled, tempPasswordVisible, adminEmail, backupFrequency,
   } = req.body;
   try {
     if (adminEmail != null && adminEmail && !/^\S+@\S+\.\S+$/.test(adminEmail)) {
@@ -409,6 +442,7 @@ router.put('/settings', async (req, res) => {
       ...(fareRanges && { fareRanges: fareRanges.map((r) => ({ maxKm: Number(r.maxKm), price: Number(r.price) })) }),
       ...(driverSignupEnabled != null && { driverSignupEnabled: !!driverSignupEnabled }),
       ...(vehicleSelectionEnabled != null && { vehicleSelectionEnabled: !!vehicleSelectionEnabled }),
+      ...(tempPasswordVisible != null && { tempPasswordVisible: !!tempPasswordVisible }),
       ...(adminEmail != null && { adminEmail: adminEmail.toLowerCase() }),
       ...(backupFrequency && { backupFrequency }),
     });
@@ -485,6 +519,12 @@ router.get('/bookings', async (req, res) => {
 router.get('/feedback', async (req, res) => {
   const feedback = await Feedback.find({}).sort({ createdAt: -1 });
   res.json(feedback);
+});
+
+// GET /api/admin/enquiries - submissions from the homepage "get in touch" form
+router.get('/enquiries', async (req, res) => {
+  const enquiries = await Enquiry.find({}).sort({ createdAt: -1 });
+  res.json(enquiries);
 });
 
 module.exports = router;

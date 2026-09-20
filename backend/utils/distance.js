@@ -45,4 +45,18 @@ function calculateCardSurcharge(fare, surchargePercent) {
   return Math.round(fare * (surchargePercent / 100) * 100) / 100;
 }
 
-module.exports = { haversineKm, calculateFare, calculateTripFare, calculateCardSurcharge };
+// Total distance across an ordered route: pickup -> each intermediate stop
+// in order -> drop. stops is optional (an array of {lat, lng}, extra
+// fields like address ignored) - with none given this is identical to a
+// plain two-point haversineKm call, so every existing single-leg caller
+// stays correct by just passing stops: undefined/[].
+function routeDistanceKm(pickup, drop, stops) {
+  const points = [pickup, ...(stops || []), drop];
+  let total = 0;
+  for (let i = 0; i < points.length - 1; i++) {
+    total += haversineKm(points[i].lat, points[i].lng, points[i + 1].lat, points[i + 1].lng);
+  }
+  return Math.round(total * 100) / 100;
+}
+
+module.exports = { haversineKm, calculateFare, calculateTripFare, calculateCardSurcharge, routeDistanceKm };
