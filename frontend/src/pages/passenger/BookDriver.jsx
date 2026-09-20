@@ -5,6 +5,7 @@ import { useAuthStore } from '../../store/authStore';
 import AddressAutocomplete from '../../components/AddressAutocomplete';
 import ScheduleField from '../../components/ScheduleField';
 import PhoneField from '../../components/PhoneField';
+import { makeStopHandlers, stopsPayload } from '../../utils/stops';
 
 export default function BookDriver() {
   const { driverId } = useParams();
@@ -15,6 +16,8 @@ export default function BookDriver() {
   const [notFound, setNotFound] = useState(false);
   const [pickup, setPickup] = useState(null);
   const [drop, setDrop] = useState(null);
+  const [stops, setStops] = useState([]);
+  const stopHandlers = makeStopHandlers(setStops);
   const [scheduledFor, setScheduledFor] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [quote, setQuote] = useState(null);
@@ -44,9 +47,10 @@ export default function BookDriver() {
     setError('');
     setNextAvailableTime(null);
     if (!pickup || !drop) return;
+    if (stops.some((s) => !s.selection)) return;
     let cancelled = false;
     setQuoteLoading(true);
-    client.post('/booking/quote', { driverId: effectiveDriverId, pickupLat: pickup.lat, pickupLng: pickup.lng, dropLat: drop.lat, dropLng: drop.lng, paymentMethod, scheduledFor })
+    client.post('/booking/quote', { driverId: effectiveDriverId, pickupLat: pickup.lat, pickupLng: pickup.lng, dropLat: drop.lat, dropLng: drop.lng, stops: stopsPayload(stops), paymentMethod, scheduledFor })
       .then((r) => { if (!cancelled) setQuote(r.data); })
       .catch((err) => {
         if (cancelled) return;
@@ -55,7 +59,7 @@ export default function BookDriver() {
       })
       .finally(() => { if (!cancelled) setQuoteLoading(false); });
     return () => { cancelled = true; };
-  }, [pickup, drop, effectiveDriverId, paymentMethod, scheduledFor]);
+  }, [pickup, drop, stops, effectiveDriverId, paymentMethod, scheduledFor]);
 
   async function confirmBooking() {
     setError('');
@@ -65,6 +69,7 @@ export default function BookDriver() {
         driverId: effectiveDriverId,
         pickupAddress: pickup.label, pickupLat: pickup.lat, pickupLng: pickup.lng,
         dropAddress: drop.label, dropLat: drop.lat, dropLng: drop.lng,
+        stops: stopsPayload(stops),
         scheduledFor,
         paymentMethod,
       });
@@ -87,6 +92,8 @@ export default function BookDriver() {
   const [guestReturning, setGuestReturning] = useState(false);
   const [guestPickup, setGuestPickup] = useState(null);
   const [guestDrop, setGuestDrop] = useState(null);
+  const [guestStops, setGuestStops] = useState([]);
+  const guestStopHandlers = makeStopHandlers(setGuestStops);
   const [guestScheduledFor, setGuestScheduledFor] = useState(null);
   const [guestPaymentMethod, setGuestPaymentMethod] = useState('cash');
   const [guestQuote, setGuestQuote] = useState(null);
@@ -120,9 +127,10 @@ export default function BookDriver() {
     setGuestError('');
     setGuestNextAvailable(null);
     if (!guestPickup || !guestDrop) return;
+    if (guestStops.some((s) => !s.selection)) return;
     let cancelled = false;
     setGuestQuoteLoading(true);
-    client.post('/booking/guest-quote', { driverId, pickupLat: guestPickup.lat, pickupLng: guestPickup.lng, dropLat: guestDrop.lat, dropLng: guestDrop.lng, paymentMethod: guestPaymentMethod, scheduledFor: guestScheduledFor })
+    client.post('/booking/guest-quote', { driverId, pickupLat: guestPickup.lat, pickupLng: guestPickup.lng, dropLat: guestDrop.lat, dropLng: guestDrop.lng, stops: stopsPayload(guestStops), paymentMethod: guestPaymentMethod, scheduledFor: guestScheduledFor })
       .then((r) => { if (!cancelled) setGuestQuote(r.data); })
       .catch((err) => {
         if (cancelled) return;
@@ -131,7 +139,7 @@ export default function BookDriver() {
       })
       .finally(() => { if (!cancelled) setGuestQuoteLoading(false); });
     return () => { cancelled = true; };
-  }, [guestPickup, guestDrop, guestPaymentMethod, guestScheduledFor, driverId]);
+  }, [guestPickup, guestDrop, guestStops, guestPaymentMethod, guestScheduledFor, driverId]);
 
   async function confirmGuestBooking() {
     setGuestError('');
@@ -142,6 +150,7 @@ export default function BookDriver() {
         passengerName: guestName, passengerMobile: guestMobile, passengerEmail: guestEmail || undefined, passengerAddress: guestAddress || undefined,
         pickupAddress: guestPickup.label, pickupLat: guestPickup.lat, pickupLng: guestPickup.lng,
         dropAddress: guestDrop.label, dropLat: guestDrop.lat, dropLng: guestDrop.lng,
+        stops: stopsPayload(guestStops),
         scheduledFor: guestScheduledFor,
         paymentMethod: guestPaymentMethod,
       });
@@ -203,6 +212,17 @@ export default function BookDriver() {
               <AddressAutocomplete label="Home address (optional)" defaultValue={guestAddress} onSelect={(r) => setGuestAddress(r ? r.label : '')} />
 
               <AddressAutocomplete label="Pickup address" onSelect={setGuestPickup} required allowLocate />
+
+              {guestStops.map((stop, i) => (
+                <div key={stop.id} style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
+                  <div style={{ flex: 1 }}>
+                    <AddressAutocomplete label={`Stop ${i + 1}`} onSelect={(sel) => guestStopHandlers.update(stop.id, sel)} required />
+                  </div>
+                  <button type="button" className="btn danger" style={{ marginBottom: 1 }} onClick={() => guestStopHandlers.remove(stop.id)}>Remove</button>
+                </div>
+              ))}
+              <button type="button" className="btn secondary" style={{ alignSelf: 'flex-start' }} onClick={guestStopHandlers.add}>+ Add stop</button>
+
               <AddressAutocomplete label="Drop address" onSelect={setGuestDrop} required />
               <ScheduleField onChange={setGuestScheduledFor} />
 
@@ -226,7 +246,7 @@ export default function BookDriver() {
                     <p className="muted" style={{ color: '#b45309' }}>⚠️ {guestQuote.requestedName || 'This driver'} is cash-only.</p>
                   )}
                   <strong>Estimated fare: ${guestQuote.estimatedFare.toFixed(2)}</strong>
-                  <div className="muted">{guestQuote.distanceKm} km{guestScheduledFor && ` · scheduled for ${new Date(guestScheduledFor).toLocaleString()}`}</div>
+                  <div className="muted">{guestQuote.distanceKm} km{guestStops.length > 0 && ` · via ${guestStops.length} stop${guestStops.length > 1 ? 's' : ''}`}{guestScheduledFor && ` · scheduled for ${new Date(guestScheduledFor).toLocaleString()}`}</div>
                   {guestError && <p className="error-text">{guestError}</p>}
                   <button className="btn" style={{ marginTop: 8 }}
                     onClick={confirmGuestBooking}
@@ -308,6 +328,17 @@ export default function BookDriver() {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <AddressAutocomplete label="Pickup address" onSelect={setPickup} required allowLocate />
+
+          {stops.map((stop, i) => (
+            <div key={stop.id} style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
+              <div style={{ flex: 1 }}>
+                <AddressAutocomplete label={`Stop ${i + 1}`} onSelect={(sel) => stopHandlers.update(stop.id, sel)} required />
+              </div>
+              <button type="button" className="btn danger" style={{ marginBottom: 1 }} onClick={() => stopHandlers.remove(stop.id)}>Remove</button>
+            </div>
+          ))}
+          <button type="button" className="btn secondary" style={{ alignSelf: 'flex-start' }} onClick={stopHandlers.add}>+ Add stop</button>
+
           <AddressAutocomplete label="Drop address" onSelect={setDrop} required />
           <ScheduleField onChange={setScheduledFor} />
 
@@ -336,7 +367,7 @@ export default function BookDriver() {
               {quote.cardSurchargeAmount > 0 && (
                 <div className="muted">+ ${quote.cardSurchargeAmount.toFixed(2)} online payment surcharge = <strong>${quote.total.toFixed(2)} total</strong></div>
               )}
-              <div className="muted">{quote.distanceKm} km{scheduledFor && ` · scheduled for ${new Date(scheduledFor).toLocaleString()}`}</div>
+              <div className="muted">{quote.distanceKm} km{stops.length > 0 && ` · via ${stops.length} stop${stops.length > 1 ? 's' : ''}`}{scheduledFor && ` · scheduled for ${new Date(scheduledFor).toLocaleString()}`}</div>
               {error && <p className="error-text">{error}</p>}
               <button className="btn" style={{ marginTop: 8 }} onClick={confirmBooking} disabled={loading || !driver}>
                 {loading ? 'Requesting...' : effectiveDriverId ? 'Confirm & request this driver' : 'Confirm & request ride'}

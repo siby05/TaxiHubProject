@@ -249,11 +249,13 @@ function buildQuote(distanceKm, ratePerKm, paymentMethod) {
 // specific scanned driver, never an open auto-match.
 router.post('/guest-quote', async (req, res) => {
   try {
-    const { pickupLat, pickupLng, dropLat, dropLng, driverId, paymentMethod, vehicleType, scheduledFor } = req.body;
+    const { pickupLat, pickupLng, dropLat, dropLng, driverId, paymentMethod, vehicleType, scheduledFor, stops } = req.body;
     if (!driverId) return res.status(400).json({ error: 'driverId is required' });
     if (pickupLat == null || pickupLng == null || dropLat == null || dropLng == null) {
       return res.status(400).json({ error: 'pickup and drop coordinates are required' });
     }
+    const stopsError = invalidStopsError(stops);
+    if (stopsError) return res.status(400).json({ error: stopsError });
     const resolved = await resolveDriver(driverId, paymentMethod, vehicleType, { lat: pickupLat, lng: pickupLng }, scheduledFor ? new Date(scheduledFor) : undefined);
     if (!resolved.driver) {
       return res.status(404).json({
@@ -261,7 +263,7 @@ router.post('/guest-quote', async (req, res) => {
         requestedUnavailable: resolved.requestedUnavailable, requestedCashOnly: resolved.requestedCashOnly, nextAvailableTime: resolved.nextAvailableTime,
       });
     }
-    const distanceKm = Math.round(haversineKm(pickupLat, pickupLng, dropLat, dropLng) * 100) / 100;
+    const distanceKm = routeDistanceKm({ lat: pickupLat, lng: pickupLng }, { lat: dropLat, lng: dropLng }, stops);
     res.json({
       ...buildQuote(distanceKm, resolved.driver.ratePerKm, paymentMethod),
       usedFallback: resolved.usedFallback, requestedUnavailable: resolved.requestedUnavailable,
@@ -459,7 +461,7 @@ router.post('/guest', async (req, res) => {
   try {
     const {
       driverId, passengerName, passengerMobile, passengerEmail, passengerAddress,
-      pickupAddress, pickupLat, pickupLng, dropAddress, dropLat, dropLng, scheduledFor, paymentMethod, vehicleType,
+      pickupAddress, pickupLat, pickupLng, dropAddress, dropLat, dropLng, scheduledFor, paymentMethod, vehicleType, stops,
     } = req.body;
 
     if (!driverId) return res.status(400).json({ error: 'driverId is required' });
@@ -476,6 +478,8 @@ router.post('/guest', async (req, res) => {
     if (vehicleType && !isValidVehicleType(vehicleType)) {
       return res.status(400).json({ error: 'Unknown vehicle type' });
     }
+    const stopsError = invalidStopsError(stops);
+    if (stopsError) return res.status(400).json({ error: stopsError });
 
     let passenger = await User.findOne({ role: 'passenger', mobile: passengerMobile });
     if (passenger) {
@@ -500,7 +504,7 @@ router.post('/guest', async (req, res) => {
       });
     }
 
-    const distanceKm = Math.round(haversineKm(pickupLat, pickupLng, dropLat, dropLng) * 100) / 100;
+    const distanceKm = routeDistanceKm({ lat: pickupLat, lng: pickupLng }, { lat: dropLat, lng: dropLng }, stops);
     const passengerRatingAvg = await getPassengerRatingAvg(passenger._id);
 
     const resolved = await resolveDriver(driverId, paymentMethod, vehicleType, { lat: pickupLat, lng: pickupLng }, scheduledFor ? new Date(scheduledFor) : undefined);
@@ -524,6 +528,7 @@ router.post('/guest', async (req, res) => {
       dropAddress,
       dropLat,
       dropLng,
+      stops: cleanStops(stops),
       distanceKm,
       estimatedFare,
       cardSurchargeAmount,
@@ -775,59 +780,63 @@ router.get('/:id', auth, roleMiddleware(['passenger']), async (req, res) => {
 // driver to accept wins, and everyone else who was shown the request gets
 // a real-time nudge to drop it from their pending list.
 router.put('/:id/accept', auth, roleMiddleware(['driver']), async (req, res) => {
-  const driver = await Driver.findOne({ userId: req.user.id });
-  if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
+  try {
+    const driver = await Driver.findOne({ userId: req.user.id });
+    if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
 
-  const booking = await Booking.findById(req.params.id);
-  if (!booking) return res.status(404).json({ error: 'Booking not found' });
-  if (booking.status !== 'pending') return res.status(400).json({ error: `Booking already ${booking.status}` });
+    const booking = await Booking.findById(req.params.id);
+    if (!booking) return res.status(404).json({ error: 'Booking not found' });
+    if (booking.status !== 'pending') return res.status(400).json({ error: `Booking already ${booking.status}` });
 
-  const isBroadcast = booking.driverId == null;
-  if (!isBroadcast && String(booking.driverId) !== String(driver._id)) {
-    return res.status(403).json({ error: 'This trip was not sent to you' });
-  }
-
-  const updated = await Booking.findByIdAndUpdate(req.params.id, {
-    status: 'accepted',
-    acceptedAt: new Date(),
-    ...(isBroadcast && { driverId: driver._id }),
-  });
-
-  // Narrow (not eliminate) the race window: if another driver's claim on
-  // this same broadcast request landed between our update and this
-  // re-check, back out rather than reporting a false success.
-  if (isBroadcast) {
-    const verify = await Booking.findById(req.params.id);
-    if (String(verify.driverId) !== String(driver._id)) {
-      return res.status(409).json({ error: 'This trip was just accepted by another driver.' });
+    const isBroadcast = booking.driverId == null;
+    if (!isBroadcast && String(booking.driverId) !== String(driver._id)) {
+      return res.status(403).json({ error: 'This trip was not sent to you' });
     }
+
+    const updated = await Booking.findByIdAndUpdate(req.params.id, {
+      status: 'accepted',
+      acceptedAt: new Date(),
+      ...(isBroadcast && { driverId: driver._id }),
+    });
+
+    // Narrow (not eliminate) the race window: if another driver's claim on
+    // this same broadcast request landed between our update and this
+    // re-check, back out rather than reporting a false success.
+    if (isBroadcast) {
+      const verify = await Booking.findById(req.params.id);
+      if (String(verify.driverId) !== String(driver._id)) {
+        return res.status(409).json({ error: 'This trip was just accepted by another driver.' });
+      }
+    }
+
+    const passenger = await User.findById(booking.passengerId);
+    await emailService.sendBookingAccepted(passenger.email, updated);
+    emitToUser(req, booking.passengerId, 'booking:accepted', updated);
+    await notifyUser(booking.passengerId, {
+      type: 'booking-accepted',
+      title: 'A driver accepted your ride',
+      message: `${updated.pickupAddress} → ${updated.dropAddress}`,
+      link: '/passenger',
+    });
+
+    if (isBroadcast) {
+      const others = (await findEligibleCandidates(booking.paymentMethod, booking.requestedVehicleType)).filter((d) => String(d._id) !== String(driver._id));
+      for (const d of others) emitToUser(req, d.userId, 'booking:claimed', { bookingId: booking._id });
+    }
+
+    const driverUser = await User.findById(driver.userId);
+
+    await notifyAdmins({
+      type: 'driver-action',
+      title: 'Driver accepted a trip',
+      message: `${driverUser?.name || 'A driver'} accepted booking ${updated._id}`,
+      link: '/admin',
+    });
+
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-
-  const passenger = await User.findById(booking.passengerId);
-  await emailService.sendBookingAccepted(passenger.email, updated);
-  emitToUser(req, booking.passengerId, 'booking:accepted', updated);
-  await notifyUser(booking.passengerId, {
-    type: 'booking-accepted',
-    title: 'A driver accepted your ride',
-    message: `${updated.pickupAddress} → ${updated.dropAddress}`,
-    link: '/passenger',
-  });
-
-  if (isBroadcast) {
-    const others = (await findEligibleCandidates(booking.paymentMethod, booking.requestedVehicleType)).filter((d) => String(d._id) !== String(driver._id));
-    for (const d of others) emitToUser(req, d.userId, 'booking:claimed', { bookingId: booking._id });
-  }
-
-  const driverUser = await User.findById(driver.userId);
-
-  await notifyAdmins({
-    type: 'driver-action',
-    title: 'Driver accepted a trip',
-    message: `${driverUser?.name || 'A driver'} accepted booking ${updated._id}`,
-    link: '/admin',
-  });
-
-  res.json(updated);
 });
 
 // PUT /api/booking/:id/decline - driver turns a pending request down. It
@@ -910,116 +919,124 @@ router.put('/:id/start', auth, roleMiddleware(['driver']), async (req, res) => {
 
 // PUT /api/booking/:id/complete - driver enters the actual fare charged
 router.put('/:id/complete', auth, roleMiddleware(['driver']), async (req, res) => {
-  const { actualFare } = req.body;
-  const booking = await Booking.findById(req.params.id);
-  if (!booking) return res.status(404).json({ error: 'Booking not found' });
+  try {
+    const { actualFare } = req.body;
+    const booking = await Booking.findById(req.params.id);
+    if (!booking) return res.status(404).json({ error: 'Booking not found' });
 
-  const updated = await Booking.findByIdAndUpdate(req.params.id, {
-    status: 'completed',
-    actualFare: actualFare || booking.estimatedFare,
-    completedAt: new Date(),
-    // Cash is collected in person at trip end; card bookings only become
-    // "paid" once the passenger actually pays via /api/payment.
-    ...(booking.paymentMethod !== 'card' && { paymentStatus: 'paid' }),
-  });
+    const updated = await Booking.findByIdAndUpdate(req.params.id, {
+      status: 'completed',
+      actualFare: actualFare || booking.estimatedFare,
+      completedAt: new Date(),
+      // Cash is collected in person at trip end; card bookings only become
+      // "paid" once the passenger actually pays via /api/payment.
+      ...(booking.paymentMethod !== 'card' && { paymentStatus: 'paid' }),
+    });
 
-  const driver = await Driver.findById(booking.driverId);
-  await Driver.findByIdAndUpdate(driver._id, {
-    totalTrips: (driver.totalTrips || 0) + 1,
-    totalEarnings: (driver.totalEarnings || 0) + updated.actualFare,
-  });
+    const driver = await Driver.findById(booking.driverId);
+    await Driver.findByIdAndUpdate(driver._id, {
+      totalTrips: (driver.totalTrips || 0) + 1,
+      totalEarnings: (driver.totalEarnings || 0) + updated.actualFare,
+    });
 
-  const passenger = await User.findById(booking.passengerId);
-  await emailService.sendBookingCompleted(passenger.email, updated);
-  emitToUser(req, booking.passengerId, 'booking:completed', updated);
-  await notifyUser(booking.passengerId, {
-    type: 'booking-completed',
-    title: 'Trip completed',
-    message: `Final fare: $${updated.actualFare}`,
-    link: '/passenger',
-  });
+    const passenger = await User.findById(booking.passengerId);
+    await emailService.sendBookingCompleted(passenger.email, updated);
+    emitToUser(req, booking.passengerId, 'booking:completed', updated);
+    await notifyUser(booking.passengerId, {
+      type: 'booking-completed',
+      title: 'Trip completed',
+      message: `Final fare: $${updated.actualFare}`,
+      link: '/passenger',
+    });
 
-  const driverUser = await User.findById(driver.userId);
-  await notifyAdmins({
-    type: 'driver-action',
-    title: 'Driver completed a trip',
-    message: `${driverUser?.name || 'A driver'} completed booking ${updated._id} - $${updated.actualFare}`,
-    link: '/admin',
-  });
+    const driverUser = await User.findById(driver.userId);
+    await notifyAdmins({
+      type: 'driver-action',
+      title: 'Driver completed a trip',
+      message: `${driverUser?.name || 'A driver'} completed booking ${updated._id} - $${updated.actualFare}`,
+      link: '/admin',
+    });
 
-  // Completing a trip can push a per-trip-commission driver's outstanding
-  // balance over their limit - take them offline immediately rather than
-  // waiting for their next go-online attempt.
-  const freshDriver = await Driver.findById(driver._id);
-  const billing = await getDriverBilling(freshDriver);
-  if (billing.overLimit && freshDriver.isAvailable) {
-    await Driver.findByIdAndUpdate(driver._id, { isAvailable: false });
-    if (driverUser) {
-      await notifyUser(driverUser._id, {
+    // Completing a trip can push a per-trip-commission driver's outstanding
+    // balance over their limit - take them offline immediately rather than
+    // waiting for their next go-online attempt.
+    const freshDriver = await Driver.findById(driver._id);
+    const billing = await getDriverBilling(freshDriver);
+    if (billing.overLimit && freshDriver.isAvailable) {
+      await Driver.findByIdAndUpdate(driver._id, { isAvailable: false });
+      if (driverUser) {
+        await notifyUser(driverUser._id, {
+          type: 'driver-disabled',
+          title: 'You have been taken offline',
+          message: `Outstanding fees ($${billing.totalPending.toFixed(2)}) are over the $${billing.feeLimit} limit. Pay the balance or contact admin to go online again.`,
+          link: '/driver/billing',
+        });
+      }
+      await notifyAdmins({
         type: 'driver-disabled',
-        title: 'You have been taken offline',
-        message: `Outstanding fees ($${billing.totalPending.toFixed(2)}) are over the $${billing.feeLimit} limit. Pay the balance or contact admin to go online again.`,
-        link: '/driver/billing',
+        title: 'Driver auto-disabled (fee limit)',
+        message: `${driverUser?.name || 'A driver'} exceeded their $${billing.feeLimit} outstanding fee limit ($${billing.totalPending.toFixed(2)} owed) and was taken offline`,
+        link: `/admin/drivers/${driver._id}/report`,
       });
     }
-    await notifyAdmins({
-      type: 'driver-disabled',
-      title: 'Driver auto-disabled (fee limit)',
-      message: `${driverUser?.name || 'A driver'} exceeded their $${billing.feeLimit} outstanding fee limit ($${billing.totalPending.toFixed(2)} owed) and was taken offline`,
-      link: `/admin/drivers/${driver._id}/report`,
-    });
-  }
 
-  res.json(updated);
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // PUT /api/booking/:id/cancel
 router.put('/:id/cancel', auth, roleMiddleware(['passenger', 'driver']), async (req, res) => {
-  const { reason } = req.body;
-  const booking = await Booking.findById(req.params.id);
-  if (!booking) return res.status(404).json({ error: 'Booking not found' });
-  if (['completed', 'cancelled'].includes(booking.status)) {
-    return res.status(400).json({ error: `Booking already ${booking.status}` });
-  }
-  const updated = await Booking.findByIdAndUpdate(req.params.id, {
-    status: 'cancelled',
-    cancelledAt: new Date(),
-    cancelReason: reason || 'No reason given',
-  });
-
-  if (req.user.role === 'passenger' && booking.driverId == null) {
-    // Still an unclaimed broadcast request - withdraw it from every
-    // driver it was shown to, instead of notifying nobody (driverId null).
-    const stillWatching = await findEligibleCandidates(booking.paymentMethod);
-    for (const d of stillWatching) emitToUser(req, d.userId, 'booking:claimed', { bookingId: booking._id });
-  } else {
-    const notifyId = req.user.role === 'passenger' ? booking.driverId : booking.passengerId;
-    emitToUser(req, notifyId, 'booking:cancelled', updated);
-    await notifyUser(notifyId, {
-      type: 'booking-cancelled',
-      title: 'A booking was cancelled',
-      message: `${updated.pickupAddress} → ${updated.dropAddress}${reason ? ` - ${reason}` : ''}`,
-      link: req.user.role === 'passenger' ? '/driver' : '/passenger',
+  try {
+    const { reason } = req.body;
+    const booking = await Booking.findById(req.params.id);
+    if (!booking) return res.status(404).json({ error: 'Booking not found' });
+    if (['completed', 'cancelled'].includes(booking.status)) {
+      return res.status(400).json({ error: `Booking already ${booking.status}` });
+    }
+    const updated = await Booking.findByIdAndUpdate(req.params.id, {
+      status: 'cancelled',
+      cancelledAt: new Date(),
+      cancelReason: reason || 'No reason given',
     });
-  }
 
-  if (req.user.role === 'driver') {
-    const driverUser = await User.findById(req.user.id);
-    await notifyAdmins({
-      type: 'driver-action',
-      title: 'Driver cancelled a trip',
-      message: `${driverUser?.name || 'A driver'} cancelled booking ${updated._id}${reason ? ` - ${reason}` : ''}`,
-      link: '/admin',
-    });
-    // The in-app notification/socket event above only reaches the
-    // passenger while they have the app open - email is the channel that
-    // reaches them regardless (WhatsApp is handled client-side by the
-    // driver, see pages/driver/DriverDashboard.jsx cancelTrip()).
-    const passenger = await User.findById(booking.passengerId);
-    if (passenger) await emailService.sendBookingCancelledByDriver(passenger.email, updated, reason);
-  }
+    if (req.user.role === 'passenger' && booking.driverId == null) {
+      // Still an unclaimed broadcast request - withdraw it from every
+      // driver it was shown to, instead of notifying nobody (driverId null).
+      const stillWatching = await findEligibleCandidates(booking.paymentMethod);
+      for (const d of stillWatching) emitToUser(req, d.userId, 'booking:claimed', { bookingId: booking._id });
+    } else {
+      const notifyId = req.user.role === 'passenger' ? booking.driverId : booking.passengerId;
+      emitToUser(req, notifyId, 'booking:cancelled', updated);
+      await notifyUser(notifyId, {
+        type: 'booking-cancelled',
+        title: 'A booking was cancelled',
+        message: `${updated.pickupAddress} → ${updated.dropAddress}${reason ? ` - ${reason}` : ''}`,
+        link: req.user.role === 'passenger' ? '/driver' : '/passenger',
+      });
+    }
 
-  res.json(updated);
+    if (req.user.role === 'driver') {
+      const driverUser = await User.findById(req.user.id);
+      await notifyAdmins({
+        type: 'driver-action',
+        title: 'Driver cancelled a trip',
+        message: `${driverUser?.name || 'A driver'} cancelled booking ${updated._id}${reason ? ` - ${reason}` : ''}`,
+        link: '/admin',
+      });
+      // The in-app notification/socket event above only reaches the
+      // passenger while they have the app open - email is the channel that
+      // reaches them regardless (WhatsApp is handled client-side by the
+      // driver, see pages/driver/DriverDashboard.jsx cancelTrip()).
+      const passenger = await User.findById(booking.passengerId);
+      if (passenger) await emailService.sendBookingCancelledByDriver(passenger.email, updated, reason);
+    }
+
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // PUT /api/booking/:id/rate - passenger rates a completed trip (rates the driver)
