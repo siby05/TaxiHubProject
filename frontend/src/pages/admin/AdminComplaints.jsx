@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import client from '../../api/client';
 import { useSocket } from '../../hooks/useSocket';
 
 const STATUSES = ['open', 'investigating', 'resolved', 'closed', 'escalated'];
 
 export default function AdminComplaints() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [complaints, setComplaints] = useState([]);
-  const [filter, setFilter] = useState('');
+  const [filter, setFilter] = useState(() => searchParams.get('status') || '');
+  const [seriousOnly, setSeriousOnly] = useState(() => searchParams.get('serious') === 'true');
   const [notes, setNotes] = useState({});
   const [alert, setAlert] = useState('');
 
@@ -16,6 +19,15 @@ export default function AdminComplaints() {
   }
 
   useEffect(() => { load(); }, [filter]);
+
+  useEffect(() => {
+    const params = {};
+    if (filter) params.status = filter;
+    if (seriousOnly) params.serious = 'true';
+    setSearchParams(params, { replace: true });
+  }, [filter, seriousOnly]);
+
+  const visibleComplaints = seriousOnly ? complaints.filter((c) => c.isSerious) : complaints;
 
   useSocket({
     'complaint:new': (complaint) => {
@@ -53,12 +65,13 @@ export default function AdminComplaints() {
         {STATUSES.map((s) => (
           <button key={s} className={filter === s ? 'active' : ''} onClick={() => setFilter(s)}>{s}</button>
         ))}
+        <button className={seriousOnly ? 'active' : ''} onClick={() => setSeriousOnly((v) => !v)}>Serious only</button>
       </div>
 
-      {complaints.length === 0 && <p className="muted">No complaints match this filter.</p>}
+      {visibleComplaints.length === 0 && <p className="muted">No complaints match this filter.</p>}
 
       <div className="grid cols-2">
-        {complaints.map((c) => (
+        {visibleComplaints.map((c) => (
           <div className="card" key={c._id}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <strong>{c.complaintId}</strong>

@@ -60,6 +60,8 @@ a { color: var(--primary); text-decoration: none; }
 
 .stat { text-align: center; }
 .stat .value { font-size: 1.8rem; font-weight: 700; color: var(--primary); }
+.stat.clickable { cursor: pointer; transition: transform 0.1s ease, box-shadow 0.1s ease; }
+.stat.clickable:hover { box-shadow: 0 2px 10px rgba(0,0,0,0.1); transform: translateY(-2px); border-color: var(--primary); }
 .stat .label { color: var(--muted); font-size: 0.85rem; }
 
 form { display: flex; flex-direction: column; gap: 12px; }
@@ -126,6 +128,21 @@ th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--bor
 .tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
 .tabs button { padding: 8px 14px; border-radius: 6px; border: 1px solid var(--border); background: white; cursor: pointer; }
 .tabs button.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+.tabs.main-menu {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  margin: 4px 0 20px;
+  gap: 6px;
+}
+.tabs.main-menu button {
+  font-weight: 600;
+  font-size: 0.95rem;
+  padding: 10px 18px;
+  border-radius: 8px;
+}
 
 /* Responsive: phones and small tablets */
 @media (max-width: 640px) {

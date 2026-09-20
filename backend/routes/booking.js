@@ -177,6 +177,11 @@ async function alertDriverOfBooking(req, driverUserId, booking, passengerName, p
 // and signup forms can render the same list the backend validates against.
 router.get('/vehicle-types', (req, res) => res.json(VEHICLE_TYPES));
 
+// GET /api/booking/vehicle-selection-enabled - public, same reasoning as
+// /api/driver-signup/enabled: the booking form needs this before an admin
+// session exists, so it can't live under the admin-gated /api/admin/settings.
+router.get('/vehicle-selection-enabled', (req, res) => res.json({ enabled: getSettings().vehicleSelectionEnabled !== false }));
+
 // GET /api/booking/guest-lookup?mobile= - public. As a returning guest
 // types their phone number on the QR landing page (see POST /guest below),
 // this looks them up so their name/email/address can auto-fill - saves a

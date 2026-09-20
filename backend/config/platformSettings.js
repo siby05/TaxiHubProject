@@ -36,6 +36,14 @@ let settings = {
   // blocked server-side (see routes/driverSignup.js) when false, so it
   // can't be reached by a stale bookmark either.
   driverSignupEnabled: true,
+  // Whether passengers get a vehicle-type selector on the booking form - an
+  // admin can turn this off (e.g. only one vehicle class actually operates
+  // right now) so every booking just broadcasts to any available driver
+  // instead. Mirrors driverSignupEnabled's on/off pattern. See
+  // routes/booking.js GET /vehicle-selection-enabled (public, same reasoning
+  // as /api/driver-signup/enabled - the booking form needs this before/without
+  // an admin session).
+  vehicleSelectionEnabled: true,
   // Real inbox for admin-facing email: serious-complaint/escalation alerts
   // (see services/emailService.js) and the scheduled data backup below -
   // replaces the admin@easyride.local seed login, which is just a login

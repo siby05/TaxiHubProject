@@ -51,6 +51,8 @@ router.get('/stats', async (req, res) => {
     pendingDriverApprovals: drivers.filter((d) => d.status === 'pending').length,
     totalBookings: bookings.length,
     completedTrips: completed.length,
+    pendingTrips: bookings.filter((b) => b.status === 'pending').length,
+    openTrips: bookings.filter((b) => ['accepted', 'in-progress'].includes(b.status)).length,
     totalRevenue: completed.reduce((sum, b) => sum + (b.actualFare || 0), 0),
     openComplaints: complaints.filter((c) => ['open', 'investigating'].includes(c.status)).length,
     seriousComplaints: complaints.filter((c) => c.isSerious).length,
@@ -391,7 +393,7 @@ router.get('/settings', async (req, res) => {
 router.put('/settings', async (req, res) => {
   const {
     commissionType, commissionPercent, weeklyFlatFee, outstandingFeeLimit, cardSurchargePercent, minimumFare, fareRanges,
-    driverSignupEnabled, adminEmail, backupFrequency,
+    driverSignupEnabled, vehicleSelectionEnabled, adminEmail, backupFrequency,
   } = req.body;
   try {
     if (adminEmail != null && adminEmail && !/^\S+@\S+\.\S+$/.test(adminEmail)) {
@@ -406,6 +408,7 @@ router.put('/settings', async (req, res) => {
       ...(minimumFare != null && { minimumFare: Number(minimumFare) }),
       ...(fareRanges && { fareRanges: fareRanges.map((r) => ({ maxKm: Number(r.maxKm), price: Number(r.price) })) }),
       ...(driverSignupEnabled != null && { driverSignupEnabled: !!driverSignupEnabled }),
+      ...(vehicleSelectionEnabled != null && { vehicleSelectionEnabled: !!vehicleSelectionEnabled }),
       ...(adminEmail != null && { adminEmail: adminEmail.toLowerCase() }),
       ...(backupFrequency && { backupFrequency }),
     });

@@ -1,11 +1,12 @@
 import { Fragment, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import client, { fileOrigin } from '../../api/client';
 import PhoneField from '../../components/PhoneField';
 
 const DOC_STATUS_CLASS = { verified: 'approved', rejected: 'rejected', pending: 'pending' };
 
 export default function AdminDashboard() {
+  const navigate = useNavigate();
   const [stats, setStats] = useState(null);
   const [drivers, setDrivers] = useState([]);
   const [tab, setTab] = useState('drivers');
@@ -162,7 +163,7 @@ export default function AdminDashboard() {
   }
 
   const filteredTrips = trips.filter((t) => {
-    if (tripFilter && t.status !== tripFilter) return false;
+    if (tripFilter === 'open' ? !['accepted', 'in-progress'].includes(t.status) : tripFilter && t.status !== tripFilter) return false;
     if (tripDriverFilter && String(t.driverId?._id) !== tripDriverFilter) return false;
     const created = new Date(t.createdAt);
     if (tripDateFrom && created < new Date(`${tripDateFrom}T00:00:00`)) return false;
@@ -170,31 +171,38 @@ export default function AdminDashboard() {
     return true;
   });
 
+  function goToTrips(filterValue) {
+    setTab('trips');
+    setTripFilter(filterValue);
+  }
+
   return (
     <div className="container">
       <h1>Admin dashboard</h1>
 
-      {stats && (
-        <div className="grid cols-4">
-          <div className="card stat"><div className="value">{stats.totalPassengers}</div><div className="label">Passengers</div></div>
-          <div className="card stat"><div className="value">{stats.totalDrivers}</div><div className="label">Drivers</div></div>
-          <div className="card stat"><div className="value">{stats.completedTrips}</div><div className="label">Completed trips</div></div>
-          <div className="card stat"><div className="value">${stats.totalRevenue.toFixed(2)}</div><div className="label">Revenue</div></div>
-          <div className="card stat"><div className="value">{stats.pendingDriverApprovals}</div><div className="label">Pending approvals</div></div>
-          <div className="card stat"><div className="value">{stats.openComplaints}</div><div className="label">Open complaints</div></div>
-          <div className="card stat"><div className="value">{stats.seriousComplaints}</div><div className="label">Serious complaints</div></div>
-          <div className="card stat"><Link to="/admin/complaints" className="btn">Manage complaints</Link></div>
-        </div>
-      )}
-
-      <div className="tabs">
+      <div className="tabs main-menu">
         <button className={tab === 'drivers' ? 'active' : ''} onClick={() => setTab('drivers')}>Drivers</button>
         <button className={tab === 'add' ? 'active' : ''} onClick={() => setTab('add')}>Add driver</button>
         <button className={tab === 'passengers' ? 'active' : ''} onClick={() => setTab('passengers')}>Passengers</button>
         <button className={tab === 'trips' ? 'active' : ''} onClick={() => setTab('trips')}>Trips</button>
-        <button className={tab === 'settings' ? 'active' : ''} onClick={() => setTab('settings')}>Platform fee settings</button>
+        <button className={tab === 'settings' ? 'active' : ''} onClick={() => setTab('settings')}>Settings</button>
         <button className={tab === 'feedback' ? 'active' : ''} onClick={() => setTab('feedback')}>Feedback</button>
       </div>
+
+      {stats && (
+        <div className="grid cols-4">
+          <div className="card stat clickable" onClick={() => setTab('passengers')}><div className="value">{stats.totalPassengers}</div><div className="label">Passengers</div></div>
+          <div className="card stat clickable" onClick={() => setTab('drivers')}><div className="value">{stats.totalDrivers}</div><div className="label">Drivers</div></div>
+          <div className="card stat clickable" onClick={() => goToTrips('completed')}><div className="value">{stats.completedTrips}</div><div className="label">Completed trips</div></div>
+          <div className="card stat"><div className="value">${stats.totalRevenue.toFixed(2)}</div><div className="label">Revenue</div></div>
+          <div className="card stat clickable" onClick={() => goToTrips('pending')}><div className="value">{stats.pendingTrips}</div><div className="label">Pending trips</div></div>
+          <div className="card stat clickable" onClick={() => goToTrips('open')}><div className="value">{stats.openTrips}</div><div className="label">Open trips</div></div>
+          <div className="card stat clickable" onClick={() => setTab('drivers')}><div className="value">{stats.pendingDriverApprovals}</div><div className="label">Pending approvals</div></div>
+          <div className="card stat clickable" onClick={() => navigate('/admin/complaints?status=open')}><div className="value">{stats.openComplaints}</div><div className="label">Open complaints</div></div>
+          <div className="card stat clickable" onClick={() => navigate('/admin/complaints?serious=true')}><div className="value">{stats.seriousComplaints}</div><div className="label">Serious complaints</div></div>
+          <div className="card stat"><Link to="/admin/complaints" className="btn">Manage complaints</Link></div>
+        </div>
+      )}
 
       {tab === 'drivers' && (
         <div className="card">
@@ -408,8 +416,8 @@ export default function AdminDashboard() {
       {tab === 'trips' && (
         <div>
           <div className="tabs">
-            {['', 'pending', 'accepted', 'in-progress', 'completed', 'cancelled'].map((s) => (
-              <button key={s || 'all'} className={tripFilter === s ? 'active' : ''} onClick={() => setTripFilter(s)}>{s || 'All'}</button>
+            {['', 'pending', 'accepted', 'in-progress', 'open', 'completed', 'cancelled'].map((s) => (
+              <button key={s || 'all'} className={tripFilter === s ? 'active' : ''} onClick={() => setTripFilter(s)}>{s === 'open' ? 'Open (accepted/in-progress)' : (s || 'All')}</button>
             ))}
           </div>
           <div className="card" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
@@ -538,6 +546,22 @@ export default function AdminDashboard() {
               <input type="checkbox" style={{ width: 'auto' }} checked={settings.driverSignupEnabled !== false}
                 onChange={(e) => setSettings((s) => ({ ...s, driverSignupEnabled: e.target.checked }))} />
               Accepting new driver applications
+            </label>
+            {settingsMsg && <p className="muted">{settingsMsg}</p>}
+            <button className="btn" style={{ marginTop: 12 }}>Save</button>
+          </form>
+        </div>
+      )}
+
+      {tab === 'settings' && settings && (
+        <div className="card" style={{ maxWidth: 480 }}>
+          <h3>Vehicle selection</h3>
+          <p className="muted">Turn off to hide the vehicle-type selector on the booking form - every booking then broadcasts to any available driver regardless of vehicle type.</p>
+          <form onSubmit={saveSettings}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input type="checkbox" style={{ width: 'auto' }} checked={settings.vehicleSelectionEnabled !== false}
+                onChange={(e) => setSettings((s) => ({ ...s, vehicleSelectionEnabled: e.target.checked }))} />
+              Passengers can choose a vehicle type when booking
             </label>
             {settingsMsg && <p className="muted">{settingsMsg}</p>}
             <button className="btn" style={{ marginTop: 12 }}>Save</button>

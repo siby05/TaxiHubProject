@@ -22,6 +22,7 @@ export default function PassengerDashboard() {
   const [preferredDriverId, setPreferredDriverId] = useState('');
   const [vehicleTypes, setVehicleTypes] = useState([]);
   const [vehicleType, setVehicleType] = useState('');
+  const [vehicleSelectionEnabled, setVehicleSelectionEnabled] = useState(true);
   const [formKey, setFormKey] = useState(0); // bump to reset the autocomplete inputs after booking
   const [payingId, setPayingId] = useState(null);
   const [payError, setPayError] = useState('');
@@ -54,6 +55,7 @@ export default function PassengerDashboard() {
   useEffect(() => {
     refresh();
     client.get('/booking/vehicle-types').then((r) => setVehicleTypes(r.data)).catch(() => {});
+    client.get('/booking/vehicle-selection-enabled').then((r) => setVehicleSelectionEnabled(r.data.enabled)).catch(() => {});
   }, []);
 
   useSocket({
@@ -214,7 +216,7 @@ export default function PassengerDashboard() {
             <AddressAutocomplete label="Drop address" onSelect={setDrop} required />
             <ScheduleField onChange={setScheduledFor} />
 
-            {vehicleTypes.length > 0 && !preferredDriverId && (
+            {vehicleSelectionEnabled && vehicleTypes.length > 0 && !preferredDriverId && (
               <div>
                 <label>Vehicle type</label>
                 <select value={vehicleType} onChange={(e) => setVehicleType(e.target.value)}>
@@ -359,7 +361,7 @@ export default function PassengerDashboard() {
             <AddressAutocomplete label="Drop address" defaultValue={editDrop?.label} onSelect={setEditDrop} required />
             <ScheduleField onChange={setEditScheduledFor} defaultValue={editScheduledFor} />
 
-            {vehicleTypes.length > 0 && !editingBooking.driverId && (
+            {vehicleSelectionEnabled && vehicleTypes.length > 0 && !editingBooking.driverId && (
               <div>
                 <label>Vehicle type</label>
                 <select value={editVehicleType} onChange={(e) => setEditVehicleType(e.target.value)}>
