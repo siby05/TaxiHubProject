@@ -21,7 +21,18 @@ async function connectDatabase() {
     if (!process.env.MONGO_URI) {
       throw new Error('DB_MODE=mongo requires MONGO_URI to be set (a MongoDB connection string - set it as an env var, never in source).');
     }
-    await mongoose.connect(process.env.MONGO_URI);
+    // A free-tier (Atlas M0) cluster has a low total connection ceiling
+    // shared across everything using it - Mongoose's own default
+    // (maxPoolSize: 100) is sized for a much bigger cluster. This app
+    // opens exactly one pool for the process's whole lifetime (never
+    // reconnects per-request), so a small, explicit pool avoids ever
+    // contributing to that limit even if Render briefly runs two
+    // instances during a deploy. serverSelectionTimeoutMS makes a
+    // genuinely unreachable cluster fail fast instead of hanging requests.
+    await mongoose.connect(process.env.MONGO_URI, {
+      maxPoolSize: 10,
+      serverSelectionTimeoutMS: 10000,
+    });
     console.log(`[db] connected to MongoDB (DB_MODE=mongo, database "${mongoose.connection.name}")`);
     return;
   }

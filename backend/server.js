@@ -25,6 +25,7 @@ const stripeConnectRoutes = require('./routes/stripeConnect');
 const { setIo } = require('./utils/notify');
 const { startReminderScheduler } = require('./utils/reminders');
 const { startBackupScheduler } = require('./utils/backup');
+const { loadSettings } = require('./config/platformSettings');
 
 // Defense in depth: a single unhandled promise rejection anywhere (a
 // missed try/catch, a third-party call that throws unexpectedly) should
@@ -93,6 +94,10 @@ connectDatabase().then(async () => {
   if ((await User.countDocuments()) === 0) {
     await require('./utils/seed')();
   }
+  // Hydrate admin-configured settings from the database before serving any
+  // requests, so a real (mongo) deployment doesn't silently reset every
+  // setting back to hardcoded defaults on each restart/redeploy.
+  await loadSettings();
   server.listen(PORT, () => console.log(`EasyRide API listening on http://localhost:${PORT}`));
   startReminderScheduler();
   startBackupScheduler();

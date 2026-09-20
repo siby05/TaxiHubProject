@@ -729,16 +729,18 @@ export default function AdminDashboard() {
 
       {tab === 'settings' && settings && (
         <div className="card" style={{ maxWidth: 480 }}>
-          <h3>Admin email &amp; data backups</h3>
+          <h3>Admin contact &amp; data backups</h3>
           <p className="muted">
             Serious-complaint alerts and scheduled backups go to this address. A CSV export of passengers, trips and
-            complaints is emailed here automatically on the schedule below.
+            complaints is emailed here automatically on the schedule below. Both fields also power the "Contact
+            admin" links shown to a passenger when no driver is available.
           </p>
           <form onSubmit={saveSettings}>
             <div>
               <label>Admin email</label>
               <input type="email" value={settings.adminEmail || ''} onChange={(e) => setSettings((s) => ({ ...s, adminEmail: e.target.value }))} required />
             </div>
+            <PhoneField label="Admin WhatsApp number (optional)" value={settings.adminMobile || ''} onChange={(v) => setSettings((s) => ({ ...s, adminMobile: v }))} />
             <div>
               <label>Backup frequency</label>
               <select value={settings.backupFrequency} onChange={(e) => setSettings((s) => ({ ...s, backupFrequency: e.target.value }))}>

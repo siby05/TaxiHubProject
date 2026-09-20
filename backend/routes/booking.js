@@ -182,6 +182,16 @@ router.get('/vehicle-types', (req, res) => res.json(VEHICLE_TYPES));
 // session exists, so it can't live under the admin-gated /api/admin/settings.
 router.get('/vehicle-selection-enabled', (req, res) => res.json({ enabled: getSettings().vehicleSelectionEnabled !== false }));
 
+// GET /api/booking/admin-contact - public, so a "no driver available"
+// error screen (logged-in booking forms, the guest QR-scan checkout, and
+// driver book-for-passenger) can offer a direct way to reach the admin.
+// Only ever returns the two contact fields, never the rest of
+// platformSettings (commission rates etc. stay admin-only).
+router.get('/admin-contact', (req, res) => {
+  const settings = getSettings();
+  res.json({ email: settings.adminEmail || null, mobile: settings.adminMobile || null });
+});
+
 // GET /api/booking/guest-lookup?mobile= - public. As a returning guest
 // types their phone number on the QR landing page (see POST /guest below),
 // this looks them up so their name/email/address can auto-fill - saves a

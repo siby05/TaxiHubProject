@@ -6,6 +6,7 @@ import AddressAutocomplete from '../../components/AddressAutocomplete';
 import ScheduleField from '../../components/ScheduleField';
 import PhoneField from '../../components/PhoneField';
 import { makeStopHandlers, stopsPayload } from '../../utils/stops';
+import ContactAdmin from '../../components/ContactAdmin';
 
 export default function BookDriver() {
   const { driverId } = useParams();
@@ -264,6 +265,7 @@ export default function BookDriver() {
                       "Schedule for later" above and enter this time instead.
                     </p>
                   )}
+                  <ContactAdmin context="scanning a driver's QR code" />
                 </div>
               )}
             </div>
@@ -381,6 +383,7 @@ export default function BookDriver() {
               {nextAvailableTime && (
                 <p className="muted">Next available: <strong>{new Date(nextAvailableTime).toLocaleString()}</strong> - toggle "Schedule for later" above and enter this time instead.</p>
               )}
+              <ContactAdmin context="booking this driver" />
             </div>
           )}
         </div>

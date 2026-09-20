@@ -465,7 +465,7 @@ router.get('/settings', async (req, res) => {
 router.put('/settings', async (req, res) => {
   const {
     commissionType, commissionPercent, weeklyFlatFee, outstandingFeeLimit, cardSurchargePercent, minimumFare, fareRanges,
-    driverSignupEnabled, vehicleSelectionEnabled, tempPasswordVisible, adminEmail, backupFrequency,
+    driverSignupEnabled, vehicleSelectionEnabled, tempPasswordVisible, adminEmail, adminMobile, backupFrequency,
   } = req.body;
   try {
     if (adminEmail != null && adminEmail && !/^\S+@\S+\.\S+$/.test(adminEmail)) {
@@ -483,6 +483,7 @@ router.put('/settings', async (req, res) => {
       ...(vehicleSelectionEnabled != null && { vehicleSelectionEnabled: !!vehicleSelectionEnabled }),
       ...(tempPasswordVisible != null && { tempPasswordVisible: !!tempPasswordVisible }),
       ...(adminEmail != null && { adminEmail: adminEmail.toLowerCase() }),
+      ...(adminMobile !== undefined && { adminMobile: adminMobile || null }),
       ...(backupFrequency && { backupFrequency }),
     });
     res.json(updated);

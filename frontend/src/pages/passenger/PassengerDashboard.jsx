@@ -11,6 +11,7 @@ import Modal from '../../components/Modal';
 import { waLink, passengerToDriverMessage } from '../../utils/whatsapp';
 import WhatsAppIcon from '../../components/WhatsAppIcon';
 import { newStopId, makeStopHandlers, stopsPayload } from '../../utils/stops';
+import ContactAdmin from '../../components/ContactAdmin';
 
 export default function PassengerDashboard() {
   const { bookings, fetchMine, createBooking } = useBookingStore();
@@ -311,6 +312,7 @@ export default function PassengerDashboard() {
                 {nextAvailableTime && (
                   <p className="muted">Next available: <strong>{new Date(nextAvailableTime).toLocaleString()}</strong> - toggle "Schedule for later" above and enter this time instead.</p>
                 )}
+                <ContactAdmin context="booking a ride" />
               </div>
             )}
           </div>
@@ -434,6 +436,7 @@ export default function PassengerDashboard() {
                 {editNextAvailableTime && (
                   <p className="muted">Next available: <strong>{new Date(editNextAvailableTime).toLocaleString()}</strong> - set "Schedule for later" above to this time instead.</p>
                 )}
+                <ContactAdmin context="editing a ride" />
               </div>
             )}
 

@@ -6,6 +6,7 @@ import PhoneField from '../../components/PhoneField';
 import ScheduleField from '../../components/ScheduleField';
 import { waLink } from '../../utils/whatsapp';
 import { makeStopHandlers, stopsPayload } from '../../utils/stops';
+import ContactAdmin from '../../components/ContactAdmin';
 
 export default function DriverBookForPassenger() {
   const navigate = useNavigate();
@@ -186,7 +187,12 @@ export default function DriverBookForPassenger() {
             </div>
           )}
 
-          {!quote && !quoteLoading && error && <p className="error-text">{error}</p>}
+          {!quote && !quoteLoading && error && (
+            <div>
+              <p className="error-text">{error}</p>
+              <ContactAdmin context="booking for a passenger" />
+            </div>
+          )}
         </div>
       </div>
     </div>

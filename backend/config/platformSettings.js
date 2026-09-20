@@ -1,12 +1,26 @@
 /**
- * Global, admin-configurable commission policy. A true singleton (not a
- * Model/collection) since there's only ever one active policy.
+ * Global, admin-configurable commission policy and platform toggles.
  *
  * commissionType 'per-trip-percent': driver owes admin a % of each
  *   completed trip's fare, tallied weekly.
  * commissionType 'weekly-flat': driver owes a fixed fee every week to keep
  *   platform access, independent of trip volume.
+ *
+ * getSettings()/updateSettings() stay fully synchronous - every existing
+ * caller across the app (dozens of them) reads this without awaiting, so
+ * changing that contract would mean touching all of them. Instead this
+ * module keeps an in-memory cache (`settings`, exactly as before) that's
+ * hydrated once from the PlatformSettings singleton document at startup
+ * (see loadSettings(), called from server.js before the server starts
+ * accepting requests) and re-persisted, fire-and-forget, on every update -
+ * so a real (Mongo) database survives restarts/redeploys instead of
+ * silently resetting every admin-configured setting back to these
+ * defaults each time, while memory mode keeps its existing "resets on
+ * restart" behaviour (there's nothing to load - loadSettings() just
+ * creates the one doc fresh, same as any other memory-mode collection).
  */
+const PlatformSettings = require('../models/PlatformSettings');
+
 let settings = {
   commissionType: 'per-trip-percent',
   commissionPercent: 15,
@@ -55,6 +69,12 @@ let settings = {
   // replaces the admin@easyride.local seed login, which is just a login
   // identity, not a real mailbox anyone reads.
   adminEmail: 'easyridenz@gmail.com',
+  // Optional WhatsApp-reachable number for the "Contact admin" links shown
+  // to a passenger when no driver is available (see GET
+  // /api/booking/admin-contact, a public route since that error screen is
+  // shown before/without login on the QR-scan guest flow too). Null until
+  // an admin sets one - those links just don't render without it.
+  adminMobile: null,
   // How often utils/backup.js emails the admin a CSV export of passengers,
   // trips and complaints. lastBackupAt (ISO string, null until the first
   // run) is how the scheduler knows one is actually due - same
@@ -63,6 +83,25 @@ let settings = {
   backupFrequency: 'weekly',
   lastBackupAt: null,
 };
+
+let settingsDocId = null;
+
+// Called once at startup (see server.js), before the server accepts any
+// requests. Merges the stored doc *over* the defaults above rather than
+// replacing them outright, so a setting added in a later release (like
+// adminMobile) still gets a sensible default for an existing deployment
+// that was already persisted before that field existed.
+async function loadSettings() {
+  const existing = await PlatformSettings.findOne({});
+  if (existing) {
+    const { _id, createdAt, updatedAt, ...stored } = existing;
+    settingsDocId = _id;
+    settings = { ...settings, ...stored };
+  } else {
+    const created = await PlatformSettings.create({ ...settings });
+    settingsDocId = created._id;
+  }
+}
 
 function getSettings() {
   return { ...settings };
@@ -82,7 +121,17 @@ function updateSettings(patch) {
     patch = { ...patch, fareRanges: [...patch.fareRanges].sort((a, b) => a.maxKm - b.maxKm) };
   }
   settings = { ...settings, ...patch };
+  // Fire-and-forget: callers of updateSettings() expect a synchronous
+  // return (every route in the app relies on that), so persistence
+  // happens in the background - a transient DB hiccup here must never
+  // block or fail the settings change the admin is actively making, it
+  // just means this particular change won't survive the next restart.
+  if (settingsDocId) {
+    PlatformSettings.findByIdAndUpdate(settingsDocId, patch).catch((err) => {
+      console.error('[platformSettings] failed to persist update:', err.message);
+    });
+  }
   return { ...settings };
 }
 
-module.exports = { getSettings, updateSettings };
+module.exports = { getSettings, updateSettings, loadSettings };
