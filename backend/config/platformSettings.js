@@ -82,6 +82,15 @@ let settings = {
   // a much coarser grain.
   backupFrequency: 'weekly',
   lastBackupAt: null,
+  // Optional trip-record housekeeping for when database space needs
+  // managing - null/0 keeps every trip forever (the default). A positive
+  // number auto-deletes completed/cancelled trips older than that many
+  // days (see utils/retention.js cleanupOldTrips() - never touches a live
+  // trip, and never one a complaint still references). Complaints have
+  // their own fixed 2-year NZTA retention instead (models/Complaint.js
+  // retentionExpiryDate) - not admin-configurable, since that's a
+  // compliance floor rather than a housekeeping choice.
+  tripRetentionDays: null,
 };
 
 let settingsDocId = null;
@@ -113,6 +122,9 @@ function updateSettings(patch) {
   }
   if (patch.backupFrequency && !['weekly', 'monthly'].includes(patch.backupFrequency)) {
     throw new Error('backupFrequency must be "weekly" or "monthly"');
+  }
+  if (patch.tripRetentionDays != null && (!Number.isInteger(patch.tripRetentionDays) || patch.tripRetentionDays < 0)) {
+    throw new Error('tripRetentionDays must be a positive whole number of days, or 0/null to disable');
   }
   if (patch.fareRanges) {
     if (!Array.isArray(patch.fareRanges) || patch.fareRanges.some((r) => typeof r.maxKm !== 'number' || typeof r.price !== 'number' || r.maxKm <= 0 || r.price < 0)) {

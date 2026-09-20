@@ -761,6 +761,28 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {tab === 'settings' && settings && (
+        <div className="card" style={{ maxWidth: 480 }}>
+          <h3>Data retention</h3>
+          <p className="muted">
+            Complaints are always kept for 2 years (NZ Transport Agency requirement) and removed automatically
+            after that - not configurable here. Completed/cancelled trip records have no such requirement; set a
+            limit below only if you need to manage database space. A trip still referenced by a complaint is never
+            deleted early, regardless of this setting.
+          </p>
+          <form onSubmit={saveSettings}>
+            <div>
+              <label>Delete finished trips older than (days)</label>
+              <input type="number" step="1" min="0" placeholder="Leave blank to keep forever"
+                value={settings.tripRetentionDays ?? ''}
+                onChange={(e) => setSettings((s) => ({ ...s, tripRetentionDays: e.target.value === '' ? null : Number(e.target.value) }))} />
+            </div>
+            {settingsMsg && <p className="muted">{settingsMsg}</p>}
+            <button className="btn" style={{ marginTop: 12 }}>Save</button>
+          </form>
+        </div>
+      )}
+
       {tab === 'feedback' && (
         <div className="card">
           <h3>Feedback submissions</h3>

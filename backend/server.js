@@ -25,6 +25,7 @@ const stripeConnectRoutes = require('./routes/stripeConnect');
 const { setIo } = require('./utils/notify');
 const { startReminderScheduler } = require('./utils/reminders');
 const { startBackupScheduler } = require('./utils/backup');
+const { startRetentionScheduler } = require('./utils/retention');
 const { loadSettings } = require('./config/platformSettings');
 
 // Defense in depth: a single unhandled promise rejection anywhere (a
@@ -101,6 +102,7 @@ connectDatabase().then(async () => {
   server.listen(PORT, () => console.log(`EasyRide API listening on http://localhost:${PORT}`));
   startReminderScheduler();
   startBackupScheduler();
+  startRetentionScheduler();
 }).catch((err) => {
   console.error('[startup] failed to start:', err.message);
   process.exit(1);
