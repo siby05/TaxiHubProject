@@ -8,7 +8,7 @@ const Booking = require('../models/Booking');
 const { auth, roleMiddleware } = require('../middleware/auth');
 const { ensureDriverQrCode } = require('../utils/qrcode');
 const { getDriverBilling } = require('../utils/billing');
-const { haversineKm, calculateTripFare, calculateCardSurcharge } = require('../utils/distance');
+const { calculateTripFare, calculateCardSurcharge, routeDistanceKm, invalidStopsError, cleanStops } = require('../utils/distance');
 const { emailService } = require('../services/emailService');
 const { notifyUser, notifyAdmins } = require('../utils/notify');
 const { checkDriverCompliance } = require('../utils/compliance');
@@ -236,7 +236,7 @@ router.post('/bookings', auth, roleMiddleware(['driver']), async (req, res) => {
   try {
     const {
       passengerId, passengerName, passengerMobile, passengerEmail, passengerAddress,
-      pickupAddress, pickupLat, pickupLng, dropAddress, dropLat, dropLng, scheduledFor, paymentMethod,
+      pickupAddress, pickupLat, pickupLng, dropAddress, dropLat, dropLng, scheduledFor, paymentMethod, stops,
     } = req.body;
 
     if (!pickupAddress || !dropAddress || pickupLat == null || dropLat == null) {
@@ -248,6 +248,8 @@ router.post('/bookings', auth, roleMiddleware(['driver']), async (req, res) => {
     if (paymentMethod && !['cash', 'card'].includes(paymentMethod)) {
       return res.status(400).json({ error: 'paymentMethod must be "cash" or "card"' });
     }
+    const stopsError = invalidStopsError(stops);
+    if (stopsError) return res.status(400).json({ error: stopsError });
 
     const driver = await Driver.findOne({ userId: req.user.id });
     if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
@@ -281,7 +283,7 @@ router.post('/bookings', auth, roleMiddleware(['driver']), async (req, res) => {
       });
     }
 
-    const distanceKm = Math.round(haversineKm(pickupLat, pickupLng, dropLat, dropLng) * 100) / 100;
+    const distanceKm = routeDistanceKm({ lat: pickupLat, lng: pickupLng }, { lat: dropLat, lng: dropLng }, stops);
     const driverBookingSettings = getSettings();
     const estimatedFare = calculateTripFare(distanceKm, driver.ratePerKm, driverBookingSettings);
     const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(estimatedFare, driverBookingSettings.cardSurchargePercent) : 0;
@@ -295,6 +297,7 @@ router.post('/bookings', auth, roleMiddleware(['driver']), async (req, res) => {
       dropAddress,
       dropLat,
       dropLng,
+      stops: cleanStops(stops),
       distanceKm,
       estimatedFare,
       cardSurchargeAmount,

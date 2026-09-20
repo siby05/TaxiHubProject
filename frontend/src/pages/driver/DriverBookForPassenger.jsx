@@ -5,6 +5,7 @@ import AddressAutocomplete from '../../components/AddressAutocomplete';
 import PhoneField from '../../components/PhoneField';
 import ScheduleField from '../../components/ScheduleField';
 import { waLink } from '../../utils/whatsapp';
+import { makeStopHandlers, stopsPayload } from '../../utils/stops';
 
 export default function DriverBookForPassenger() {
   const navigate = useNavigate();
@@ -17,6 +18,8 @@ export default function DriverBookForPassenger() {
 
   const [pickup, setPickup] = useState(null);
   const [drop, setDrop] = useState(null);
+  const [stops, setStops] = useState([]);
+  const stopHandlers = makeStopHandlers(setStops);
   const [scheduledFor, setScheduledFor] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [quote, setQuote] = useState(null);
@@ -40,14 +43,15 @@ export default function DriverBookForPassenger() {
     setQuote(null);
     setError('');
     if (!pickup || !drop) return;
+    if (stops.some((s) => !s.selection)) return;
     let cancelled = false;
     setQuoteLoading(true);
-    client.post('/booking/quote', { pickupLat: pickup.lat, pickupLng: pickup.lng, dropLat: drop.lat, dropLng: drop.lng, paymentMethod })
+    client.post('/booking/quote', { pickupLat: pickup.lat, pickupLng: pickup.lng, dropLat: drop.lat, dropLng: drop.lng, stops: stopsPayload(stops), paymentMethod })
       .then((r) => { if (!cancelled) setQuote(r.data); })
       .catch((err) => { if (!cancelled) setError(err.response?.data?.error || 'Could not calculate fare'); })
       .finally(() => { if (!cancelled) setQuoteLoading(false); });
     return () => { cancelled = true; };
-  }, [pickup, drop, paymentMethod]);
+  }, [pickup, drop, stops, paymentMethod]);
 
   const passengerReady = mode === 'search' ? !!selected : !!(newPassenger.name && newPassenger.mobile && newPassenger.address);
 
@@ -66,6 +70,7 @@ export default function DriverBookForPassenger() {
           }),
         pickupAddress: pickup.label, pickupLat: pickup.lat, pickupLng: pickup.lng,
         dropAddress: drop.label, dropLat: drop.lat, dropLng: drop.lng,
+        stops: stopsPayload(stops),
         scheduledFor,
         paymentMethod,
       });
@@ -137,6 +142,17 @@ export default function DriverBookForPassenger() {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
           <AddressAutocomplete label="Pickup address" onSelect={setPickup} required allowLocate />
+
+          {stops.map((stop, i) => (
+            <div key={stop.id} style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
+              <div style={{ flex: 1 }}>
+                <AddressAutocomplete label={`Stop ${i + 1}`} onSelect={(sel) => stopHandlers.update(stop.id, sel)} required />
+              </div>
+              <button type="button" className="btn danger" style={{ marginBottom: 1 }} onClick={() => stopHandlers.remove(stop.id)}>Remove</button>
+            </div>
+          ))}
+          <button type="button" className="btn secondary" style={{ alignSelf: 'flex-start' }} onClick={stopHandlers.add}>+ Add stop</button>
+
           <AddressAutocomplete label="Drop address" onSelect={setDrop} required />
           {(!pickup || !drop) && <p className="muted">Enter both pickup and drop address (pick a suggestion from the list) to see the fare and confirm.</p>}
           <ScheduleField onChange={setScheduledFor} />
@@ -161,7 +177,7 @@ export default function DriverBookForPassenger() {
               {quote.cardSurchargeAmount > 0 && (
                 <div className="muted">+ ${quote.cardSurchargeAmount.toFixed(2)} online payment surcharge = <strong>${quote.total.toFixed(2)} total</strong></div>
               )}
-              <div className="muted">{quote.distanceKm} km{scheduledFor && ` · scheduled for ${new Date(scheduledFor).toLocaleString()}`}</div>
+              <div className="muted">{quote.distanceKm} km{stops.length > 0 && ` · via ${stops.length} stop${stops.length > 1 ? 's' : ''}`}{scheduledFor && ` · scheduled for ${new Date(scheduledFor).toLocaleString()}`}</div>
               {error && <p className="error-text">{error}</p>}
               <button className="btn" style={{ marginTop: 8 }} onClick={confirmBooking} disabled={loading || !passengerReady}>
                 {loading ? 'Booking...' : 'Confirm booking'}

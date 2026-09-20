@@ -10,25 +10,7 @@ import StripePaymentModal from '../../components/StripePaymentModal';
 import Modal from '../../components/Modal';
 import { waLink, passengerToDriverMessage } from '../../utils/whatsapp';
 import WhatsAppIcon from '../../components/WhatsAppIcon';
-
-let stopIdCounter = 0;
-
-// Shared add/remove/update handlers for a stops array (each entry
-// {id, selection}, selection null until the AddressAutocomplete resolves
-// a real address) - used by both the booking form and the edit modal.
-function makeStopHandlers(setStopsState) {
-  return {
-    add: () => setStopsState((s) => [...s, { id: ++stopIdCounter, selection: null }]),
-    remove: (id) => setStopsState((s) => s.filter((stop) => stop.id !== id)),
-    update: (id, selection) => setStopsState((s) => s.map((stop) => (stop.id === id ? { ...stop, selection } : stop))),
-  };
-}
-
-// stops with a resolved address, in the {address, lat, lng} shape the
-// backend expects (see routes/booking.js cleanStops()).
-function stopsPayload(stopsState) {
-  return stopsState.filter((s) => s.selection).map((s) => ({ address: s.selection.label, lat: s.selection.lat, lng: s.selection.lng }));
-}
+import { newStopId, makeStopHandlers, stopsPayload } from '../../utils/stops';
 
 export default function PassengerDashboard() {
   const { bookings, fetchMine, createBooking } = useBookingStore();
@@ -120,7 +102,7 @@ export default function PassengerDashboard() {
     setEditingBooking(b);
     setEditPickup({ label: b.pickupAddress, lat: b.pickupLat, lng: b.pickupLng });
     setEditDrop({ label: b.dropAddress, lat: b.dropLat, lng: b.dropLng });
-    setEditStops((b.stops || []).map((s) => ({ id: ++stopIdCounter, selection: { label: s.address, lat: s.lat, lng: s.lng } })));
+    setEditStops((b.stops || []).map((s) => ({ id: newStopId(), selection: { label: s.address, lat: s.lat, lng: s.lng } })));
     setEditScheduledFor(b.scheduledFor || null);
     setEditPaymentMethod(b.paymentMethod);
     setEditVehicleType(b.requestedVehicleType || '');

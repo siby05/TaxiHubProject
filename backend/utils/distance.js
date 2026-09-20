@@ -59,4 +59,24 @@ function routeDistanceKm(pickup, drop, stops) {
   return Math.round(total * 100) / 100;
 }
 
-module.exports = { haversineKm, calculateFare, calculateTripFare, calculateCardSurcharge, routeDistanceKm };
+// Validates an optional multi-stop array: each entry needs numeric lat/lng
+// (address is free text, kept as-is). Returns an error string, or null if
+// ok - shared by every booking-creation route that accepts stops
+// (routes/booking.js and routes/driver.js's book-for-passenger).
+function invalidStopsError(stops) {
+  if (stops === undefined || stops === null) return null;
+  if (!Array.isArray(stops)) return 'stops must be an array';
+  if (stops.some((s) => typeof s?.lat !== 'number' || typeof s?.lng !== 'number')) {
+    return 'Each stop needs numeric lat/lng';
+  }
+  return null;
+}
+
+function cleanStops(stops) {
+  return (stops || []).map((s) => ({ address: s.address || '', lat: s.lat, lng: s.lng }));
+}
+
+module.exports = {
+  haversineKm, calculateFare, calculateTripFare, calculateCardSurcharge, routeDistanceKm,
+  invalidStopsError, cleanStops,
+};

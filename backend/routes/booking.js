@@ -7,22 +7,7 @@ const Driver = require('../models/Driver');
 const User = require('../models/User');
 const { auth, roleMiddleware } = require('../middleware/auth');
 const { emailService } = require('../services/emailService');
-const { haversineKm, calculateTripFare, calculateCardSurcharge, routeDistanceKm } = require('../utils/distance');
-
-// Validates an optional multi-stop array: each entry needs numeric lat/lng
-// (address is free text, kept as-is). Returns an error string, or null if ok.
-function invalidStopsError(stops) {
-  if (stops === undefined || stops === null) return null;
-  if (!Array.isArray(stops)) return 'stops must be an array';
-  if (stops.some((s) => typeof s?.lat !== 'number' || typeof s?.lng !== 'number')) {
-    return 'Each stop needs numeric lat/lng';
-  }
-  return null;
-}
-
-function cleanStops(stops) {
-  return (stops || []).map((s) => ({ address: s.address || '', lat: s.lat, lng: s.lng }));
-}
+const { haversineKm, calculateTripFare, calculateCardSurcharge, routeDistanceKm, invalidStopsError, cleanStops } = require('../utils/distance');
 const { VEHICLE_TYPES, isValidVehicleType } = require('../config/vehicleTypes');
 const { notifyUser, notifyAdmins } = require('../utils/notify');
 const { getPassengerRatingAvg } = require('../utils/ratings');
