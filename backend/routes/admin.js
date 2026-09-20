@@ -105,6 +105,25 @@ router.put('/users/:id/unblock-booking', async (req, res) => {
   res.json(publicUser(user));
 });
 
+// DELETE /api/admin/users/:id - permanently remove a passenger account.
+// Restricted to role:'passenger' - drivers have their own dedicated
+// DELETE /drivers/:id (which also removes the Driver record), and an
+// admin account isn't deletable through this route at all. Blocked while
+// they have a live trip, same reasoning as driver deletion below.
+router.delete('/users/:id', async (req, res) => {
+  const user = await User.findById(req.params.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  if (user.role !== 'passenger') return res.status(400).json({ error: 'Only passenger accounts can be deleted here' });
+
+  const liveTrips = await Booking.find({ passengerId: user._id, status: { $in: ['pending', 'accepted', 'in-progress'] } });
+  if (liveTrips.length > 0) {
+    return res.status(400).json({ error: `This passenger has ${liveTrips.length} live trip(s) - wait for them to complete or cancel first.` });
+  }
+
+  await User.deleteMany({ _id: user._id });
+  res.json({ message: 'Passenger deleted.' });
+});
+
 // POST /api/admin/drivers - admin-managed driver creation. Drivers can
 // also self-register with documents via POST /api/driver-signup; either
 // way they land as status:'pending' until an admin approves them here.

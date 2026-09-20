@@ -6,15 +6,6 @@ import { useAuthStore } from '../../store/authStore';
 
 const DOC_STATUS_CLASS = { verified: 'approved', rejected: 'rejected', pending: 'pending' };
 
-const NAV_ITEMS = [
-  { key: 'drivers', icon: '🚘', label: 'Drivers' },
-  { key: 'passengers', icon: '🧍', label: 'Passengers' },
-  { key: 'trips', icon: '🗺️', label: 'Trips' },
-  { key: 'settings', icon: '⚙️', label: 'Settings' },
-  { key: 'feedback', icon: '💬', label: 'Feedback' },
-  { key: 'enquiries', icon: '✉️', label: 'Enquiries' },
-];
-
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const { user, token, setSession } = useAuthStore();
@@ -133,6 +124,16 @@ export default function AdminDashboard() {
     load();
   }
 
+  async function deletePassenger(p) {
+    if (!window.confirm(`Permanently delete ${p.name}? This removes their account entirely and can't be undone.`)) return;
+    try {
+      await client.delete(`/admin/users/${p._id}`);
+      load();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not delete this passenger');
+    }
+  }
+
   async function viewQr(id) {
     setEditFor(null);
     if (qrFor?.id === id) { setQrFor(null); return; }
@@ -235,31 +236,42 @@ export default function AdminDashboard() {
     <div className="container">
       <h1>Admin dashboard</h1>
 
-      <div className="grid cols-4 dashboard-menu">
-        {NAV_ITEMS.map((item) => (
-          <div
-            key={item.key}
-            className={`card nav-card ${tab === item.key ? 'active' : ''}`}
-            onClick={() => setTab(item.key)}
-          >
-            <div className="nav-icon">{item.icon}</div>
-            <div>{item.label}</div>
-          </div>
-        ))}
-      </div>
-
       {stats && (
         <div className="grid cols-4">
-          <div className="card stat clickable" onClick={() => focusTab('passengers')}><div className="value">{stats.totalPassengers}</div><div className="label">Passengers</div></div>
-          <div className="card stat clickable" onClick={() => focusTab('drivers')}><div className="value">{stats.totalDrivers}</div><div className="label">Drivers</div></div>
-          <div className="card stat clickable" onClick={() => goToTrips('completed')}><div className="value">{stats.completedTrips}</div><div className="label">Completed trips</div></div>
-          <div className="card stat"><div className="value">${stats.totalRevenue.toFixed(2)}</div><div className="label">Revenue</div></div>
-          <div className="card stat clickable" onClick={() => goToTrips('pending')}><div className="value">{stats.pendingTrips}</div><div className="label">Pending trips</div></div>
-          <div className="card stat clickable" onClick={() => goToTrips('open')}><div className="value">{stats.openTrips}</div><div className="label">Open trips</div></div>
-          <div className="card stat clickable" onClick={() => focusTab('drivers')}><div className="value">{stats.pendingDriverApprovals}</div><div className="label">Pending approvals</div></div>
-          <div className="card stat clickable" onClick={() => navigate('/admin/complaints?status=open')}><div className="value">{stats.openComplaints}</div><div className="label">Open complaints</div></div>
-          <div className="card stat clickable" onClick={() => navigate('/admin/complaints?serious=true')}><div className="value">{stats.seriousComplaints}</div><div className="label">Serious complaints</div></div>
-          <div className="card stat"><Link to="/admin/complaints" className="btn">Manage complaints</Link></div>
+          <div className="card stat clickable" onClick={() => focusTab('passengers')}>
+            <div className="icon">🧍</div><div className="value">{stats.totalPassengers}</div><div className="label">Passengers</div>
+          </div>
+          <div className="card stat clickable" onClick={() => focusTab('drivers')}>
+            <div className="icon">🚘</div><div className="value">{stats.totalDrivers}</div><div className="label">Drivers</div>
+            {stats.pendingDriverApprovals > 0 && <div className="sub-note">{stats.pendingDriverApprovals} pending approval</div>}
+          </div>
+          <div className="card stat clickable" onClick={() => goToTrips('pending')}>
+            <div className="icon">⏳</div><div className="value">{stats.pendingTrips}</div><div className="label">Pending trips</div>
+          </div>
+          <div className="card stat clickable" onClick={() => goToTrips('open')}>
+            <div className="icon">🚗</div><div className="value">{stats.openTrips}</div><div className="label">Open trips</div>
+          </div>
+          <div className="card stat clickable" onClick={() => goToTrips('completed')}>
+            <div className="icon">✅</div><div className="value">{stats.completedTrips}</div><div className="label">Completed trips</div>
+          </div>
+          <div className="card stat">
+            <div className="icon">💰</div><div className="value">${stats.totalRevenue.toFixed(2)}</div><div className="label">Revenue</div>
+          </div>
+          <div className="card stat clickable" onClick={() => navigate('/admin/complaints?status=open')}>
+            <div className="icon">⚠️</div><div className="value">{stats.openComplaints}</div><div className="label">Open complaints</div>
+          </div>
+          <div className="card stat clickable" onClick={() => navigate('/admin/complaints?serious=true')}>
+            <div className="icon">🚨</div><div className="value">{stats.seriousComplaints}</div><div className="label">Serious complaints</div>
+          </div>
+          <div className="card stat clickable" onClick={() => focusTab('settings')}>
+            <div className="icon">⚙️</div><div className="label">Settings</div>
+          </div>
+          <div className="card stat clickable" onClick={() => focusTab('feedback')}>
+            <div className="icon">💬</div><div className="value">{feedback.length}</div><div className="label">Feedback</div>
+          </div>
+          <div className="card stat clickable" onClick={() => focusTab('enquiries')}>
+            <div className="icon">✉️</div><div className="value">{enquiries.length}</div><div className="label">Enquiries</div>
+          </div>
         </div>
       )}
 
@@ -476,13 +488,15 @@ export default function AdminDashboard() {
                 {p.bookingBlocked && <span className="badge cancelled">booking blocked</span>}
               </div>
               <div className="muted" style={{ marginTop: 8 }}>{p.totalBookings} bookings · {p.completedTrips} completed · {p.ratingAvg ? `⭐ ${p.ratingAvg}` : 'no rating yet'}</div>
-              <button
-                className={`btn ${p.bookingBlocked ? '' : 'danger'}`}
-                style={{ marginTop: 10 }}
-                onClick={() => toggleBookingBlock(p)}
-              >
-                {p.bookingBlocked ? 'Unblock booking' : 'Block from booking'}
-              </button>
+              <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+                <button
+                  className={`btn ${p.bookingBlocked ? '' : 'danger'}`}
+                  onClick={() => toggleBookingBlock(p)}
+                >
+                  {p.bookingBlocked ? 'Unblock booking' : 'Block from booking'}
+                </button>
+                <button className="btn danger" onClick={() => deletePassenger(p)}>Delete</button>
+              </div>
             </div>
           ))}
           {passengers.length === 0 && <p className="muted">No passengers yet.</p>}
