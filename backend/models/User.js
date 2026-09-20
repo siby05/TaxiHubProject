@@ -5,7 +5,10 @@ const { createModel } = require('../lib/createModel');
 // all), bookingBlocked (passenger-only: can still log in, but new bookings
 // are refused - see routes/booking.js), emailVerified, registeredByDriver
 // (true for a passenger a driver registered on the spot with a
-// placeholder password - see routes/driver.js POST /bookings), createdAt.
+// placeholder password - see routes/driver.js POST /bookings),
+// registeredViaQr (true for a passenger created by the guest QR-scan
+// booking flow, same placeholder-password idea - see routes/booking.js
+// POST /guest), createdAt.
 const User = createModel('User');
 
 module.exports = User;

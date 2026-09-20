@@ -4,6 +4,7 @@ import client from '../../api/client';
 import { useAuthStore } from '../../store/authStore';
 import AddressAutocomplete from '../../components/AddressAutocomplete';
 import ScheduleField from '../../components/ScheduleField';
+import PhoneField from '../../components/PhoneField';
 
 export default function BookDriver() {
   const { driverId } = useParams();
@@ -69,7 +70,95 @@ export default function BookDriver() {
     }
   }
 
+  // Guest checkout (no account) - the "scan the QR, book, done" path.
+  // Full registration (below) still exists side by side for anyone who
+  // wants an account to track trip history from.
+  const [guestName, setGuestName] = useState('');
+  const [guestMobile, setGuestMobile] = useState('');
+  const [guestEmail, setGuestEmail] = useState('');
+  const [guestAddress, setGuestAddress] = useState('');
+  const [guestReturning, setGuestReturning] = useState(false);
+  const [guestPickup, setGuestPickup] = useState(null);
+  const [guestDrop, setGuestDrop] = useState(null);
+  const [guestScheduledFor, setGuestScheduledFor] = useState(null);
+  const [guestPaymentMethod, setGuestPaymentMethod] = useState('cash');
+  const [guestQuote, setGuestQuote] = useState(null);
+  const [guestQuoteLoading, setGuestQuoteLoading] = useState(false);
+  const [guestError, setGuestError] = useState('');
+  const [guestLoading, setGuestLoading] = useState(false);
+  const [guestSuccess, setGuestSuccess] = useState(null);
+
+  // As soon as a full number is typed, check if we've seen them before -
+  // prefills name/email/address (never pickup/drop, those are per-trip)
+  // for a returning guest instead of making them retype everything.
+  useEffect(() => {
+    setGuestReturning(false);
+    if (!guestMobile || guestMobile.replace(/\D/g, '').length < 8) return;
+    let cancelled = false;
+    const t = setTimeout(() => {
+      client.get('/booking/guest-lookup', { params: { mobile: guestMobile } }).then((r) => {
+        if (cancelled || !r.data.found) return;
+        setGuestReturning(true);
+        setGuestName((v) => v || r.data.name || '');
+        setGuestEmail((v) => v || r.data.email || '');
+        setGuestAddress((v) => v || r.data.address || '');
+      }).catch(() => {});
+    }, 500);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [guestMobile]);
+
+  useEffect(() => {
+    setGuestQuote(null);
+    setGuestError('');
+    if (!guestPickup || !guestDrop) return;
+    let cancelled = false;
+    setGuestQuoteLoading(true);
+    client.post('/booking/guest-quote', { driverId, pickupLat: guestPickup.lat, pickupLng: guestPickup.lng, dropLat: guestDrop.lat, dropLng: guestDrop.lng, paymentMethod: guestPaymentMethod })
+      .then((r) => { if (!cancelled) setGuestQuote(r.data); })
+      .catch((err) => { if (!cancelled) setGuestError(err.response?.data?.error || 'Could not calculate fare'); })
+      .finally(() => { if (!cancelled) setGuestQuoteLoading(false); });
+    return () => { cancelled = true; };
+  }, [guestPickup, guestDrop, guestPaymentMethod, driverId]);
+
+  async function confirmGuestBooking() {
+    setGuestError('');
+    setGuestLoading(true);
+    try {
+      const { data } = await client.post('/booking/guest', {
+        driverId,
+        passengerName: guestName, passengerMobile: guestMobile, passengerEmail: guestEmail || undefined, passengerAddress: guestAddress || undefined,
+        pickupAddress: guestPickup.label, pickupLat: guestPickup.lat, pickupLng: guestPickup.lng,
+        dropAddress: guestDrop.label, dropLat: guestDrop.lat, dropLng: guestDrop.lng,
+        scheduledFor: guestScheduledFor,
+        paymentMethod: guestPaymentMethod,
+      });
+      setGuestSuccess(data);
+    } catch (err) {
+      setGuestError(err.response?.data?.error || 'Could not create booking');
+    } finally {
+      setGuestLoading(false);
+    }
+  }
+
   if (!user) {
+    if (guestSuccess) {
+      return (
+        <div className="container">
+          <div className="card" style={{ maxWidth: 460, margin: '40px auto', background: '#dcfce7' }}>
+            <h2 style={{ marginTop: 0 }}>Ride requested!</h2>
+            <p>{guestSuccess.bookingId} · {guestSuccess.pickupAddress} → {guestSuccess.dropAddress}</p>
+            <p><strong>Estimated fare: ${guestSuccess.estimatedFare}</strong></p>
+            <p className="muted">
+              {preview?.name || 'The driver'} has been notified and will accept shortly. We've saved your details
+              under {guestMobile} - next time you scan a car's QR code, just enter the same number and your details
+              fill in automatically.
+            </p>
+            <p className="muted">Want to track this trip and your history? <Link to="/register" state={{ from: `/book/${driverId}` }}>Create a free account</Link> using the same mobile number.</p>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="container">
         <div className="hero">
@@ -84,44 +173,83 @@ export default function BookDriver() {
           )}
           {preview && !preview.available && (
             <div className="card" style={{ background: '#fef3c7', maxWidth: 420, margin: '0 auto 20px', textAlign: 'left' }}>
-              ⚠️ <strong>{preview.name || 'This driver'}</strong> isn't currently taking bookings. Sign up or log in and we'll match you with an available driver instead.
+              ⚠️ <strong>{preview.name || 'This driver'}</strong> isn't currently taking bookings.
             </div>
           )}
+        </div>
 
-          <ul className="feature-list">
-            <li>✅ See your fare before you confirm</li>
-            <li>✅ Book this exact driver directly</li>
-            <li>✅ Admin-vetted, licensed drivers</li>
-            <li>✅ Live trip status the moment they accept</li>
-          </ul>
+        {preview && preview.available && (
+          <div className="card" style={{ maxWidth: 460, margin: '0 auto', textAlign: 'left' }}>
+            <h3 style={{ marginTop: 0 }}>Book now - no account needed</h3>
+            {guestReturning && <p className="muted" style={{ color: 'var(--success)' }}>👋 Welcome back - we've filled in your saved details.</p>}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <PhoneField label="Mobile" value={guestMobile} onChange={setGuestMobile} required hint="We'll remember your name and address for next time." />
+              <div><label>Full name</label><input value={guestName} onChange={(e) => setGuestName(e.target.value)} required /></div>
+              <div><label>Email (optional)</label><input type="email" value={guestEmail} onChange={(e) => setGuestEmail(e.target.value)} /></div>
+              <AddressAutocomplete label="Home address (optional)" defaultValue={guestAddress} onSelect={(r) => setGuestAddress(r ? r.label : '')} />
 
-          <div className="cta-row">
-            <Link className="btn" to="/register" state={{ from: `/book/${driverId}` }}>Create free account</Link>
-            <Link className="btn secondary" to="/login" state={{ from: `/book/${driverId}` }}>Log in to book</Link>
-          </div>
+              <AddressAutocomplete label="Pickup address" onSelect={setGuestPickup} required allowLocate />
+              <AddressAutocomplete label="Drop address" onSelect={setGuestDrop} required />
+              <ScheduleField onChange={setGuestScheduledFor} />
 
-          <div className="grid cols-2" style={{ marginTop: 32, textAlign: 'left' }}>
-            <div className="card">
-              <h3 style={{ marginTop: 0 }}>About EasyRide</h3>
-              <p className="muted">
-                EasyRide connects you directly with a driver by scanning the QR code in their vehicle - like flagging
-                a cab, but with an upfront price and a booking record. Every driver on the platform is added and
-                approved by an admin, holds a registered license and vehicle, and has a rating built from real
-                completed trips. If a driver isn't taking bookings right now, we match you with another available
-                one automatically instead of leaving you stuck.
-              </p>
-            </div>
-            <div className="card">
-              <h3 style={{ marginTop: 0 }}>How fares work</h3>
-              <p className="muted">
-                Every fare is a small base fare plus a per-kilometre rate set by the driver - no surge pricing, and
-                you always see the total before you confirm. What you pay is exactly what the driver charges; any
-                platform fee is billed to the driver separately and never added to your fare.
-              </p>
-              {preview && preview.available && (
-                <p className="muted">This driver: {preview.vehicleType} · ⭐ {preview.rating || 'new (no ratings yet)'}</p>
+              <div>
+                <label>Payment</label>
+                <div style={{ display: 'flex', gap: 16 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <input type="radio" style={{ width: 'auto' }} checked={guestPaymentMethod === 'cash'} onChange={() => setGuestPaymentMethod('cash')} /> Cash to driver
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <input type="radio" style={{ width: 'auto' }} checked={guestPaymentMethod === 'card'} onChange={() => setGuestPaymentMethod('card')} /> Pay online
+                  </label>
+                </div>
+                {guestPaymentMethod === 'card' && <p className="muted">Card payment needs an account so we can send a secure payment link - cash is available right now with no sign-up.</p>}
+              </div>
+
+              {guestQuoteLoading && <p className="muted">Calculating fare...</p>}
+              {guestQuote && !guestQuoteLoading && (
+                <div className="card fare-confirm">
+                  {guestQuote.requestedCashOnly && (
+                    <p className="muted" style={{ color: '#b45309' }}>⚠️ {guestQuote.requestedName || 'This driver'} is cash-only.</p>
+                  )}
+                  <strong>Estimated fare: ${guestQuote.estimatedFare.toFixed(2)}</strong>
+                  <div className="muted">{guestQuote.distanceKm} km{guestScheduledFor && ` · scheduled for ${new Date(guestScheduledFor).toLocaleString()}`}</div>
+                  {guestError && <p className="error-text">{guestError}</p>}
+                  <button className="btn" style={{ marginTop: 8 }}
+                    onClick={confirmGuestBooking}
+                    disabled={guestLoading || !guestName || !guestMobile || (guestPaymentMethod === 'card')}>
+                    {guestLoading ? 'Requesting...' : 'Confirm & request ride'}
+                  </button>
+                </div>
               )}
+              {!guestQuote && !guestQuoteLoading && guestError && <p className="error-text">{guestError}</p>}
             </div>
+          </div>
+        )}
+
+        <p className="muted" style={{ textAlign: 'center', marginTop: 20 }}>
+          Prefer an account to track your trip history? <Link to="/register" state={{ from: `/book/${driverId}` }}>Sign up</Link> or <Link to="/login" state={{ from: `/book/${driverId}` }}>log in</Link>.
+        </p>
+
+        <div className="grid cols-2" style={{ marginTop: 32, textAlign: 'left' }}>
+          <div className="card">
+            <h3 style={{ marginTop: 0 }}>About EasyRide</h3>
+            <p className="muted">
+              EasyRide connects you directly with a driver by scanning the QR code in their vehicle - like flagging
+              a cab, but with an upfront price and a booking record. Every driver on the platform is added and
+              approved by an admin, holds a registered license and vehicle, and has a rating built from real
+              completed trips.
+            </p>
+          </div>
+          <div className="card">
+            <h3 style={{ marginTop: 0 }}>How fares work</h3>
+            <p className="muted">
+              Every fare is a small base fare plus a per-kilometre rate set by the driver - no surge pricing, and
+              you always see the total before you confirm. What you pay is exactly what the driver charges; any
+              platform fee is billed to the driver separately and never added to your fare.
+            </p>
+            {preview && preview.available && (
+              <p className="muted">This driver: {preview.vehicleType} · ⭐ {preview.rating || 'new (no ratings yet)'}</p>
+            )}
           </div>
         </div>
       </div>

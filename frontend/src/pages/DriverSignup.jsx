@@ -24,9 +24,15 @@ export default function DriverSignup() {
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [vehicleTypes, setVehicleTypes] = useState([]);
+  const [signupEnabled, setSignupEnabled] = useState(true);
+  const [checkedEnabled, setCheckedEnabled] = useState(false);
 
   useEffect(() => {
     client.get('/booking/vehicle-types').then((r) => setVehicleTypes(r.data)).catch(() => {});
+    client.get('/driver-signup/enabled')
+      .then((r) => setSignupEnabled(r.data.enabled))
+      .catch(() => {})
+      .finally(() => setCheckedEnabled(true));
   }, []);
 
   function update(field, value) {
@@ -63,6 +69,18 @@ export default function DriverSignup() {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (checkedEnabled && !signupEnabled) {
+    return (
+      <div className="container">
+        <div className="card" style={{ maxWidth: 480, margin: '0 auto' }}>
+          <h2>Driver sign-up is closed</h2>
+          <p className="muted">We're not accepting new driver applications right now. Please check back later.</p>
+          <Link className="btn secondary" to="/">Back home</Link>
+        </div>
+      </div>
+    );
   }
 
   if (submitted) {

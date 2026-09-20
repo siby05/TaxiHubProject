@@ -1,4 +1,6 @@
 const express = require('express');
+const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const router = express.Router();
 const Booking = require('../models/Booking');
 const Driver = require('../models/Driver');
@@ -116,6 +118,25 @@ async function alertDriverOfBooking(req, driverUserId, booking, passengerName, p
 // and signup forms can render the same list the backend validates against.
 router.get('/vehicle-types', (req, res) => res.json(VEHICLE_TYPES));
 
+// GET /api/booking/guest-lookup?mobile= - public. As a returning guest
+// types their phone number on the QR landing page (see POST /guest below),
+// this looks them up so their name/email/address can auto-fill - saves a
+// repeat visitor from retyping their details every time they scan a car's
+// QR code. Deliberately returns only name/email/address, never pickup/drop
+// (those are per-trip, not part of a person's saved details) and never an
+// account id or anything that would let this be used to enumerate users.
+router.get('/guest-lookup', async (req, res) => {
+  const mobile = (req.query.mobile || '').trim();
+  if (!mobile) return res.json({ found: false });
+  const existing = await User.findOne({ role: 'passenger', mobile });
+  if (!existing) return res.json({ found: false });
+  // A guest who never gave a real email got a generated no-email.easyride.local
+  // placeholder (see POST /guest below) - never surface that as if it were
+  // a saved address.
+  const realEmail = existing.email && !existing.email.endsWith('@no-email.easyride.local') ? existing.email : null;
+  res.json({ found: true, name: existing.name, email: realEmail, address: existing.address || null });
+});
+
 // GET /api/booking/driver-preview/:id - unauthenticated, minimal driver info
 // for the QR landing page shown before a scanning passenger has signed in.
 router.get('/driver-preview/:id', async (req, res) => {
@@ -143,6 +164,45 @@ router.get('/driver-info/:id', auth, roleMiddleware(['passenger']), async (req, 
     ratePerKm: driver.ratePerKm,
     rating: driver.rating,
   });
+});
+
+// Shared by POST /quote and POST /guest-quote: distance + the same
+// three-way fare floor (per-km / minimum / range price) as an actual
+// booking would get, plus the card surcharge when relevant.
+function buildQuote(distanceKm, ratePerKm, paymentMethod) {
+  const settings = getSettings();
+  const estimatedFare = calculateTripFare(distanceKm, ratePerKm, settings);
+  const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(estimatedFare, settings.cardSurchargePercent) : 0;
+  return {
+    distanceKm, estimatedFare, cardSurchargePercent: settings.cardSurchargePercent, cardSurchargeAmount,
+    total: Math.round((estimatedFare + cardSurchargeAmount) * 100) / 100,
+  };
+}
+
+// POST /api/booking/guest-quote - public counterpart to /quote below, for
+// the QR-scan guest checkout (see POST /guest) which has no logged-in user
+// to authenticate. driverId is required - a guest is always quoting a
+// specific scanned driver, never an open auto-match.
+router.post('/guest-quote', async (req, res) => {
+  try {
+    const { pickupLat, pickupLng, dropLat, dropLng, driverId, paymentMethod, vehicleType } = req.body;
+    if (!driverId) return res.status(400).json({ error: 'driverId is required' });
+    if (pickupLat == null || pickupLng == null || dropLat == null || dropLng == null) {
+      return res.status(400).json({ error: 'pickup and drop coordinates are required' });
+    }
+    const resolved = await resolveDriver(driverId, paymentMethod, vehicleType);
+    if (!resolved.driver) {
+      return res.status(404).json({ error: noDriverError(resolved.requestedUnavailable, resolved.requestedName, resolved.requestedCashOnly, vehicleType), requestedUnavailable: resolved.requestedUnavailable, requestedCashOnly: resolved.requestedCashOnly });
+    }
+    const distanceKm = Math.round(haversineKm(pickupLat, pickupLng, dropLat, dropLng) * 100) / 100;
+    res.json({
+      ...buildQuote(distanceKm, resolved.driver.ratePerKm, paymentMethod),
+      usedFallback: resolved.usedFallback, requestedUnavailable: resolved.requestedUnavailable,
+      requestedCashOnly: resolved.requestedCashOnly, requestedName: resolved.requestedName,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // POST /api/booking/quote - preview distance/fare before confirming, so the
@@ -284,6 +344,115 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
     }
 
     res.status(201).json({ ...booking, usedFallback, requestedUnavailable, requestedCashOnly, requestedName, broadcast: !targetDriverId });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/booking/guest - public, no account/login required. For the QR
+// landing page: a passenger who scanned a driver's code can complete a
+// booking straight away with just their name/mobile (email optional)
+// instead of going through full registration first - registration still
+// exists and still works (see routes/auth.js /register), this is just a
+// faster path for the QR-scan moment specifically. driverId is required
+// (this is always a direct hail to the scanned driver, with the same
+// fallback-to-another-driver behaviour as POST / above if they're no
+// longer available).
+//
+// A returning guest is matched by mobile number and reused rather than
+// creating a duplicate account each visit - see GET /guest-lookup, which
+// the frontend calls as soon as they type their number, to prefill name/
+// email/address (not pickup/drop - those are always entered fresh). No
+// session/token is issued; this intentionally stays a one-off guest
+// checkout rather than logging them in.
+router.post('/guest', async (req, res) => {
+  try {
+    const {
+      driverId, passengerName, passengerMobile, passengerEmail, passengerAddress,
+      pickupAddress, pickupLat, pickupLng, dropAddress, dropLat, dropLng, scheduledFor, paymentMethod, vehicleType,
+    } = req.body;
+
+    if (!driverId) return res.status(400).json({ error: 'driverId is required' });
+    if (!passengerName || !passengerMobile) return res.status(400).json({ error: 'passengerName and passengerMobile are required' });
+    if (!pickupAddress || !dropAddress || pickupLat == null || dropLat == null) {
+      return res.status(400).json({ error: 'pickupAddress, dropAddress and lat/lng for both are required' });
+    }
+    if (scheduledFor && new Date(scheduledFor) <= new Date()) {
+      return res.status(400).json({ error: 'scheduledFor must be a time in the future' });
+    }
+    if (paymentMethod && !['cash', 'card'].includes(paymentMethod)) {
+      return res.status(400).json({ error: 'paymentMethod must be "cash" or "card"' });
+    }
+    if (vehicleType && !isValidVehicleType(vehicleType)) {
+      return res.status(400).json({ error: 'Unknown vehicle type' });
+    }
+
+    let passenger = await User.findOne({ role: 'passenger', mobile: passengerMobile });
+    if (passenger) {
+      // Keep their saved details current if this visit gave new ones,
+      // without clobbering a previously-saved address with a blank.
+      const patch = {};
+      if (passengerName && passengerName !== passenger.name) patch.name = passengerName;
+      if (passengerAddress && passengerAddress !== passenger.address) patch.address = passengerAddress;
+      if (Object.keys(patch).length) passenger = await User.findByIdAndUpdate(passenger._id, patch);
+    } else {
+      const placeholderPassword = await bcrypt.hash(crypto.randomBytes(16).toString('hex'), 10);
+      passenger = await User.create({
+        name: passengerName,
+        email: passengerEmail ? passengerEmail.toLowerCase() : `guest-${crypto.randomBytes(4).toString('hex')}@no-email.easyride.local`,
+        password: placeholderPassword,
+        mobile: passengerMobile,
+        address: passengerAddress || null,
+        role: 'passenger',
+        isActive: true,
+        emailVerified: false,
+        registeredViaQr: true,
+      });
+    }
+
+    const distanceKm = Math.round(haversineKm(pickupLat, pickupLng, dropLat, dropLng) * 100) / 100;
+    const passengerRatingAvg = await getPassengerRatingAvg(passenger._id);
+
+    const resolved = await resolveDriver(driverId, paymentMethod, vehicleType);
+    if (!resolved.driver) {
+      return res.status(404).json({ error: noDriverError(resolved.requestedUnavailable, resolved.requestedName, resolved.requestedCashOnly, vehicleType), requestedUnavailable: resolved.requestedUnavailable, requestedCashOnly: resolved.requestedCashOnly });
+    }
+
+    const bookingSettings = getSettings();
+    const estimatedFare = calculateTripFare(distanceKm, resolved.driver.ratePerKm, bookingSettings);
+    const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(estimatedFare, bookingSettings.cardSurchargePercent) : 0;
+
+    const booking = await Booking.create({
+      passengerId: passenger._id,
+      driverId: resolved.driver._id,
+      pickupAddress,
+      pickupLat,
+      pickupLng,
+      dropAddress,
+      dropLat,
+      dropLng,
+      distanceKm,
+      estimatedFare,
+      cardSurchargeAmount,
+      requestedVehicleType: vehicleType || null,
+      status: 'pending',
+      paymentMethod: paymentMethod || 'cash',
+      paymentStatus: 'unpaid',
+      declinedBy: [],
+      requestedAt: new Date(),
+      scheduledFor: scheduledFor ? new Date(scheduledFor) : null,
+    });
+
+    await emailService.sendBookingConfirmation(passenger.email, booking);
+    await alertDriverOfBooking(req, resolved.driver.userId, booking, passenger.name, passengerRatingAvg);
+
+    res.status(201).json({
+      ...booking,
+      usedFallback: resolved.usedFallback,
+      requestedUnavailable: resolved.requestedUnavailable,
+      requestedCashOnly: resolved.requestedCashOnly,
+      requestedName: resolved.requestedName,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

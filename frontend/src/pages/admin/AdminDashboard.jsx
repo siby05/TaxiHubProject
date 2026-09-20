@@ -517,6 +517,22 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {tab === 'settings' && settings && (
+        <div className="card" style={{ maxWidth: 480 }}>
+          <h3>Driver sign-up</h3>
+          <p className="muted">Turn off to hide "Drive with us" from the site and stop new applications - existing drivers are unaffected.</p>
+          <form onSubmit={saveSettings}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input type="checkbox" style={{ width: 'auto' }} checked={settings.driverSignupEnabled !== false}
+                onChange={(e) => setSettings((s) => ({ ...s, driverSignupEnabled: e.target.checked }))} />
+              Accepting new driver applications
+            </label>
+            {settingsMsg && <p className="muted">{settingsMsg}</p>}
+            <button className="btn" style={{ marginTop: 12 }}>Save</button>
+          </form>
+        </div>
+      )}
+
       {tab === 'feedback' && (
         <div className="card">
           <h3>Feedback submissions</h3>

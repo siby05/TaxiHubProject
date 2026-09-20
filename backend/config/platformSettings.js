@@ -30,6 +30,12 @@ let settings = {
   // whichever of (distance x rate + base fare), minimumFare, and the
   // matching range price is highest.
   fareRanges: [],
+  // Whether "Drive with us" / driver self-signup is open right now - an
+  // admin can close it (e.g. the driver roster is full, or applications
+  // need to pause) without touching code. Hidden from the public nav and
+  // blocked server-side (see routes/driverSignup.js) when false, so it
+  // can't be reached by a stale bookmark either.
+  driverSignupEnabled: true,
 };
 
 function getSettings() {

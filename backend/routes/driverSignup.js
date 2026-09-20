@@ -9,6 +9,7 @@ const { notifyAdmins } = require('../utils/notify');
 const { isValidVehicleType } = require('../config/vehicleTypes');
 const { DRIVER_DOCUMENTS } = require('../config/driverDocuments');
 const { documentUpload, documentUrl } = require('../utils/documentUpload');
+const { getSettings } = require('../config/platformSettings');
 
 function signToken(user) {
   return jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, {
@@ -21,6 +22,12 @@ async function isLicenseTaken(licenseNumber) {
   return drivers.some((d) => d.licenseNumber?.toLowerCase() === licenseNumber.toLowerCase());
 }
 
+// GET /api/driver-signup/enabled - public, so the pre-login nav can decide
+// whether to show "Drive with us" at all, and the signup page itself can
+// bail out early with a clear message rather than let someone fill in the
+// whole form only to be rejected by the POST below.
+router.get('/enabled', (req, res) => res.json({ enabled: getSettings().driverSignupEnabled !== false }));
+
 // POST /api/driver-signup - public driver self-registration with mandatory
 // document uploads (license, TSL, CoF, rego). Lands as status:'pending',
 // same as an admin-created driver - an admin still has to approve them
@@ -28,6 +35,9 @@ async function isLicenseTaken(licenseNumber) {
 // acceptance (see frontend/src/pages/DriverSignup.jsx for the popup).
 router.post(
   '/',
+  (req, res, next) => (getSettings().driverSignupEnabled === false
+    ? res.status(403).json({ error: 'Driver sign-up is closed right now. Please check back later.' })
+    : next()),
   documentUpload.fields(DRIVER_DOCUMENTS.map((d) => ({ name: d.field, maxCount: 1 }))),
   async (req, res) => {
     try {

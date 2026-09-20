@@ -1,11 +1,18 @@
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import client from '../api/client';
 import NotificationBell from './NotificationBell';
 import Logo from './Logo';
 
 export default function Navbar() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
+  const [driverSignupEnabled, setDriverSignupEnabled] = useState(true);
+
+  useEffect(() => {
+    client.get('/driver-signup/enabled').then((r) => setDriverSignupEnabled(r.data.enabled)).catch(() => {});
+  }, []);
 
   const home = user?.role === 'admin' ? '/admin' : user?.role === 'driver' ? '/driver' : '/passenger';
 
@@ -50,7 +57,7 @@ export default function Navbar() {
             <Link to="/about">About</Link>
             <Link to="/login">Log in</Link>
             <Link to="/register">Sign up</Link>
-            <Link to="/driver-signup">Drive with us</Link>
+            {driverSignupEnabled && <Link to="/driver-signup">Drive with us</Link>}
           </>
         )}
       </nav>
