@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../api/client';
 
@@ -47,6 +47,12 @@ function EnquiryForm() {
 }
 
 export default function Home() {
+  const [driverSignupEnabled, setDriverSignupEnabled] = useState(true);
+
+  useEffect(() => {
+    client.get('/driver-signup/enabled').then((r) => setDriverSignupEnabled(r.data.enabled)).catch(() => {});
+  }, []);
+
   return (
     <div>
       <div className="hero-band" style={{ backgroundImage: `linear-gradient(rgba(7,26,44,0.82), rgba(7,26,44,0.92)), url(${HERO_IMAGE})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
@@ -59,7 +65,7 @@ export default function Home() {
           </p>
           <div className="cta-row">
             <Link className="btn hero-primary" to="/register">Book a ride - sign up</Link>
-            <Link className="btn hero-secondary" to="/driver-signup">Drive with us</Link>
+            {driverSignupEnabled && <Link className="btn hero-secondary" to="/driver-signup">Drive with us</Link>}
           </div>
           <div className="trust-strip">
             <span>✅ Admin-approved drivers</span>
@@ -194,7 +200,9 @@ export default function Home() {
                 approves your account before you go live. Set your own rate, your own weekly schedule, and get notified
                 the moment a trip comes in.
               </p>
-              <Link className="btn secondary" to="/driver-signup">Apply to drive</Link>
+              {driverSignupEnabled
+                ? <Link className="btn secondary" to="/driver-signup">Apply to drive</Link>
+                : <p className="muted">We're not accepting new driver applications right now.</p>}
             </div>
           </div>
           <p className="muted" style={{ textAlign: 'center', marginTop: 28 }}>
