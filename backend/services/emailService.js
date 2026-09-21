@@ -192,14 +192,19 @@ function buildInvoiceHtml(booking, passenger, driver, driverName) {
 
   return `
 <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:560px;margin:0 auto;background:#ffffff;">
-  <div style="background:#0B2942;padding:20px 32px;border-radius:10px 10px 0 0;">
+  <div style="background:#0B2942;padding:24px 32px;border-radius:10px 10px 0 0;">
     <table style="border-collapse:collapse;" cellpadding="0" cellspacing="0" role="presentation">
       <tr>
-        <td style="vertical-align:middle;">
-          <!-- Same public/logo.png the website's navbar/favicon use (see frontend/src/components/Logo.jsx) - the wordmark is baked into the image, so no separate "EasyRide" text is rendered alongside it. Referenced by URL rather than attached/embedded, so the email stays light; degrades to just the tagline line below if images are blocked. -->
-          <img src="${appUrl('/logo.png')}" width="48" height="48" alt="EasyRide" style="display:block;border-radius:50%;" />
+        <td style="width:40px;vertical-align:middle;">
+          <!-- CSS-only badge (no external/attached image - the one asset guaranteed to render in every mail client, including ones that block remote images by default), matching frontend/src/components/Logo.jsx's chevron-in-a-badge mark. -->
+          <div style="width:34px;height:34px;background:#38BDF8;border-radius:9px;text-align:center;line-height:34px;">
+            <span style="color:#ffffff;font-size:18px;font-weight:800;font-family:Georgia,serif;">&rsaquo;</span>
+          </div>
         </td>
-        <td style="vertical-align:middle;padding-left:12px;color:#94a3b8;font-size:11px;letter-spacing:0.08em;">PREMIUM TRANSPORT<br/>NEW PLYMOUTH, NZ</td>
+        <td style="vertical-align:middle;padding-left:10px;">
+          <span style="font-size:22px;font-weight:800;"><span style="color:#ffffff;">Easy</span><span style="color:#38BDF8;">Ride</span></span>
+          <div style="color:#94a3b8;font-size:11px;letter-spacing:0.08em;margin-top:2px;">PREMIUM TRANSPORT · NEW PLYMOUTH, NZ</div>
+        </td>
       </tr>
     </table>
   </div>
