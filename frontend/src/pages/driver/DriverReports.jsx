@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import client from '../../api/client';
+import { formatNzDateTime } from '../../utils/nzTime';
 
 export default function DriverReports() {
   const [trips, setTrips] = useState([]);
@@ -65,7 +66,7 @@ export default function DriverReports() {
                   <td>{t.passengerId?.name}</td>
                   <td>${t.actualFare ?? t.estimatedFare}</td>
                   <td><span className={`badge ${t.status}`}>{t.status}</span></td>
-                  <td className="muted">{new Date(t.createdAt).toLocaleString()}</td>
+                  <td className="muted">{formatNzDateTime(t.createdAt)}</td>
                 </tr>
               ))}
               {filteredTrips.length === 0 && <tr><td colSpan={5} className="muted">No trips match this filter.</td></tr>}
@@ -85,7 +86,7 @@ export default function DriverReports() {
                   <td>{c.complainantId?.name}</td>
                   <td className="muted">{c.complaintType?.replace(/-/g, ' ')}</td>
                   <td><span className={`badge ${c.status}`}>{c.status}</span></td>
-                  <td className="muted">{new Date(c.createdAt).toLocaleString()}</td>
+                  <td className="muted">{formatNzDateTime(c.createdAt)}</td>
                 </tr>
               ))}
               {filteredComplaints.length === 0 && <tr><td colSpan={5} className="muted">No complaints match this filter.</td></tr>}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import client from '../../api/client';
+import { formatNzDate } from '../../utils/nzTime';
 
 export default function DriverComplaints() {
   const [complaints, setComplaints] = useState([]);
@@ -30,7 +31,7 @@ export default function DriverComplaints() {
               <strong>{c.complaintId}</strong>
               <span className={`badge ${c.status}`}>{c.status}</span>
             </div>
-            <p className="muted">{c.complaintType.replace(/-/g, ' ')} · {new Date(c.incidentDate).toLocaleDateString()}</p>
+            <p className="muted">{c.complaintType.replace(/-/g, ' ')} · {formatNzDate(c.incidentDate)}</p>
             <p>{c.description}</p>
 
             {c.driverComments?.map((dc, i) => (

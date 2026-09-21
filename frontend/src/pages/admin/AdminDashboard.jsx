@@ -4,6 +4,7 @@ import client, { fileOrigin } from '../../api/client';
 import PhoneField from '../../components/PhoneField';
 import { useAuthStore } from '../../store/authStore';
 import { waLink } from '../../utils/whatsapp';
+import { formatNzDate, formatNzDateTime } from '../../utils/nzTime';
 
 const DOC_STATUS_CLASS = { verified: 'approved', rejected: 'rejected', pending: 'pending' };
 
@@ -371,7 +372,7 @@ export default function AdminDashboard() {
                   {docsFor === d._id && (
                     <tr>
                       <td colSpan={5} style={{ padding: 16 }}>
-                        <strong>Documents</strong> (self-signup on {d.termsAcceptedAt ? new Date(d.termsAcceptedAt).toLocaleDateString() : '-'}, T&amp;Cs accepted)
+                        <strong>Documents</strong> (self-signup on {d.termsAcceptedAt ? formatNzDate(d.termsAcceptedAt) : '-'}, T&amp;Cs accepted)
                         <p className="muted" style={{ marginTop: 4 }}>Every document must be verified before this driver can be approved.</p>
                         {docError && <p className="error-text">{docError}</p>}
                         <table>
@@ -383,7 +384,7 @@ export default function AdminDashboard() {
                                   <td>
                                     <strong>{doc.label}</strong>
                                     {record?.status === 'rejected' && <div className="error-text">Rejected: {record.rejectionReason}</div>}
-                                    {record?.uploadedAt && <div className="muted">Uploaded {new Date(record.uploadedAt).toLocaleDateString()}</div>}
+                                    {record?.uploadedAt && <div className="muted">Uploaded {formatNzDate(record.uploadedAt)}</div>}
                                   </td>
                                   <td><span className={`badge ${DOC_STATUS_CLASS[record?.status] || 'closed'}`}>{record?.status || 'not supplied'}</span></td>
                                   <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -566,13 +567,13 @@ export default function AdminDashboard() {
                     <td>
                       <div className="muted">{t.bookingId}</div>
                       {t.pickupAddress}{t.stops?.map((s, i) => <span key={i}> → {s.address}</span>)} → {t.dropAddress}
-                      {t.scheduledFor && <div className="muted">Scheduled: {new Date(t.scheduledFor).toLocaleString()}</div>}
+                      {t.scheduledFor && <div className="muted">Scheduled: {formatNzDateTime(t.scheduledFor)}</div>}
                     </td>
                     <td>{t.passengerId?.name}{t.passengerRatingAvg ? <div className="muted">⭐ {t.passengerRatingAvg}</div> : ''}</td>
                     <td>{t.driverId?.userId?.name || '-'}</td>
                     <td>${t.actualFare ?? t.estimatedFare}{t.rating && <div className="muted">⭐ {t.rating} (driver)</div>}</td>
                     <td><span className={`badge ${t.status}`}>{t.status}</span></td>
-                    <td className="muted">{new Date(t.createdAt).toLocaleString()}</td>
+                    <td className="muted">{formatNzDateTime(t.createdAt)}</td>
                   </tr>
                 ))}
                 {filteredTrips.length === 0 && <tr><td colSpan={6} className="muted">No trips match this filter.</td></tr>}
@@ -753,7 +754,7 @@ export default function AdminDashboard() {
           </form>
           <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
             <p className="muted" style={{ marginTop: 0 }}>
-              {settings.lastBackupAt ? `Last backup: ${new Date(settings.lastBackupAt).toLocaleString()}` : 'No backup has been sent yet.'}
+              {settings.lastBackupAt ? `Last backup: ${formatNzDateTime(settings.lastBackupAt)}` : 'No backup has been sent yet.'}
             </p>
             <button type="button" className="btn secondary" onClick={runBackupNow}>Run backup now</button>
             {backupMsg && <p className="muted" style={{ marginTop: 8 }}>{backupMsg}</p>}
@@ -796,7 +797,7 @@ export default function AdminDashboard() {
                     {f.rating ? <span> · {'★'.repeat(f.rating)}{'☆'.repeat(5 - f.rating)}</span> : ''}
                     <div className="muted">{f.message}</div>
                   </td>
-                  <td className="muted">{new Date(f.createdAt).toLocaleString()}</td>
+                  <td className="muted">{formatNzDateTime(f.createdAt)}</td>
                 </tr>
               ))}
             </tbody>
@@ -818,7 +819,7 @@ export default function AdminDashboard() {
                     <span className="muted"> · {e.email}{e.phone ? ` · ${e.phone}` : ''}</span>
                     <div className="muted">{e.message}</div>
                   </td>
-                  <td className="muted">{new Date(e.createdAt).toLocaleString()}</td>
+                  <td className="muted">{formatNzDateTime(e.createdAt)}</td>
                 </tr>
               ))}
             </tbody>

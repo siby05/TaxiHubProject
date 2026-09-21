@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import client from '../../api/client';
 import { useSocket } from '../../hooks/useSocket';
+import { formatNzDate } from '../../utils/nzTime';
 
 const STATUSES = ['open', 'investigating', 'resolved', 'closed', 'escalated'];
 
@@ -82,7 +83,7 @@ export default function AdminComplaints() {
             </div>
             <p className="muted">{c.complaintType.replace(/-/g, ' ')} · vs {c.driverName} ({c.vehicleNumber})</p>
             <p>{c.description}</p>
-            <p className="muted">By {c.complainantId?.name} on {new Date(c.incidentDate).toLocaleDateString()} at {c.incidentLocation}</p>
+            <p className="muted">By {c.complainantId?.name} on {formatNzDate(c.incidentDate)} at {c.incidentLocation}</p>
 
             {c.driverComments?.map((dc, i) => <p key={i} className="muted"><strong>Driver:</strong> {dc.comment}</p>)}
             {c.adminNotes?.map((n, i) => <p key={i} className="muted"><strong>Internal note ({n.noteByName}):</strong> {n.note}</p>)}

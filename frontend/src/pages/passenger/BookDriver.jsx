@@ -7,6 +7,7 @@ import ScheduleField from '../../components/ScheduleField';
 import PhoneField from '../../components/PhoneField';
 import { makeStopHandlers, stopsPayload } from '../../utils/stops';
 import ContactAdmin from '../../components/ContactAdmin';
+import { formatNzDateTime } from '../../utils/nzTime';
 
 export default function BookDriver() {
   const { driverId } = useParams();
@@ -260,7 +261,7 @@ export default function BookDriver() {
                     <p className="muted" style={{ color: '#b45309' }}>⚠️ {guestQuote.requestedName || 'This driver'} is cash-only.</p>
                   )}
                   <strong>Estimated fare: ${guestQuote.estimatedFare.toFixed(2)}</strong>
-                  <div className="muted">{guestQuote.distanceKm} km{guestStops.length > 0 && ` · via ${guestStops.length} stop${guestStops.length > 1 ? 's' : ''}`}{guestScheduledFor && ` · scheduled for ${new Date(guestScheduledFor).toLocaleString()}`}</div>
+                  <div className="muted">{guestQuote.distanceKm} km{guestStops.length > 0 && ` · via ${guestStops.length} stop${guestStops.length > 1 ? 's' : ''}`}{guestScheduledFor && ` · scheduled for ${formatNzDateTime(guestScheduledFor)}`}</div>
                   {guestError && <p className="error-text">{guestError}</p>}
                   <button className="btn" style={{ marginTop: 8 }}
                     onClick={confirmGuestBooking}
@@ -274,7 +275,7 @@ export default function BookDriver() {
                   <p className="error-text">{guestError}</p>
                   {guestNextAvailable && (
                     <p className="muted">
-                      Next available: <strong>{new Date(guestNextAvailable).toLocaleString()}</strong> - toggle
+                      Next available: <strong>{formatNzDateTime(guestNextAvailable)}</strong> - toggle
                       "Schedule for later" above and enter this time instead.
                     </p>
                   )}
@@ -382,7 +383,7 @@ export default function BookDriver() {
               {quote.cardSurchargeAmount > 0 && (
                 <div className="muted">+ ${quote.cardSurchargeAmount.toFixed(2)} online payment surcharge = <strong>${quote.total.toFixed(2)} total</strong></div>
               )}
-              <div className="muted">{quote.distanceKm} km{stops.length > 0 && ` · via ${stops.length} stop${stops.length > 1 ? 's' : ''}`}{scheduledFor && ` · scheduled for ${new Date(scheduledFor).toLocaleString()}`}</div>
+              <div className="muted">{quote.distanceKm} km{stops.length > 0 && ` · via ${stops.length} stop${stops.length > 1 ? 's' : ''}`}{scheduledFor && ` · scheduled for ${formatNzDateTime(scheduledFor)}`}</div>
               {error && <p className="error-text">{error}</p>}
               <button className="btn" style={{ marginTop: 8 }} onClick={confirmBooking} disabled={loading || !driver}>
                 {loading ? 'Requesting...' : effectiveDriverId ? 'Confirm & request this driver' : 'Confirm & request ride'}
@@ -394,7 +395,7 @@ export default function BookDriver() {
             <div>
               <p className="error-text">{error}</p>
               {nextAvailableTime && (
-                <p className="muted">Next available: <strong>{new Date(nextAvailableTime).toLocaleString()}</strong> - toggle "Schedule for later" above and enter this time instead.</p>
+                <p className="muted">Next available: <strong>{formatNzDateTime(nextAvailableTime)}</strong> - toggle "Schedule for later" above and enter this time instead.</p>
               )}
               <ContactAdmin context="booking this driver" />
             </div>

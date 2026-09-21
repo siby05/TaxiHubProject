@@ -7,6 +7,7 @@
 const dns = require('dns');
 const { promisify } = require('util');
 const { getSettings } = require('../config/platformSettings');
+const { formatNzDateTime, formatNzDate } = require('../utils/nzTime');
 
 const resolve4 = promisify(dns.resolve4);
 const smtpConfigured = !!(process.env.SMTP_HOST && process.env.SMTP_USER);
@@ -124,6 +125,14 @@ function adminInbox() {
   return getSettings().adminEmail || process.env.EMAIL_FROM;
 }
 
+// Same FRONTEND_URL every other deep link in the app uses (see
+// utils/qrcode.js, routes/auth.js's reset link) - lets a driver tap
+// straight into the app from a trip-notification email instead of having
+// to find it themselves.
+function appUrl(path = '/driver') {
+  return `${(process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '')}${path}`;
+}
+
 // "Toyota Corolla (Comfort) · ABC123" - brand/model are optional (older
 // driver profiles may not have set them yet via PUT /api/driver/profile),
 // so this degrades to just "Comfort · ABC123" when they're missing.
@@ -156,13 +165,13 @@ const emailService = {
     send(to, `Booking confirmed (${booking.bookingId})`, `Your ride from ${booking.pickupAddress} to ${booking.dropAddress} has been requested. Estimated fare: $${booking.estimatedFare}.${driverLine(driver, driverName)}`),
 
   sendDriverBookingAlert: (to, booking) =>
-    send(to, `New ride request (${booking.bookingId})`, `New booking from ${booking.pickupAddress} to ${booking.dropAddress}. You have 30 seconds to accept in-app.`),
+    send(to, `New ride request (${booking.bookingId})`, `New booking from ${booking.pickupAddress} to ${booking.dropAddress}. You have 30 seconds to accept in-app.\nOpen the app: ${appUrl()}`),
 
   // A QR-scan direct hail is auto-accepted (see routes/booking.js) - no
   // accept/decline step, so the driver is told it's already theirs
   // rather than asked to respond.
   sendDriverTripAssigned: (to, booking) =>
-    send(to, `New confirmed trip (${booking.bookingId})`, `A passenger scanned your QR code and booked you directly - already confirmed, head to ${booking.pickupAddress} for pickup.`),
+    send(to, `New confirmed trip (${booking.bookingId})`, `A passenger scanned your QR code and booked you directly - already confirmed, head to ${booking.pickupAddress} for pickup.\nOpen the app: ${appUrl()}`),
 
   sendBookingAccepted: (to, booking, driver, driverName) =>
     send(to, `Driver accepted your ride (${booking.bookingId})`, `Your driver has accepted booking ${booking.bookingId} and is on the way.${driverLine(driver, driverName)}`),
@@ -176,7 +185,7 @@ const emailService = {
   sendBookingCancelledByDriver: (to, booking, reason) =>
     send(to, `Your driver cancelled trip ${booking.bookingId}`,
       `Your trip from ${booking.pickupAddress} to ${booking.dropAddress} was cancelled by the driver.` +
-      `${reason ? `\nReason: ${reason}` : ''}\nPlease rebook in the app - you'll be matched with another driver.`),
+      `${reason ? `\nReason: ${reason}` : ''}\nPlease rebook in the app when you're ready.`),
 
   sendComplaintAcknowledgement: (to, complaint) =>
     send(to, `Complaint received (${complaint.complaintId})`, `We've received your complaint and will investigate. Reference: ${complaint.complaintId}.`),
@@ -203,7 +212,7 @@ const emailService = {
     send(adminInbox(), `ESCALATED: ${complaint.complaintId}`, `Complaint ${complaint.complaintId} has been escalated to authorities.`),
 
   sendTripReminder: (to, booking, whenLabel) =>
-    send(to, `Reminder: trip ${whenLabel} (${booking.bookingId})`, `Your trip from ${booking.pickupAddress} to ${booking.dropAddress} is scheduled for ${new Date(booking.scheduledFor).toLocaleString()}.`),
+    send(to, `Reminder: trip ${whenLabel} (${booking.bookingId})`, `Your trip from ${booking.pickupAddress} to ${booking.dropAddress} is scheduled for ${formatNzDateTime(booking.scheduledFor)}.`),
 
   // utils/backup.js's weekly/monthly data export - three CSV attachments
   // (passengers, trips, complaints) to whatever the admin has set as
@@ -211,7 +220,7 @@ const emailService = {
   sendBackupEmail: (to, counts, attachments) =>
     send(
       to,
-      `EasyRide data backup - ${new Date().toLocaleDateString()}`,
+      `EasyRide data backup - ${formatNzDate(new Date())}`,
       `Attached: ${counts.passengers} passengers, ${counts.bookings} trips, ${counts.complaints} complaints (CSV files).`,
       attachments,
     ),

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import client, { fileOrigin } from '../../api/client';
+import { formatNzDate } from '../../utils/nzTime';
 
 const STATUS_LABEL = {
   pending: 'Awaiting review',
@@ -65,8 +66,8 @@ export default function DriverDocuments() {
             <div>
               <strong>{doc.label}</strong>
               <div className="muted">
-                {doc.uploadedAt ? `Uploaded ${new Date(doc.uploadedAt).toLocaleDateString()}` : 'Never uploaded'}
-                {doc.reviewedAt && ` · reviewed ${new Date(doc.reviewedAt).toLocaleDateString()}`}
+                {doc.uploadedAt ? `Uploaded ${formatNzDate(doc.uploadedAt)}` : 'Never uploaded'}
+                {doc.reviewedAt && ` · reviewed ${formatNzDate(doc.reviewedAt)}`}
               </div>
             </div>
             <span className={`badge ${STATUS_CLASS[doc.status] || 'pending'}`}>{STATUS_LABEL[doc.status] || doc.status}</span>

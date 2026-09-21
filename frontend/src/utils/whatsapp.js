@@ -1,3 +1,5 @@
+import { formatNzDateTime } from './nzTime';
+
 // "Toyota Corolla (Comfort) · ABC123" - brand/model are optional (a driver
 // may not have set them yet in Settings), so this degrades gracefully to
 // just "Comfort · ABC123" when they're missing. Shared by every WhatsApp
@@ -41,7 +43,7 @@ export function driverPendingMessage(booking, passengerName) {
   return `Hi${passengerName ? ` ${passengerName}` : ''}, this is your EasyRide driver about booking ${booking.bookingId}.\n` +
     `Pickup: ${booking.pickupAddress}\nDrop: ${booking.dropAddress}\n` +
     `${booking.distanceKm} km · est. $${booking.estimatedFare} · ${booking.paymentMethod === 'card' ? 'paying online' : 'cash'}` +
-    `${booking.scheduledFor ? `\nScheduled: ${new Date(booking.scheduledFor).toLocaleString()}` : ''}\n` +
+    `${booking.scheduledFor ? `\nScheduled: ${formatNzDateTime(booking.scheduledFor)}` : ''}\n` +
     `I'll confirm shortly.`;
 }
 
@@ -53,7 +55,7 @@ export function driverConfirmedMessage(booking, driverName, vehicleLabel) {
     `${vehicleLabel ? `Vehicle: ${vehicleLabel}\n` : ''}` +
     `Pickup: ${booking.pickupAddress}\nDrop: ${booking.dropAddress}\n` +
     `Estimated fare: $${booking.estimatedFare}` +
-    `${booking.scheduledFor ? `\nScheduled: ${new Date(booking.scheduledFor).toLocaleString()}` : ''}`;
+    `${booking.scheduledFor ? `\nScheduled: ${formatNzDateTime(booking.scheduledFor)}` : ''}`;
 }
 
 // Driver -> passenger, sent once the driver has arrived at pickup.
@@ -68,7 +70,7 @@ export function driverArrivedMessage(booking, driverName, vehicleLabel) {
 // no-delay heads-up on top of that.
 export function driverCancelledMessage(booking, driverName, reason) {
   return `Hi, this is ${driverName || 'your EasyRide driver'} - I'm sorry, I have to cancel your trip (${booking.bookingId}: ${booking.pickupAddress} → ${booking.dropAddress}).` +
-    `${reason ? `\nReason: ${reason}` : ''}\nPlease rebook in the app - you'll be matched with another driver.`;
+    `${reason ? `\nReason: ${reason}` : ''}\nPlease rebook in the app when you're ready.`;
 }
 
 // Passenger -> driver, once the driver has accepted the ride. Deliberately

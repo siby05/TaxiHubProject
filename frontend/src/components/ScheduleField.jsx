@@ -1,33 +1,35 @@
 import { useState } from 'react';
+import { nzWallTimeToISO, isoToNzDateTimeInputs, todayNz } from '../utils/nzTime';
 
 // Optional "book for later" toggle. Reports the combined date+time as an
 // ISO string via onChange, or null when scheduling is off (book now). Pass
 // defaultValue (an ISO string, e.g. an existing booking's scheduledFor) to
 // pre-fill and start toggled on - used when editing an already-scheduled trip.
-function pad(n) { return String(n).padStart(2, '0'); }
-
+//
+// The date/time <input>s are always read/written as NZ local wall-clock
+// time (via nzWallTimeToISO/isoToNzDateTimeInputs), not the viewer's own
+// device timezone - this app only ever operates in NZ, and a driver's
+// availabilitySchedule is likewise always interpreted as NZ time (see
+// backend/utils/schedule.js), so building this from the browser's local
+// zone would silently mismatch a driver's shift for anyone not on NZ time.
 export default function ScheduleField({ onChange, defaultValue }) {
-  // Date/time <input> values are local, but a stored scheduledFor is a UTC
-  // ISO string - pull local components back out rather than slicing the
-  // ISO string directly, or the pre-filled time would be off by the
-  // viewer's UTC offset.
-  const initial = defaultValue ? new Date(defaultValue) : null;
+  const initial = defaultValue ? isoToNzDateTimeInputs(defaultValue) : null;
   const [enabled, setEnabled] = useState(!!initial);
-  const [date, setDate] = useState(initial ? `${initial.getFullYear()}-${pad(initial.getMonth() + 1)}-${pad(initial.getDate())}` : '');
-  const [time, setTime] = useState(initial ? `${pad(initial.getHours())}:${pad(initial.getMinutes())}` : '');
+  const [date, setDate] = useState(initial?.date || '');
+  const [time, setTime] = useState(initial?.time || '');
 
   function toggle(checked) {
     setEnabled(checked);
-    onChange(checked && date && time ? new Date(`${date}T${time}`).toISOString() : null);
+    onChange(checked && date && time ? nzWallTimeToISO(date, time) : null);
   }
 
   function update(nextDate, nextTime) {
     setDate(nextDate);
     setTime(nextTime);
-    onChange(enabled && nextDate && nextTime ? new Date(`${nextDate}T${nextTime}`).toISOString() : null);
+    onChange(enabled && nextDate && nextTime ? nzWallTimeToISO(nextDate, nextTime) : null);
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayNz();
 
   return (
     <div>

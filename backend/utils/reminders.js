@@ -3,6 +3,7 @@ const User = require('../models/User');
 const Driver = require('../models/Driver');
 const { emailService } = require('../services/emailService');
 const { notifyUser } = require('./notify');
+const { formatNzDateTime } = require('./nzTime');
 
 /**
  * Polls for scheduled (not-yet-completed) trips and fires a reminder email
@@ -39,7 +40,7 @@ async function checkReminders() {
       await notifyUser(recipient._id, {
         type: 'trip-reminder',
         title: `Trip reminder - ${whenLabel}`,
-        message: `${booking.pickupAddress} → ${booking.dropAddress} at ${new Date(booking.scheduledFor).toLocaleString()}`,
+        message: `${booking.pickupAddress} → ${booking.dropAddress} at ${formatNzDateTime(booking.scheduledFor)}`,
         link: recipient._id === passenger._id ? '/passenger' : '/driver',
       });
     }

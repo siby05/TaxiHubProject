@@ -5,6 +5,7 @@ import { useSocket } from '../../hooks/useSocket';
 import StarRating from '../../components/StarRating';
 import { notificationPermission, requestNotificationPermission, showBrowserNotification } from '../../utils/browserNotify';
 import { waLink, driverPendingMessage, driverConfirmedMessage, driverArrivedMessage, driverCancelledMessage, paymentReminderMessage, vehicleLabel } from '../../utils/whatsapp';
+import { formatNzDateTime, formatNzTime } from '../../utils/nzTime';
 import WhatsAppIcon from '../../components/WhatsAppIcon';
 
 export default function DriverDashboard() {
@@ -226,9 +227,9 @@ export default function DriverDashboard() {
                   {b.passengerId?.name}{b.passengerRatingAvg ? ` (⭐${b.passengerRatingAvg})` : ''} · {b.distanceKm} km · est. ${b.estimatedFare} · {b.paymentMethod === 'card' ? (b.paymentStatus === 'paid' ? 'paid online' : 'awaiting online payment') : 'cash'}
                 </div>
                 <div className="muted">
-                  {b.scheduledFor ? `Scheduled: ${new Date(b.scheduledFor).toLocaleString()}` : `Requested: ${new Date(b.requestedAt || b.createdAt).toLocaleString()}`}
+                  {b.scheduledFor ? `Scheduled: ${formatNzDateTime(b.scheduledFor)}` : `Requested: ${formatNzDateTime(b.requestedAt || b.createdAt)}`}
                 </div>
-                {b.arrivedAt && b.status === 'accepted' && <div className="muted">Arrived at pickup: {new Date(b.arrivedAt).toLocaleTimeString()}</div>}
+                {b.arrivedAt && b.status === 'accepted' && <div className="muted">Arrived at pickup: {formatNzTime(b.arrivedAt)}</div>}
                 {b.passengerRating && <div className="muted">You rated: {'★'.repeat(b.passengerRating)}{'☆'.repeat(5 - b.passengerRating)}</div>}
               </div>
               <span className={`badge ${b.status}`}>{b.status}</span>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../../api/client';
+import { formatNzDate } from '../../utils/nzTime';
 
 export default function MyComplaints() {
   const [complaints, setComplaints] = useState([]);
@@ -41,7 +42,7 @@ export default function MyComplaints() {
               <strong>{c.complaintId}</strong>
               <span className={`badge ${c.status}`}>{c.status}</span>
             </div>
-            <p className="muted">{c.complaintType.replace(/-/g, ' ')} · {new Date(c.incidentDate).toLocaleDateString()}</p>
+            <p className="muted">{c.complaintType.replace(/-/g, ' ')} · {formatNzDate(c.incidentDate)}</p>
             <p>{c.description}</p>
             {c.isSerious && <p className="error-text">Escalated as serious incident</p>}
             {c.resolutionSummary && <p><strong>Resolution:</strong> {c.resolutionSummary}</p>}

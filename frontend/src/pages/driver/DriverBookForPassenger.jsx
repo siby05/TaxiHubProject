@@ -7,6 +7,7 @@ import ScheduleField from '../../components/ScheduleField';
 import { waLink } from '../../utils/whatsapp';
 import { makeStopHandlers, stopsPayload } from '../../utils/stops';
 import ContactAdmin from '../../components/ContactAdmin';
+import { formatNzDateTime } from '../../utils/nzTime';
 
 export default function DriverBookForPassenger() {
   const navigate = useNavigate();
@@ -178,7 +179,7 @@ export default function DriverBookForPassenger() {
               {quote.cardSurchargeAmount > 0 && (
                 <div className="muted">+ ${quote.cardSurchargeAmount.toFixed(2)} online payment surcharge = <strong>${quote.total.toFixed(2)} total</strong></div>
               )}
-              <div className="muted">{quote.distanceKm} km{stops.length > 0 && ` · via ${stops.length} stop${stops.length > 1 ? 's' : ''}`}{scheduledFor && ` · scheduled for ${new Date(scheduledFor).toLocaleString()}`}</div>
+              <div className="muted">{quote.distanceKm} km{stops.length > 0 && ` · via ${stops.length} stop${stops.length > 1 ? 's' : ''}`}{scheduledFor && ` · scheduled for ${formatNzDateTime(scheduledFor)}`}</div>
               {error && <p className="error-text">{error}</p>}
               <button className="btn" style={{ marginTop: 8 }} onClick={confirmBooking} disabled={loading || !passengerReady}>
                 {loading ? 'Booking...' : 'Confirm booking'}

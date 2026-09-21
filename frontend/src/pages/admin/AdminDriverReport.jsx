@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import client from '../../api/client';
+import { formatNzDate } from '../../utils/nzTime';
 
 export default function AdminDriverReport() {
   const { driverId } = useParams();
@@ -106,7 +107,7 @@ export default function AdminDriverReport() {
             <tbody>
               {billing?.weeks.map((w) => (
                 <tr key={w.weekStart}>
-                  <td>{new Date(w.weekStart).toLocaleDateString()}</td>
+                  <td>{formatNzDate(w.weekStart)}</td>
                   <td>{w.tripsCount}</td>
                   <td>${w.tripsRevenue.toFixed(2)}</td>
                   <td>${w.amountOwed.toFixed(2)}</td>
@@ -126,7 +127,7 @@ export default function AdminDriverReport() {
                 <option value="">Select a week...</option>
                 {billing?.weeks.filter((w) => w.status !== 'paid').map((w) => (
                   <option key={w.weekStart} value={w.weekStart}>
-                    {new Date(w.weekStart).toLocaleDateString()} - owed ${w.amountOwed.toFixed(2)}, paid ${w.amountPaid.toFixed(2)}
+                    {formatNzDate(w.weekStart)} - owed ${w.amountOwed.toFixed(2)}, paid ${w.amountPaid.toFixed(2)}
                   </option>
                 ))}
               </select>
@@ -147,7 +148,7 @@ export default function AdminDriverReport() {
                   <td>
                     <div className="muted">{t.bookingId}</div>
                     <div>{t.pickupAddress}{t.stops?.map((s, i) => <span key={i}> → {s.address}</span>)} → {t.dropAddress}</div>
-                    <div className="muted">{t.passengerId?.name} · {new Date(t.createdAt).toLocaleDateString()}</div>
+                    <div className="muted">{t.passengerId?.name} · {formatNzDate(t.createdAt)}</div>
                   </td>
                   <td>${t.actualFare ?? t.estimatedFare}</td>
                   <td><span className={`badge ${t.status}`}>{t.status}</span></td>
