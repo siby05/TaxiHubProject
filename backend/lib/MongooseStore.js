@@ -178,7 +178,36 @@ function createModel(name, refs = {}) {
         schema.pre('save', async function hook() {
           if (!this.isNew) return;
           const count = await compiled.countDocuments();
-          await fn(this, { docs: { length: count } });
+          // Every model's pre() callback (Booking's bookingId, Complaint's
+          // complaintId/status/severity/... ) was written against
+          // MemoryStore's plain JS objects, where `doc.field = value` (and
+          // reading it straight back) just works. On a real Mongoose
+          // document with `strict: false`, plain assignment to a path not
+          // already declared on the schema is a silent no-op - Mongoose
+          // never registers it as modified, so it's dropped on save
+          // without error (caught by testing bookingId directly against a
+          // real Atlas cluster: set inside the hook, then simply absent
+          // from the saved document). `doc.set(path, value)` is the form
+          // that actually persists an undeclared path, and `doc.get(path)`
+          // the form that reads one back - this Proxy routes plain
+          // property access through both automatically, so every model's
+          // callback keeps working unchanged (including Complaint's, which
+          // reads a field back in the same hook right after setting it -
+          // e.g. isSerious feeding requiresTransportAgencyReport - so the
+          // get trap isn't optional here, a set-only proxy still silently
+          // dropped that value) and MemoryStore/MongooseStore stay
+          // interchangeable as the comment above promises.
+          const proxy = new Proxy(this, {
+            get(target, prop, receiver) {
+              const val = Reflect.get(target, prop, receiver);
+              return (val === undefined && typeof prop === 'string') ? target.get(prop) : val;
+            },
+            set(target, prop, value) {
+              target.set(prop, value);
+              return true;
+            },
+          });
+          await fn(proxy, { docs: { length: count } });
         });
       }
       compiled = mongoose.models[name] || mongoose.model(name, schema);
