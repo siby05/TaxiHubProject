@@ -1,3 +1,14 @@
+// "Toyota Corolla (Comfort) · ABC123" - brand/model are optional (a driver
+// may not have set them yet in Settings), so this degrades gracefully to
+// just "Comfort · ABC123" when they're missing. Shared by every WhatsApp
+// message below that tells a passenger what car to look for at pickup.
+export function vehicleLabel(driver) {
+  if (!driver) return '';
+  const make = [driver.vehicleBrand, driver.vehicleModel].filter(Boolean).join(' ');
+  const withType = make ? `${make} (${driver.vehicleType})` : driver.vehicleType;
+  return [withType, driver.vehicleNumber].filter(Boolean).join(' · ');
+}
+
 // Builds a free wa.me deep link: opens WhatsApp (app or web) with the
 // recipient and message pre-filled, one tap away from sending. This is the
 // free alternative to the paid WhatsApp Business API - there's no way to

@@ -8,7 +8,7 @@ export default function DriverSettings() {
   const { token, setSession } = useAuthStore();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ name: '', email: '', mobile: '', vehicleNumber: '', currentPassword: '', newPassword: '' });
+  const [form, setForm] = useState({ name: '', email: '', mobile: '', vehicleNumber: '', vehicleBrand: '', vehicleModel: '', currentPassword: '', newPassword: '' });
   const [originalEmail, setOriginalEmail] = useState('');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -46,7 +46,8 @@ export default function DriverSettings() {
       setProfile(r.data);
       setForm({
         name: r.data.userId?.name || '', email: r.data.userId?.email || '', mobile: r.data.userId?.mobile || '',
-        vehicleNumber: r.data.vehicleNumber || '', currentPassword: '', newPassword: '',
+        vehicleNumber: r.data.vehicleNumber || '', vehicleBrand: r.data.vehicleBrand || '', vehicleModel: r.data.vehicleModel || '',
+        currentPassword: '', newPassword: '',
       });
       setOriginalEmail(r.data.userId?.email || '');
       setLoading(false);
@@ -120,6 +121,9 @@ export default function DriverSettings() {
           <div><label>Email</label><input type="email" value={form.email} onChange={(e) => update('email', e.target.value)} required /></div>
           <PhoneField value={form.mobile} onChange={(v) => update('mobile', v)} hint="Trip requests are sent here on WhatsApp." />
           <div><label>Vehicle number</label><input value={form.vehicleNumber} onChange={(e) => update('vehicleNumber', e.target.value)} required /></div>
+          <div><label>Vehicle brand</label><input value={form.vehicleBrand} onChange={(e) => update('vehicleBrand', e.target.value)} placeholder="e.g. Toyota" /></div>
+          <div><label>Vehicle model</label><input value={form.vehicleModel} onChange={(e) => update('vehicleModel', e.target.value)} placeholder="e.g. Corolla" /></div>
+          <p className="muted" style={{ marginTop: 4, marginBottom: 8 }}>Shown to passengers in booking emails and WhatsApp messages so your car is easy to spot at pickup.</p>
           <div><label>New password (optional)</label><input type="password" value={form.newPassword} onChange={(e) => update('newPassword', e.target.value)} placeholder="Leave blank to keep current password" /></div>
           <div><label>Current password</label><input type="password" value={form.currentPassword} onChange={(e) => update('currentPassword', e.target.value)} placeholder="Only required if changing email or password" /></div>
           <p className="muted" style={{ marginTop: 4 }}>License and compliance documents can only be changed by an admin.</p>

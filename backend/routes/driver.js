@@ -32,7 +32,7 @@ router.get('/profile', auth, roleMiddleware(['driver']), async (req, res) => {
 // fields here - those stay admin/compliance-controlled since they're
 // either a login identity or something an admin has to verify anyway.
 router.put('/profile', auth, roleMiddleware(['driver']), async (req, res) => {
-  const { name, mobile, vehicleNumber } = req.body;
+  const { name, mobile, vehicleNumber, vehicleBrand, vehicleModel } = req.body;
   const driver = await Driver.findOne({ userId: req.user.id });
   if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
 
@@ -42,8 +42,13 @@ router.put('/profile', auth, roleMiddleware(['driver']), async (req, res) => {
       ...(mobile && { mobile }),
     });
   }
-  const updated = vehicleNumber
-    ? await Driver.findByIdAndUpdate(driver._id, { vehicleNumber })
+  const vehicleChanges = {
+    ...(vehicleNumber && { vehicleNumber }),
+    ...(vehicleBrand !== undefined && { vehicleBrand }),
+    ...(vehicleModel !== undefined && { vehicleModel }),
+  };
+  const updated = Object.keys(vehicleChanges).length
+    ? await Driver.findByIdAndUpdate(driver._id, vehicleChanges)
     : driver;
 
   res.json(await getDriverProfile(req.user.id) || updated);
@@ -305,7 +310,7 @@ router.post('/bookings', auth, roleMiddleware(['driver']), async (req, res) => {
     });
 
     if (passenger.emailVerified) {
-      await emailService.sendBookingConfirmation(passenger.email, booking);
+      await emailService.sendBookingConfirmation(passenger.email, booking, driver, req.user.name);
       await notifyUser(passenger._id, {
         type: 'booking-accepted',
         title: 'A driver booked a ride for you',

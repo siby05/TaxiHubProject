@@ -482,7 +482,12 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
       scheduledFor: scheduledFor ? new Date(scheduledFor) : null,
     });
 
-    await (autoAccept ? emailService.sendBookingConfirmedDirect(passenger.email, booking) : emailService.sendBookingConfirmation(passenger.email, booking));
+    if (autoAccept) {
+      const assignedDriver = await Driver.findById(targetDriverId).populate('userId', 'name');
+      await emailService.sendBookingConfirmedDirect(passenger.email, booking, assignedDriver, assignedDriver?.userId?.name);
+    } else {
+      await emailService.sendBookingConfirmation(passenger.email, booking);
+    }
 
     const notifyDriverIds = targetDriverId
       ? [(await Driver.findById(targetDriverId)).userId]
@@ -617,7 +622,8 @@ router.post('/guest', async (req, res) => {
       scheduledFor: scheduledFor ? new Date(scheduledFor) : null,
     });
 
-    await emailService.sendBookingConfirmedDirect(passenger.email, booking);
+    const assignedDriver = await Driver.findById(resolved.driver._id).populate('userId', 'name');
+    await emailService.sendBookingConfirmedDirect(passenger.email, booking, assignedDriver, assignedDriver?.userId?.name);
     await notifyDriverOfAutoAcceptedTrip(req, resolved.driver.userId, booking, passenger.name, passengerRatingAvg);
 
     // A guest who chose to pay online has no other way back into the app
@@ -905,7 +911,7 @@ router.put('/:id/accept', auth, roleMiddleware(['driver']), async (req, res) => 
     }
 
     const passenger = await User.findById(booking.passengerId);
-    await emailService.sendBookingAccepted(passenger.email, updated);
+    await emailService.sendBookingAccepted(passenger.email, updated, driver, req.user.name);
     emitToUser(req, booking.passengerId, 'booking:accepted', updated);
     await notifyUser(booking.passengerId, {
       type: 'booking-accepted',
@@ -992,7 +998,8 @@ router.put('/:id/arrived', auth, roleMiddleware(['driver']), async (req, res) =>
   const updated = await Booking.findByIdAndUpdate(req.params.id, { arrivedAt: new Date() });
 
   const driverUser = await User.findById(driver.userId);
-  const vehicleLabel = `${driver.vehicleType} · ${driver.vehicleNumber}`;
+  const vehicleMake = [driver.vehicleBrand, driver.vehicleModel].filter(Boolean).join(' ');
+  const vehicleLabel = `${vehicleMake ? `${vehicleMake} (${driver.vehicleType})` : driver.vehicleType} · ${driver.vehicleNumber}`;
 
   emitToUser(req, booking.passengerId, 'booking:arrived', updated);
   await notifyUser(booking.passengerId, {

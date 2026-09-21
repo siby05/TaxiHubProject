@@ -4,7 +4,7 @@ import { useBookingStore } from '../../store/bookingStore';
 import { useSocket } from '../../hooks/useSocket';
 import StarRating from '../../components/StarRating';
 import { notificationPermission, requestNotificationPermission, showBrowserNotification } from '../../utils/browserNotify';
-import { waLink, driverPendingMessage, driverConfirmedMessage, driverArrivedMessage, driverCancelledMessage, paymentReminderMessage } from '../../utils/whatsapp';
+import { waLink, driverPendingMessage, driverConfirmedMessage, driverArrivedMessage, driverCancelledMessage, paymentReminderMessage, vehicleLabel } from '../../utils/whatsapp';
 import WhatsAppIcon from '../../components/WhatsAppIcon';
 
 export default function DriverDashboard() {
@@ -115,7 +115,7 @@ export default function DriverDashboard() {
   // could hit): worst case is a resend, not a confusing error.
   async function markArrived(id) {
     const booking = bookings.find((b) => b._id === id);
-    const link = booking && waLink(booking.passengerId?.mobile, driverArrivedMessage(booking, profile?.userId?.name, profile ? `${profile.vehicleType} · ${profile.vehicleNumber}` : ''));
+    const link = booking && waLink(booking.passengerId?.mobile, driverArrivedMessage(booking, profile?.userId?.name, vehicleLabel(profile)));
     if (link) {
       try { window.open(link, '_blank'); } catch { /* popup blocked - nothing else to fall back to, per "no separate button" */ }
     }
@@ -179,7 +179,7 @@ export default function DriverDashboard() {
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
             <div>
-              <strong>{profile.vehicleType}</strong> · {profile.vehicleNumber} · ${profile.ratePerKm}/km
+              <strong>{vehicleLabel(profile)}</strong> · ${profile.ratePerKm}/km
               <div className="muted">Status: <span className={`badge ${profile.status}`}>{profile.status}</span></div>
               {profile.pendingRatePerKm != null && (
                 <div className="muted">Rate change to ${profile.pendingRatePerKm}/km pending admin approval</div>
@@ -253,9 +253,9 @@ export default function DriverDashboard() {
                 {b.status === 'accepted' && !b.arrivedAt && (
                   <>
                     <button className="btn secondary" onClick={() => markArrived(b._id)}>I've arrived</button>
-                    {waLink(b.passengerId?.mobile, driverConfirmedMessage(b, profile?.userId?.name, `${profile?.vehicleType} · ${profile?.vehicleNumber}`)) && (
+                    {waLink(b.passengerId?.mobile, driverConfirmedMessage(b, profile?.userId?.name, vehicleLabel(profile))) && (
                       <a className="btn whatsapp" target="_blank" rel="noreferrer"
-                        href={waLink(b.passengerId?.mobile, driverConfirmedMessage(b, profile?.userId?.name, `${profile?.vehicleType} · ${profile?.vehicleNumber}`))}><WhatsAppIcon /> Message passenger: trip confirmed</a>
+                        href={waLink(b.passengerId?.mobile, driverConfirmedMessage(b, profile?.userId?.name, vehicleLabel(profile)))}><WhatsAppIcon /> Message passenger: trip confirmed</a>
                     )}
                   </>
                 )}

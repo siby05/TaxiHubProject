@@ -62,6 +62,18 @@ async function buildTransporter() {
   });
 }
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Connection-level failures (a dropped/refused/timed-out TCP handshake) are
+// often a one-off network blip rather than a real, retry-proof problem -
+// unlike an auth failure (bad credentials) or a rejected recipient, where
+// trying again changes nothing. Nodemailer/Node label these with one of a
+// handful of error codes, so only those get a second attempt.
+const RETRYABLE_CODES = new Set(['ETIMEDOUT', 'ECONNREFUSED', 'ECONNRESET', 'ENETUNREACH', 'EHOSTUNREACH']);
+function isRetryable(err) {
+  return RETRYABLE_CODES.has(err.code) || /connection timeout/i.test(err.message || '');
+}
+
 // Never throws: a booking/complaint/enquiry must never fail (or, worse,
 // crash the whole process via an unhandled rejection - see the SMTP
 // ENETUNREACH incident) just because a courtesy email couldn't be sent.
@@ -70,21 +82,35 @@ async function buildTransporter() {
 // instead of a thrown error.
 async function send(to, subject, text, attachments) {
   if (smtpConfigured) {
-    try {
-      const transporter = await buildTransporter();
-      if (!transporter) throw new Error('SMTP transporter could not be created');
-      // EMAIL_FROM is optional - defaults to the admin's own configured
-      // inbox, which is also the SMTP account actually sending (most
-      // providers, Gmail included, want the From address to match the
-      // authenticated account anyway; an unset/mismatched From is a
-      // common reason a send silently never arrives).
-      const from = process.env.EMAIL_FROM || getSettings().adminEmail;
-      await transporter.sendMail({ from, to, subject, text, ...(attachments && { attachments }) });
-      return { ok: true };
-    } catch (err) {
-      console.error(`[email] send to ${to} failed: ${err.message}`);
-      return { ok: false, error: err.message };
+    // EMAIL_FROM is optional - defaults to the admin's own configured inbox,
+    // which is also the SMTP account actually sending (most providers,
+    // Gmail included, want the From address to match the authenticated
+    // account anyway; an unset/mismatched From is a common reason a send
+    // silently never arrives).
+    const from = process.env.EMAIL_FROM || getSettings().adminEmail;
+    let lastErr;
+    // One retry, with a fresh DNS resolution and transporter - a connection
+    // timeout/reset is frequently a transient blip (or a stale resolved
+    // address if Gmail's frontend IP rotated between attempts), not
+    // something that reliably fails the same way twice.
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      try {
+        const transporter = await buildTransporter();
+        if (!transporter) throw new Error('SMTP transporter could not be created');
+        await transporter.sendMail({ from, to, subject, text, ...(attachments && { attachments }) });
+        return { ok: true };
+      } catch (err) {
+        lastErr = err;
+        if (attempt === 1 && isRetryable(err)) {
+          console.warn(`[email] send to ${to} failed (${err.message}) - retrying once`);
+          await sleep(1000);
+          continue;
+        }
+        break;
+      }
     }
+    console.error(`[email] send to ${to} failed: ${lastErr.message}`);
+    return { ok: false, error: lastErr.message };
   }
   const attachmentNote = attachments ? `\nAttachments: ${attachments.map((a) => a.filename).join(', ')}` : '';
   console.log(`\n[EMAIL MOCK] To: ${to}\nSubject: ${subject}\n${text}${attachmentNote}\n`);
@@ -98,6 +124,24 @@ function adminInbox() {
   return getSettings().adminEmail || process.env.EMAIL_FROM;
 }
 
+// "Toyota Corolla (Comfort) · ABC123" - brand/model are optional (older
+// driver profiles may not have set them yet via PUT /api/driver/profile),
+// so this degrades to just "Comfort · ABC123" when they're missing.
+function vehicleLabel(driver) {
+  if (!driver) return null;
+  const make = [driver.vehicleBrand, driver.vehicleModel].filter(Boolean).join(' ');
+  const withType = make ? `${make} (${driver.vehicleType})` : driver.vehicleType;
+  return [withType, driver.vehicleNumber].filter(Boolean).join(' · ');
+}
+
+// Appended to a booking-confirmation email once a specific driver is
+// assigned, so the passenger knows what car and who to look for at pickup
+// without having to log back into the app.
+function driverLine(driver, driverName) {
+  const label = vehicleLabel(driver);
+  return label ? `\nDriver: ${driverName || 'assigned'} - ${label}` : '';
+}
+
 const emailService = {
   sendVerificationEmail: (to, name) =>
     send(to, 'Welcome to EasyRide - verify your email', `Hi ${name}, welcome to EasyRide! Your account is ready to use.`),
@@ -108,8 +152,8 @@ const emailService = {
   sendDriverApproved: (to, name) =>
     send(to, 'You are approved to drive on EasyRide', `Hi ${name}, your driver account has been approved. Log in, go online, and you can start receiving trip requests.`),
 
-  sendBookingConfirmation: (to, booking) =>
-    send(to, `Booking confirmed (${booking.bookingId})`, `Your ride from ${booking.pickupAddress} to ${booking.dropAddress} has been requested. Estimated fare: $${booking.estimatedFare}.`),
+  sendBookingConfirmation: (to, booking, driver, driverName) =>
+    send(to, `Booking confirmed (${booking.bookingId})`, `Your ride from ${booking.pickupAddress} to ${booking.dropAddress} has been requested. Estimated fare: $${booking.estimatedFare}.${driverLine(driver, driverName)}`),
 
   sendDriverBookingAlert: (to, booking) =>
     send(to, `New ride request (${booking.bookingId})`, `New booking from ${booking.pickupAddress} to ${booking.dropAddress}. You have 30 seconds to accept in-app.`),
@@ -120,11 +164,11 @@ const emailService = {
   sendDriverTripAssigned: (to, booking) =>
     send(to, `New confirmed trip (${booking.bookingId})`, `A passenger scanned your QR code and booked you directly - already confirmed, head to ${booking.pickupAddress} for pickup.`),
 
-  sendBookingAccepted: (to, booking) =>
-    send(to, `Driver accepted your ride (${booking.bookingId})`, `Your driver has accepted booking ${booking.bookingId} and is on the way.`),
+  sendBookingAccepted: (to, booking, driver, driverName) =>
+    send(to, `Driver accepted your ride (${booking.bookingId})`, `Your driver has accepted booking ${booking.bookingId} and is on the way.${driverLine(driver, driverName)}`),
 
-  sendBookingConfirmedDirect: (to, booking) =>
-    send(to, `Your ride is confirmed (${booking.bookingId})`, `Your ride from ${booking.pickupAddress} to ${booking.dropAddress} is confirmed - the driver has been notified. Estimated fare: $${booking.estimatedFare}.`),
+  sendBookingConfirmedDirect: (to, booking, driver, driverName) =>
+    send(to, `Your ride is confirmed (${booking.bookingId})`, `Your ride from ${booking.pickupAddress} to ${booking.dropAddress} is confirmed - the driver has been notified. Estimated fare: $${booking.estimatedFare}.${driverLine(driver, driverName)}`),
 
   sendBookingCompleted: (to, booking) =>
     send(to, `Trip completed (${booking.bookingId})`, `Your trip is complete. Final fare: $${booking.actualFare}.`),

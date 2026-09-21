@@ -1,7 +1,10 @@
 const { createModel } = require('../lib/createModel');
 
 // Fields: userId (-> User), licenseNumber (globally unique - enforced in
-// routes/admin.js), vehicleType, vehicleNumber, ratePerKm, pendingRatePerKm
+// routes/admin.js), vehicleType, vehicleNumber, vehicleBrand, vehicleModel
+// (e.g. "Toyota"/"Corolla" - driver-editable via PUT /api/driver/profile,
+// shown to passengers in booking emails/WhatsApp messages so the car is
+// easy to spot at pickup), ratePerKm, pendingRatePerKm
 // (driver-requested rate awaiting admin approval, null when none), status
 // ('pending' | 'approved' | 'rejected'), isAvailable, availabilitySchedule
 // (see utils/schedule.js - an array of 7 {dayOfWeek, slots: [{startTime,
