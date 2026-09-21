@@ -16,19 +16,31 @@ function nzDayAndTime(date) {
   return { dayOfWeek: WEEKDAY_INDEX[get('weekday')], hhmm: `${get('hour')}:${get('minute')}` };
 }
 
+// A day's slot list, tolerant of the old one-slot-per-day shape
+// ({enabled, startTime, endTime}) that every driver's schedule was saved as
+// before multiple shifts per day existed - lets a schedule saved under the
+// old format keep working exactly as before until the driver next edits and
+// re-saves it (in the current {dayOfWeek, slots: [{startTime,endTime}]} shape).
+function daySlots(day) {
+  if (!day) return [];
+  if (Array.isArray(day.slots)) return day.slots;
+  return day.enabled ? [{ startTime: day.startTime, endTime: day.endTime }] : [];
+}
+
 // Is `driver` currently within a day/time slot they've marked enabled on
 // their weekly availability calendar? A driver with no schedule set at all
 // (empty/never-saved array) is treated as always-in-schedule, so this only
-// restricts drivers who have actually declared hours.
+// restricts drivers who have actually declared hours. A day can have more
+// than one slot (e.g. a morning shift and a separate evening shift) - any
+// one of them being current is enough.
 function isWithinSchedule(driver, now = new Date()) {
   const schedule = driver.availabilitySchedule;
   if (!Array.isArray(schedule) || schedule.length === 0) return true;
 
   const { dayOfWeek, hhmm } = nzDayAndTime(now);
-  const slot = schedule.find((s) => s.dayOfWeek === dayOfWeek);
-  if (!slot || !slot.enabled) return false;
+  const slots = daySlots(schedule.find((s) => s.dayOfWeek === dayOfWeek));
 
-  return hhmm >= slot.startTime && hhmm < slot.endTime;
+  return slots.some((slot) => hhmm >= slot.startTime && hhmm < slot.endTime);
 }
 
 module.exports = { isWithinSchedule };

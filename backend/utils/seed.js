@@ -45,9 +45,7 @@ module.exports = async function seed() {
     // to see trips actually get held back outside declared hours.
     availabilitySchedule: [0, 1, 2, 3, 4, 5, 6].map((dayOfWeek) => ({
       dayOfWeek,
-      enabled: true,
-      startTime: '00:00',
-      endTime: '23:59',
+      slots: [{ startTime: '00:00', endTime: '23:59' }],
     })),
   });
 
@@ -61,7 +59,7 @@ module.exports = async function seed() {
   // vehicle-type filter and multi-driver broadcast flow can be tested
   // without hand-creating accounts through the admin UI every time.
   const fullWeekSchedule = [0, 1, 2, 3, 4, 5, 6].map((dayOfWeek) => ({
-    dayOfWeek, enabled: true, startTime: '00:00', endTime: '23:59',
+    dayOfWeek, slots: [{ startTime: '00:00', endTime: '23:59' }],
   }));
 
   const testDrivers = [
