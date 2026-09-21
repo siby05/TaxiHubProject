@@ -184,6 +184,24 @@ async function alertDriverOfBooking(req, driverUserId, booking, passengerName, p
   });
 }
 
+// A QR-scan direct hail (see autoAccept below) skips the accept/decline
+// step entirely - the driver's dashboard naturally shows it as an
+// already-accepted trip (I've arrived/Complete/Cancel, no Accept button)
+// once it reloads, so this only needs to tell them it happened, not ask
+// them to respond.
+async function notifyDriverOfAutoAcceptedTrip(req, driverUserId, booking, passengerName, passengerRatingAvg) {
+  const driverUser = await User.findById(driverUserId);
+  if (!driverUser) return;
+  await emailService.sendDriverTripAssigned(driverUser.email, booking);
+  emitToUser(req, driverUserId, 'booking:new', { ...booking, passengerName, passengerRatingAvg });
+  await notifyUser(driverUserId, {
+    type: 'booking-new',
+    title: 'New confirmed trip',
+    message: `${passengerName} scanned your QR code - ${booking.pickupAddress} → ${booking.dropAddress} - $${booking.estimatedFare}`,
+    link: '/driver',
+  });
+}
+
 // GET /api/booking/vehicle-types - public so the pre-login QR landing page
 // and signup forms can render the same list the backend validates against.
 router.get('/vehicle-types', (req, res) => res.json(VEHICLE_TYPES));
@@ -361,7 +379,7 @@ router.post('/quote', auth, roleMiddleware(['passenger', 'driver']), async (req,
 // which also tells the others' dashboards to drop the request in real time.
 router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
   try {
-    const { pickupAddress, pickupLat, pickupLng, dropAddress, dropLat, dropLng, driverId, scheduledFor, paymentMethod, vehicleType, stops } = req.body;
+    const { pickupAddress, pickupLat, pickupLng, dropAddress, dropLat, dropLng, driverId, scheduledFor, paymentMethod, vehicleType, stops, viaQr } = req.body;
     if (!pickupAddress || !dropAddress || pickupLat == null || dropLat == null) {
       return res.status(400).json({ error: 'pickupAddress, dropAddress and lat/lng for both are required' });
     }
@@ -424,6 +442,16 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
     const estimatedFare = calculateTripFare(distanceKm, ratePerKmForEstimate, bookingSettings);
     const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(estimatedFare, bookingSettings.cardSurchargePercent) : 0;
 
+    // A QR-scan direct hail (see frontend/src/pages/passenger/BookDriver.jsx,
+    // the only caller that sends viaQr) skips the accept/decline step
+    // entirely - scanning a specific driver's own car is the "flag a cab"
+    // moment, not a request they might turn down. Only applies when a
+    // single driver actually got resolved (targetDriverId) - if that
+    // driver wasn't usable and this fell back to a broadcast instead,
+    // there's no single driver to auto-assign to, so it behaves like any
+    // other broadcast (first to accept claims it).
+    const autoAccept = !!(viaQr && targetDriverId);
+
     const booking = await Booking.create({
       passengerId: req.user.id,
       driverId: targetDriverId,
@@ -438,7 +466,8 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
       estimatedFare,
       cardSurchargeAmount,
       requestedVehicleType: vehicleType || null,
-      status: 'pending',
+      status: autoAccept ? 'accepted' : 'pending',
+      ...(autoAccept && { acceptedAt: new Date() }),
       paymentMethod: paymentMethod || 'cash',
       paymentStatus: 'unpaid',
       declinedBy: [],
@@ -446,14 +475,18 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
       scheduledFor: scheduledFor ? new Date(scheduledFor) : null,
     });
 
-    await emailService.sendBookingConfirmation(passenger.email, booking);
+    await (autoAccept ? emailService.sendBookingConfirmedDirect(passenger.email, booking) : emailService.sendBookingConfirmation(passenger.email, booking));
 
     const notifyDriverIds = targetDriverId
       ? [(await Driver.findById(targetDriverId)).userId]
       : broadcastCandidates.map((d) => d.userId);
 
     for (const driverUserId of notifyDriverIds) {
-      await alertDriverOfBooking(req, driverUserId, booking, passenger.name, passengerRatingAvg);
+      if (autoAccept) {
+        await notifyDriverOfAutoAcceptedTrip(req, driverUserId, booking, passenger.name, passengerRatingAvg);
+      } else {
+        await alertDriverOfBooking(req, driverUserId, booking, passenger.name, passengerRatingAvg);
+      }
     }
 
     res.status(201).json({ ...booking, usedFallback, requestedUnavailable, requestedCashOnly, requestedName, broadcast: !targetDriverId });
@@ -565,7 +598,11 @@ router.post('/guest', async (req, res) => {
       estimatedFare,
       cardSurchargeAmount,
       requestedVehicleType: vehicleType || null,
-      status: 'pending',
+      // Guest checkout only ever exists behind a QR scan - always a
+      // direct hail, never a broadcast - so it's always auto-accepted,
+      // same "flag a cab" reasoning as the logged-in viaQr path above.
+      status: 'accepted',
+      acceptedAt: new Date(),
       paymentMethod: paymentMethod || 'cash',
       paymentStatus: 'unpaid',
       declinedBy: [],
@@ -573,8 +610,8 @@ router.post('/guest', async (req, res) => {
       scheduledFor: scheduledFor ? new Date(scheduledFor) : null,
     });
 
-    await emailService.sendBookingConfirmation(passenger.email, booking);
-    await alertDriverOfBooking(req, resolved.driver.userId, booking, passenger.name, passengerRatingAvg);
+    await emailService.sendBookingConfirmedDirect(passenger.email, booking);
+    await notifyDriverOfAutoAcceptedTrip(req, resolved.driver.userId, booking, passenger.name, passengerRatingAvg);
 
     // A guest who chose to pay online has no other way back into the app
     // to pay once accepted - no account/login was ever set up for them

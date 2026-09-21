@@ -85,8 +85,17 @@ const emailService = {
   sendDriverBookingAlert: (to, booking) =>
     send(to, 'New ride request', `New booking from ${booking.pickupAddress} to ${booking.dropAddress}. You have 30 seconds to accept in-app.`),
 
+  // A QR-scan direct hail is auto-accepted (see routes/booking.js) - no
+  // accept/decline step, so the driver is told it's already theirs
+  // rather than asked to respond.
+  sendDriverTripAssigned: (to, booking) =>
+    send(to, 'New confirmed trip', `A passenger scanned your QR code and booked you directly - already confirmed, head to ${booking.pickupAddress} for pickup.`),
+
   sendBookingAccepted: (to, booking) =>
     send(to, 'Driver accepted your ride', `Your driver has accepted booking ${booking._id} and is on the way.`),
+
+  sendBookingConfirmedDirect: (to, booking) =>
+    send(to, 'Your ride is confirmed', `Your ride from ${booking.pickupAddress} to ${booking.dropAddress} is confirmed - the driver has been notified. Estimated fare: $${booking.estimatedFare}.`),
 
   sendBookingCompleted: (to, booking) =>
     send(to, 'Trip completed', `Your trip is complete. Final fare: $${booking.actualFare}.`),

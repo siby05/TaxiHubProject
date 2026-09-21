@@ -66,15 +66,19 @@ export default function BookDriver() {
     setError('');
     setLoading(true);
     try {
-      await client.post('/booking', {
+      const { data } = await client.post('/booking', {
         driverId: effectiveDriverId,
         pickupAddress: pickup.label, pickupLat: pickup.lat, pickupLng: pickup.lng,
         dropAddress: drop.label, dropLat: drop.lat, dropLng: drop.lng,
         stops: stopsPayload(stops),
         scheduledFor,
         paymentMethod,
+        viaQr: true,
       });
-      navigate('/passenger');
+      // Auto-accepted (this page only exists behind a QR scan) - if paying
+      // online, go straight to the payment page instead of the dashboard;
+      // the trip's already confirmed, so there's no "wait for accept" step.
+      navigate(paymentMethod === 'card' ? `/pay/${data._id}` : '/passenger');
     } catch (err) {
       setError(err.response?.data?.error || 'Could not create booking');
       setNextAvailableTime(err.response?.data?.nextAvailableTime || null);
@@ -178,11 +182,11 @@ export default function BookDriver() {
       return (
         <div className="container">
           <div className="card" style={{ maxWidth: 460, margin: '40px auto', background: '#dcfce7' }}>
-            <h2 style={{ marginTop: 0 }}>Ride requested!</h2>
+            <h2 style={{ marginTop: 0 }}>Ride confirmed!</h2>
             <p>{guestSuccess.bookingId} · {guestSuccess.pickupAddress} → {guestSuccess.dropAddress}</p>
             <p><strong>Estimated fare: ${guestSuccess.estimatedFare}</strong></p>
             <p className="muted">
-              {preview?.name || 'The driver'} has been notified and will accept shortly. We've saved your details
+              {preview?.name || 'The driver'} has been notified and is on the way. We've saved your details
               under {guestMobile} - next time you scan a car's QR code, just enter the same number and your details
               fill in automatically.
             </p>
@@ -246,7 +250,7 @@ export default function BookDriver() {
                     <input type="radio" style={{ width: 'auto' }} checked={guestPaymentMethod === 'card'} onChange={() => setGuestPaymentMethod('card')} /> Pay online
                   </label>
                 </div>
-                {guestPaymentMethod === 'card' && <p className="muted">You'll be taken to a secure payment page once a driver accepts.</p>}
+                {guestPaymentMethod === 'card' && <p className="muted">You'll be taken straight to a secure payment page once you confirm - this ride is booked directly with this driver, no waiting on an accept step.</p>}
               </div>
 
               {guestQuoteLoading && <p className="muted">Calculating fare...</p>}
@@ -364,7 +368,7 @@ export default function BookDriver() {
               </label>
             </div>
             {paymentMethod === 'card' && <p className="muted">Online payment includes a small payment-gateway surcharge (≈2.6%), added on top of the fare - shown below before you confirm.</p>}
-            {paymentMethod === 'card' && <p className="muted">You'll be able to pay once a driver accepts your ride.</p>}
+            {paymentMethod === 'card' && <p className="muted">You'll be taken straight to a secure payment page once you confirm - this ride is booked directly with this driver, no waiting on an accept step.</p>}
           </div>
 
           {quoteLoading && <p className="muted">Calculating fare...</p>}

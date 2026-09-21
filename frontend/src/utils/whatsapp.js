@@ -47,7 +47,7 @@ export function driverConfirmedMessage(booking, driverName, vehicleLabel) {
 
 // Driver -> passenger, sent once the driver has arrived at pickup.
 export function driverArrivedMessage(booking, driverName, vehicleLabel) {
-  return `Hi, this is ${driverName || 'your EasyRide driver'}${vehicleLabel ? ` (${vehicleLabel})` : ''} - I've arrived at ${booking.pickupAddress}. Whenever you're ready.`;
+  return `Hi, this is ${driverName || 'your EasyRide driver'}${vehicleLabel ? ` (${vehicleLabel})` : ''} - I've arrived at ${booking.pickupAddress} for booking ${booking.bookingId}. No rush at all, take your time - I'll be here waiting.`;
 }
 
 // Driver -> passenger, opened automatically the moment the driver cancels

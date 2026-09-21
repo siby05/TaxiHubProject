@@ -24,13 +24,14 @@ export default function DriverDashboard() {
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({ name: '', email: '', mobile: '', vehicleNumber: '', currentPassword: '' });
   const [profileMsg, setProfileMsg] = useState('');
-  // A link the driver can tap to send a WhatsApp update, offered *after*
-  // an action succeeds rather than auto-opened during it - opening a new
-  // tab mid-click backgrounds this one, and some browsers throttle a
-  // backgrounded tab's JS enough that the accept/complete/cancel request
-  // and the subsequent load() were delayed long enough to look like the
-  // button hadn't done anything (reported as Accept needing two clicks).
-  const [waSuggestion, setWaSuggestion] = useState(null);
+  // Cancelling is the one trip-lifecycle action with no data-derived way
+  // to tell "I just cancelled this" after the fact (the booking is just
+  // status:'cancelled' - nothing marks it as "cancelled by me, offer a
+  // WhatsApp link"), so unlike accept/arrived/payment-reminder below
+  // (which render straight off the booking's own fields, no state
+  // needed) this one small per-booking map is kept around after a
+  // successful cancel so the link can still show inline in that row.
+  const [cancelWaLinks, setCancelWaLinks] = useState({});
 
   function load() {
     fetchDriverBookings(showAllTrips ? { all: true } : undefined);
@@ -132,12 +133,8 @@ export default function DriverDashboard() {
   }
 
   async function accept(id) {
-    setWaSuggestion(null);
     try {
       await client.put(`/booking/${id}/accept`);
-      const booking = bookings.find((b) => b._id === id);
-      const link = booking && waLink(booking.passengerId?.mobile, driverConfirmedMessage(booking, profile?.userId?.name, profile ? `${profile.vehicleType} · ${profile.vehicleNumber}` : ''));
-      if (link) setWaSuggestion({ link, label: 'Message passenger: trip confirmed' });
     } catch (err) {
       setAlert(err.response?.data?.error || 'Could not accept this trip');
     }
@@ -153,18 +150,18 @@ export default function DriverDashboard() {
   // one that's still pending - the passenger is expecting this driver, so
   // they're told twice: an email from the backend (see routes/booking.js
   // PUT /:id/cancel, which works even without the passenger's number) and
-  // a WhatsApp link offered here once the cancel itself has gone through.
+  // a WhatsApp link, kept in cancelWaLinks so it can still show inline in
+  // this booking's row once cancelled (see comment on that state above).
   async function cancelTrip(id) {
     const reason = window.prompt("Why are you cancelling this trip? The passenger will see this reason.");
     if (reason === null) return; // dismissed the prompt - don't cancel
     if (!window.confirm('Cancel this trip? The passenger will be notified by email.')) return;
 
-    setWaSuggestion(null);
     try {
       const booking = bookings.find((b) => b._id === id);
       await client.put(`/booking/${id}/cancel`, { reason });
       const link = booking && waLink(booking.passengerId?.mobile, driverCancelledMessage(booking, profile?.userId?.name, reason));
-      if (link) setWaSuggestion({ link, label: 'Message passenger: trip cancelled' });
+      if (link) setCancelWaLinks((links) => ({ ...links, [id]: link }));
     } catch (err) {
       setAlert(err.response?.data?.error || 'Could not cancel this trip');
     }
@@ -172,23 +169,32 @@ export default function DriverDashboard() {
   }
 
   async function markArrived(id) {
-    await client.put(`/booking/${id}/arrived`);
+    // Unlike accept()/complete()/cancelTrip(), there's no "already did
+    // this" conflict a stray second click could hit here, so it's safe
+    // to open WhatsApp in the same click as every other trip-lifecycle
+    // action used to - the driver asked for this to go out on the first
+    // tap instead of needing a second click on a link that only appears
+    // after the page re-renders. The persistent "I've arrived" link
+    // rendered below (data-derived off arrivedAt, same as trip-confirmed
+    // and payment-reminder) is still there afterward as a manual resend.
+    const booking = bookings.find((b) => b._id === id);
+    const link = booking && waLink(booking.passengerId?.mobile, driverArrivedMessage(booking, profile?.userId?.name, profile ? `${profile.vehicleType} · ${profile.vehicleNumber}` : ''));
+    if (link) {
+      try { window.open(link, '_blank'); } catch { /* popup blocked - the persistent link below still covers it */ }
+    }
+
+    try {
+      await client.put(`/booking/${id}/arrived`);
+    } catch (err) {
+      setAlert(err.response?.data?.error || 'Could not mark arrived');
+    }
     load();
   }
 
   async function complete(id) {
-    setWaSuggestion(null);
-    const booking = bookings.find((b) => b._id === id);
     const actualFare = Number(fareInputs[id]) || undefined;
-
     try {
       await client.put(`/booking/${id}/complete`, { actualFare });
-      if (booking && booking.paymentMethod === 'card' && booking.paymentStatus !== 'paid') {
-        const payLink = `${window.location.origin}/pay/${id}`;
-        const finalBooking = { ...booking, actualFare: actualFare || booking.estimatedFare };
-        const link = waLink(booking.passengerId?.mobile, paymentReminderMessage(finalBooking, profile?.userId?.name, payLink));
-        if (link) setWaSuggestion({ link, label: 'Message passenger: payment reminder' });
-      }
     } catch (err) {
       setAlert(err.response?.data?.error || 'Could not complete this trip');
     }
@@ -204,12 +210,6 @@ export default function DriverDashboard() {
     <div className="container">
       <h1>Driver dashboard</h1>
       {alert && <div className="card" style={{ background: '#fef3c7' }}>{alert} <button className="btn secondary" onClick={() => setAlert('')}>Dismiss</button></div>}
-      {waSuggestion && (
-        <div className="card" style={{ background: '#dcfce7', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <a className="btn whatsapp" target="_blank" rel="noreferrer" href={waSuggestion.link}><WhatsAppIcon /> {waSuggestion.label}</a>
-          <button className="btn secondary" onClick={() => setWaSuggestion(null)}>Dismiss</button>
-        </div>
-      )}
       {profile?.compliance && !profile.compliance.compliant && (
         <div className="card" style={{ background: '#fef3c7' }}>
           ⚠️ <strong>NZTA compliance incomplete:</strong> {profile.compliance.issues.join('; ')}. Contact an admin to update your record - this blocks going online.
@@ -332,16 +332,35 @@ export default function DriverDashboard() {
             {(b.status === 'accepted' || b.status === 'in-progress') && (
               <div className="booking-actions">
                 {b.status === 'accepted' && !b.arrivedAt && (
-                  <button className="btn secondary" onClick={() => markArrived(b._id)}>I've arrived</button>
+                  <>
+                    <button className="btn secondary" onClick={() => markArrived(b._id)}>I've arrived</button>
+                    {waLink(b.passengerId?.mobile, driverConfirmedMessage(b, profile?.userId?.name, `${profile?.vehicleType} · ${profile?.vehicleNumber}`)) && (
+                      <a className="btn whatsapp" target="_blank" rel="noreferrer"
+                        href={waLink(b.passengerId?.mobile, driverConfirmedMessage(b, profile?.userId?.name, `${profile?.vehicleType} · ${profile?.vehicleNumber}`))}><WhatsAppIcon /> Message passenger: trip confirmed</a>
+                    )}
+                  </>
                 )}
                 {b.status === 'accepted' && b.arrivedAt && waLink(b.passengerId?.mobile, driverArrivedMessage(b, profile?.userId?.name, `${profile?.vehicleType} · ${profile?.vehicleNumber}`)) && (
                   <a className="btn whatsapp" target="_blank" rel="noreferrer"
-                    href={waLink(b.passengerId?.mobile, driverArrivedMessage(b, profile?.userId?.name, `${profile?.vehicleType} · ${profile?.vehicleNumber}`))}><WhatsAppIcon /> "I've arrived"</a>
+                    href={waLink(b.passengerId?.mobile, driverArrivedMessage(b, profile?.userId?.name, `${profile?.vehicleType} · ${profile?.vehicleNumber}`))}><WhatsAppIcon /> Message passenger: I've arrived</a>
                 )}
                 <input style={{ width: 90 }} type="number" step="0.01" placeholder="Actual $"
                   value={fareInputs[b._id] || ''} onChange={(e) => setFareInputs((f) => ({ ...f, [b._id]: e.target.value }))} />
                 <button className="btn" onClick={() => complete(b._id)}>Complete</button>
                 <button className="btn danger" onClick={() => cancelTrip(b._id)}>Cancel trip</button>
+              </div>
+            )}
+            {b.paymentMethod === 'card' && b.paymentStatus !== 'paid' && ['accepted', 'in-progress', 'completed'].includes(b.status) && (
+              <div className="booking-actions">
+                {waLink(b.passengerId?.mobile, paymentReminderMessage(b, profile?.userId?.name, `${window.location.origin}/pay/${b._id}`)) && (
+                  <a className="btn whatsapp" target="_blank" rel="noreferrer"
+                    href={waLink(b.passengerId?.mobile, paymentReminderMessage(b, profile?.userId?.name, `${window.location.origin}/pay/${b._id}`))}><WhatsAppIcon /> Message passenger: payment reminder</a>
+                )}
+              </div>
+            )}
+            {b.status === 'cancelled' && cancelWaLinks[b._id] && (
+              <div className="booking-actions">
+                <a className="btn whatsapp" target="_blank" rel="noreferrer" href={cancelWaLinks[b._id]}><WhatsAppIcon /> Message passenger: trip cancelled</a>
               </div>
             )}
           </div>
