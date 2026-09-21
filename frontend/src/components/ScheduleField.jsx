@@ -38,7 +38,7 @@ export default function ScheduleField({ onChange, defaultValue }) {
         Schedule for later (instead of now)
       </label>
       {enabled && (
-        <div className="grid cols-2" style={{ marginTop: 8 }}>
+        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
             <label>Date</label>
             <input type="date" min={today} value={date} required onChange={(e) => update(e.target.value, time)} />
