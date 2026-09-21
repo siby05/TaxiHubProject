@@ -13,6 +13,8 @@ import WhatsAppIcon from '../../components/WhatsAppIcon';
 import { newStopId, makeStopHandlers, stopsPayload } from '../../utils/stops';
 import ContactAdmin from '../../components/ContactAdmin';
 import InstallPrompt from '../../components/InstallPrompt';
+import PrintableReceipt from '../../components/PrintableReceipt';
+import { formatNzDateTime } from '../../utils/nzTime';
 
 // Friendlier wording for the raw booking status - the CSS class (badge
 // pending/accepted/...) still keys off the raw status, just the visible
@@ -41,6 +43,7 @@ export default function PassengerDashboard() {
   const [payError, setPayError] = useState('');
   const [bookingActionError, setBookingActionError] = useState('');
   const [payModal, setPayModal] = useState(null);
+  const [printingBooking, setPrintingBooking] = useState(null);
   const [quote, setQuote] = useState(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [error, setError] = useState('');
@@ -118,6 +121,13 @@ export default function PassengerDashboard() {
     await client.put(`/booking/${bookingId}/rate`, { rating, review });
     refresh();
   }
+
+  // Setting state and calling window.print() synchronously would print
+  // before React has actually rendered the (freshly-swapped) receipt into
+  // the DOM - wait for that render via an effect instead.
+  useEffect(() => {
+    if (printingBooking) window.print();
+  }, [printingBooking]);
 
   async function cancelBooking(id) {
     if (!window.confirm("Cancel this ride? If a driver has already accepted, they'll be notified.")) return;
@@ -343,7 +353,7 @@ export default function PassengerDashboard() {
                 {quote.cardSurchargeAmount > 0 && (
                   <div className="muted">+ ${quote.cardSurchargeAmount.toFixed(2)} online payment surcharge = <strong>${quote.total.toFixed(2)} total</strong></div>
                 )}
-                <div className="muted">{quote.distanceKm} km{stops.length > 0 && ` · via ${stops.length} stop${stops.length > 1 ? 's' : ''}`}{scheduledFor && ` · scheduled for ${new Date(scheduledFor).toLocaleString()}`}</div>
+                <div className="muted">{quote.distanceKm} km{stops.length > 0 && ` · via ${stops.length} stop${stops.length > 1 ? 's' : ''}`}{scheduledFor && ` · scheduled for ${formatNzDateTime(scheduledFor)}`}</div>
                 {error && <p className="error-text">{error}</p>}
                 <button className="btn" style={{ marginTop: 8 }} onClick={confirmBooking} disabled={loading}>
                   {loading ? 'Booking...' : 'Confirm & request ride'}
@@ -355,7 +365,7 @@ export default function PassengerDashboard() {
               <div>
                 <p className="error-text">{error}</p>
                 {nextAvailableTime && (
-                  <p className="muted">Next available: <strong>{new Date(nextAvailableTime).toLocaleString()}</strong> - toggle "Schedule for later" above and enter this time instead.</p>
+                  <p className="muted">Next available: <strong>{formatNzDateTime(nextAvailableTime)}</strong> - toggle "Schedule for later" above and enter this time instead.</p>
                 )}
                 <ContactAdmin context="booking a ride" />
               </div>
@@ -377,7 +387,7 @@ export default function PassengerDashboard() {
                   <div className="muted">
                     {b.distanceKm} km · ${b.actualFare ?? b.estimatedFare} · {b.paymentMethod === 'card' ? (b.paymentStatus === 'paid' ? 'paid online' : 'unpaid (online)') : 'cash'}
                   </div>
-                  {b.scheduledFor && <div className="muted">Scheduled: {new Date(b.scheduledFor).toLocaleString()}</div>}
+                  {b.scheduledFor && <div className="muted">Scheduled: {formatNzDateTime(b.scheduledFor)}</div>}
                   {b.arrivedAt && b.status === 'accepted' && (
                     <div style={{ color: '#16a34a', fontWeight: 600 }}>🚕 Your driver has arrived - head out to the car.</div>
                   )}
@@ -414,13 +424,18 @@ export default function PassengerDashboard() {
                   </button>
                 )}
                 {b.status === 'completed' && (
-                  <Link className="btn secondary" to="/passenger/complaints/new" state={{ bookingId: b._id, driverName: b.driverId?.userId?.name }}>Lodge complaint</Link>
+                  <>
+                    <button className="btn secondary" onClick={() => setPrintingBooking(b)}>Print receipt</button>
+                    <Link className="btn secondary" to="/passenger/complaints/new" state={{ bookingId: b._id, driverName: b.driverId?.userId?.name }}>Lodge complaint</Link>
+                  </>
                 )}
               </div>
             </div>
           ))}
         </div>
       </div>
+
+      <PrintableReceipt booking={printingBooking} />
 
       {payModal && (
         <StripePaymentModal
@@ -481,14 +496,14 @@ export default function PassengerDashboard() {
                 {editQuote.cardSurchargeAmount > 0 && (
                   <div className="muted">+ ${editQuote.cardSurchargeAmount.toFixed(2)} online payment surcharge = <strong>${editQuote.total.toFixed(2)} total</strong></div>
                 )}
-                <div className="muted">{editQuote.distanceKm} km{editStops.length > 0 && ` · via ${editStops.length} stop${editStops.length > 1 ? 's' : ''}`}{editScheduledFor && ` · scheduled for ${new Date(editScheduledFor).toLocaleString()}`}</div>
+                <div className="muted">{editQuote.distanceKm} km{editStops.length > 0 && ` · via ${editStops.length} stop${editStops.length > 1 ? 's' : ''}`}{editScheduledFor && ` · scheduled for ${formatNzDateTime(editScheduledFor)}`}</div>
               </div>
             )}
             {editError && (
               <div>
                 <p className="error-text">{editError}</p>
                 {editNextAvailableTime && (
-                  <p className="muted">Next available: <strong>{new Date(editNextAvailableTime).toLocaleString()}</strong> - set "Schedule for later" above to this time instead.</p>
+                  <p className="muted">Next available: <strong>{formatNzDateTime(editNextAvailableTime)}</strong> - set "Schedule for later" above to this time instead.</p>
                 )}
                 <ContactAdmin context="editing a ride" />
               </div>

@@ -291,11 +291,15 @@ th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--bor
   .hero h1 { font-size: 1.5rem; }
 }
 
-/* A6 printable QR card: hidden on screen, shown only when printing */
-.printable-qr-card { display: none; }
+/* A6 printable QR card and A4 trip receipt: hidden on screen, shown only
+   when printing. Each names its own @page context (Chrome/Edge support -
+   see the `page:` property below) so the QR card's A6 size doesn't leak
+   into a receipt print, or vice versa. */
+.printable-qr-card, .printable-receipt { display: none; }
 
 @media print {
   body * { visibility: hidden; }
+
   .printable-qr-card, .printable-qr-card * { visibility: visible; }
   .printable-qr-card {
     display: flex;
@@ -306,6 +310,17 @@ th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--bor
     justify-content: center;
     text-align: center;
     gap: 12px;
+    page: qr-card;
   }
-  @page { size: A6; margin: 8mm; }
+  @page qr-card { size: A6; margin: 8mm; }
+
+  .printable-receipt, .printable-receipt * { visibility: visible; }
+  .printable-receipt {
+    display: block;
+    position: fixed;
+    inset: 0;
+    padding: 15mm;
+    page: receipt;
+  }
+  @page receipt { size: auto; margin: 15mm; }
 }
