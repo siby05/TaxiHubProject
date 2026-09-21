@@ -1156,6 +1156,33 @@ router.put('/:id/rate-passenger', auth, roleMiddleware(['driver']), async (req, 
   res.json(updated);
 });
 
+// POST /api/booking/:id/invoice - emails the passenger an invoice for a
+// completed trip. Available to the passenger themselves (their own
+// booking), the driver who did the trip, or any admin - so a passenger who
+// needs it again later can ask either of them to resend it, not just
+// re-trigger it themselves.
+router.post('/:id/invoice', auth, roleMiddleware(['passenger', 'driver', 'admin']), async (req, res) => {
+  const booking = await Booking.findById(req.params.id).populate('driverId');
+  if (!booking) return res.status(404).json({ error: 'Booking not found' });
+
+  if (req.user.role === 'passenger' && String(booking.passengerId) !== String(req.user.id)) {
+    return res.status(403).json({ error: 'Not your booking' });
+  }
+  if (req.user.role === 'driver') {
+    const driver = await Driver.findOne({ userId: req.user.id });
+    if (!driver || String(booking.driverId?._id) !== String(driver._id)) return res.status(403).json({ error: 'Not your trip' });
+  }
+  if (booking.status !== 'completed') return res.status(400).json({ error: 'An invoice is only available once a trip is completed' });
+
+  const passenger = await User.findById(booking.passengerId);
+  if (!passenger) return res.status(404).json({ error: 'Passenger not found' });
+  const driverUser = booking.driverId ? await User.findById(booking.driverId.userId) : null;
+
+  const result = await emailService.sendInvoiceEmail(passenger.email, booking, { name: passenger.name, address: passenger.address }, booking.driverId, driverUser?.name);
+  if (!result.ok) return res.status(502).json({ error: 'Could not send the invoice email - please try again shortly' });
+  res.json({ ok: true, sentTo: passenger.email });
+});
+
 // PUT /api/booking/:id/payment-method - passenger changes how they're
 // paying, any time before the trip wraps up (not just while still
 // pending) - QR-scan direct hails are auto-accepted straight past

@@ -44,6 +44,7 @@ export default function PassengerDashboard() {
   const [bookingActionError, setBookingActionError] = useState('');
   const [payModal, setPayModal] = useState(null);
   const [printingBooking, setPrintingBooking] = useState(null);
+  const [invoiceStatus, setInvoiceStatus] = useState({});
   const [quote, setQuote] = useState(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [error, setError] = useState('');
@@ -120,6 +121,16 @@ export default function PassengerDashboard() {
   async function rateDriver(bookingId, rating, review) {
     await client.put(`/booking/${bookingId}/rate`, { rating, review });
     refresh();
+  }
+
+  async function emailInvoice(bookingId) {
+    setInvoiceStatus((s) => ({ ...s, [bookingId]: 'sending' }));
+    try {
+      await client.post(`/booking/${bookingId}/invoice`);
+      setInvoiceStatus((s) => ({ ...s, [bookingId]: 'sent' }));
+    } catch (err) {
+      setInvoiceStatus((s) => ({ ...s, [bookingId]: err.response?.data?.error || 'Could not send invoice' }));
+    }
   }
 
   // Setting state and calling window.print() synchronously would print
@@ -426,10 +437,17 @@ export default function PassengerDashboard() {
                 {b.status === 'completed' && (
                   <>
                     <button className="btn secondary" onClick={() => setPrintingBooking(b)}>Print receipt</button>
+                    <button className="btn secondary" onClick={() => emailInvoice(b._id)} disabled={invoiceStatus[b._id] === 'sending'}>
+                      {invoiceStatus[b._id] === 'sending' ? 'Sending...' : 'Email invoice'}
+                    </button>
                     <Link className="btn secondary" to="/passenger/complaints/new" state={{ bookingId: b._id, driverName: b.driverId?.userId?.name }}>Lodge complaint</Link>
                   </>
                 )}
               </div>
+              {invoiceStatus[b._id] === 'sent' && <p className="muted" style={{ color: 'var(--success)', marginTop: 6 }}>Invoice emailed.</p>}
+              {invoiceStatus[b._id] && !['sending', 'sent'].includes(invoiceStatus[b._id]) && (
+                <p className="error-text" style={{ marginTop: 6 }}>{invoiceStatus[b._id]}</p>
+              )}
             </div>
           ))}
         </div>

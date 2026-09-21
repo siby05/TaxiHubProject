@@ -27,7 +27,7 @@ const smtpConfigured = !!(process.env.SMTP_HOST && process.env.SMTP_USER);
 // its own DNS resolution whenever `host` is already an IP (net.isIP check) -
 // while tls.servername keeps TLS certificate validation working against the
 // real hostname instead of the raw IP.
-async function buildTransporter() {
+async function buildTransporter(port) {
   if (!smtpConfigured) return null;
   let nodemailer;
   try {
@@ -49,7 +49,12 @@ async function buildTransporter() {
 
   return nodemailer.createTransport({
     host,
-    port: Number(process.env.SMTP_PORT) || 587,
+    port,
+    // 465 is implicit TLS from the first byte; 587 (and anything else)
+    // starts plaintext and upgrades via STARTTLS - passing the wrong one
+    // for the port just produces its own connection failure, so this has
+    // to track whichever port this attempt is actually using.
+    secure: port === 465,
     auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
     tls: { servername: process.env.SMTP_HOST },
     // Nodemailer's own defaults can take a long time to give up on a
@@ -81,7 +86,7 @@ function isRetryable(err) {
 // Most callers fire-and-forget this; runBackup() is the one exception that
 // needs to know about a real failure, so it's told via the return value
 // instead of a thrown error.
-async function send(to, subject, text, attachments) {
+async function send(to, subject, text, attachments, html) {
   if (smtpConfigured) {
     // EMAIL_FROM is optional - defaults to the admin's own configured inbox,
     // which is also the SMTP account actually sending (most providers,
@@ -90,20 +95,29 @@ async function send(to, subject, text, attachments) {
     // silently never arrives).
     const from = process.env.EMAIL_FROM || getSettings().adminEmail;
     let lastErr;
-    // One retry, with a fresh DNS resolution and transporter - a connection
-    // timeout/reset is frequently a transient blip (or a stale resolved
-    // address if Gmail's frontend IP rotated between attempts), not
-    // something that reliably fails the same way twice.
-    for (let attempt = 1; attempt <= 2; attempt += 1) {
+    // A same-port retry alone wasn't enough in production: Render logs
+    // showed the *final* failure (both the first attempt and the 1s-later
+    // retry) still timing out on the same port, which points to that
+    // specific port being blocked/throttled outbound rather than a
+    // one-off blip. 587 (STARTTLS) and 465 (implicit TLS) are both common
+    // SMTP ports, and a network that blocks one sometimes still allows the
+    // other - so the second attempt switches port instead of just
+    // retrying the same one, on top of the fresh DNS resolution and
+    // transporter every attempt already gets.
+    const configuredPort = Number(process.env.SMTP_PORT) || 587;
+    const fallbackPort = configuredPort === 465 ? 587 : 465;
+    const ports = [configuredPort, fallbackPort];
+    for (let attempt = 1; attempt <= ports.length; attempt += 1) {
+      const port = ports[attempt - 1];
       try {
-        const transporter = await buildTransporter();
+        const transporter = await buildTransporter(port);
         if (!transporter) throw new Error('SMTP transporter could not be created');
-        await transporter.sendMail({ from, to, subject, text, ...(attachments && { attachments }) });
+        await transporter.sendMail({ from, to, subject, text, ...(html && { html }), ...(attachments && { attachments }) });
         return { ok: true };
       } catch (err) {
         lastErr = err;
-        if (attempt === 1 && isRetryable(err)) {
-          console.warn(`[email] send to ${to} failed (${err.message}) - retrying once`);
+        if (attempt < ports.length && isRetryable(err)) {
+          console.warn(`[email] send to ${to} via port ${port} failed (${err.message}) - retrying on port ${ports[attempt]}`);
           await sleep(1000);
           continue;
         }
@@ -151,6 +165,106 @@ function driverLine(driver, driverName) {
   return label ? `\nDriver: ${driverName || 'assigned'} - ${label}` : '';
 }
 
+// A row of the invoice's details table - kept as one helper so every row
+// shares the same border/padding instead of repeating inline styles.
+function invoiceRow(label, value) {
+  if (!value) return '';
+  return `<tr>
+    <td style="padding:8px 0;color:#64748b;font-size:13px;border-bottom:1px solid #e2e8f0;">${label}</td>
+    <td style="padding:8px 0;color:#0f172a;font-size:13px;text-align:right;border-bottom:1px solid #e2e8f0;">${value}</td>
+  </tr>`;
+}
+
+// Table-based HTML (not flexbox/grid - the only layout email clients like
+// Outlook reliably render) for the "Email invoice" action on a completed
+// trip (see routes/booking.js POST /:id/invoice) - available to the
+// passenger themselves, and to admin/driver so either can (re)send a
+// passenger their invoice on request. Mirrors PrintableReceipt.jsx's
+// content so the emailed and printed versions agree, but styled as a
+// proper company invoice: branded header, admin contact details for
+// queries, and a clearly totalled fare breakdown.
+function buildInvoiceHtml(booking, passenger, driver, driverName) {
+  const settings = getSettings();
+  const fare = booking.actualFare ?? booking.estimatedFare;
+  const total = fare + (booking.cardSurchargeAmount || 0);
+  const vLabel = vehicleLabel(driver);
+  const stopsRows = (booking.stops || []).map((s, i) => invoiceRow(`Stop ${i + 1}`, s.address)).join('');
+
+  return `
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:560px;margin:0 auto;background:#ffffff;">
+  <div style="background:#0B2942;padding:20px 32px;border-radius:10px 10px 0 0;">
+    <table style="border-collapse:collapse;" cellpadding="0" cellspacing="0" role="presentation">
+      <tr>
+        <td style="vertical-align:middle;">
+          <!-- Same public/logo.png the website's navbar/favicon use (see frontend/src/components/Logo.jsx) - the wordmark is baked into the image, so no separate "EasyRide" text is rendered alongside it. Referenced by URL rather than attached/embedded, so the email stays light; degrades to just the tagline line below if images are blocked. -->
+          <img src="${appUrl('/logo.png')}" width="48" height="48" alt="EasyRide" style="display:block;border-radius:50%;" />
+        </td>
+        <td style="vertical-align:middle;padding-left:12px;color:#94a3b8;font-size:11px;letter-spacing:0.08em;">PREMIUM TRANSPORT<br/>NEW PLYMOUTH, NZ</td>
+      </tr>
+    </table>
+  </div>
+  <div style="border:1px solid #e2e8f0;border-top:none;border-radius:0 0 10px 10px;padding:32px;">
+    <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
+      <tr>
+        <td style="font-size:20px;font-weight:700;color:#0f172a;">Invoice</td>
+        <td style="text-align:right;color:#64748b;font-size:13px;">${formatNzDate(booking.completedAt || booking.requestedAt)}</td>
+      </tr>
+      <tr><td colspan="2" style="color:#64748b;font-size:13px;padding-top:2px;">${booking.bookingId}</td></tr>
+    </table>
+
+    ${passenger?.name ? `<div style="margin-bottom:20px;"><div style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px;">Billed to</div><div style="color:#0f172a;font-size:14px;font-weight:600;">${passenger.name}</div>${passenger.address ? `<div style="color:#64748b;font-size:13px;margin-top:2px;">${passenger.address}</div>` : ''}</div>` : ''}
+
+    <table style="width:100%;border-collapse:collapse;margin-bottom:8px;">
+      ${invoiceRow('Pickup', booking.pickupAddress)}
+      ${stopsRows}
+      ${invoiceRow('Drop-off', booking.dropAddress)}
+      ${invoiceRow('Distance', `${booking.distanceKm} km`)}
+      ${invoiceRow('Driver', driverName)}
+      ${invoiceRow('Vehicle', vLabel)}
+      ${invoiceRow('Payment method', booking.paymentMethod === 'card' ? 'Card (online)' : 'Cash')}
+      ${invoiceRow('Payment status', booking.paymentStatus === 'paid' ? 'Paid' : 'Unpaid')}
+    </table>
+
+    <table style="width:100%;border-collapse:collapse;margin-top:16px;">
+      <tr><td colspan="2" style="border-top:2px solid #0B2942;padding-top:10px;"></td></tr>
+      <tr>
+        <td style="padding:4px 0;color:#64748b;font-size:13px;">Fare</td>
+        <td style="padding:4px 0;color:#0f172a;font-size:13px;text-align:right;">$${fare.toFixed(2)}</td>
+      </tr>
+      ${booking.cardSurchargeAmount > 0 ? `<tr><td style="padding:4px 0;color:#64748b;font-size:13px;">Online payment surcharge</td><td style="padding:4px 0;color:#0f172a;font-size:13px;text-align:right;">$${booking.cardSurchargeAmount.toFixed(2)}</td></tr>` : ''}
+      <tr>
+        <td style="padding:12px 0 0;color:#0f172a;font-size:16px;font-weight:700;">Total</td>
+        <td style="padding:12px 0 0;color:#0EA5E9;font-size:16px;font-weight:700;text-align:right;">$${total.toFixed(2)}</td>
+      </tr>
+    </table>
+
+    <div style="margin-top:32px;padding-top:20px;border-top:1px solid #e2e8f0;color:#64748b;font-size:12px;line-height:1.6;">
+      <div style="font-weight:700;color:#0f172a;margin-bottom:4px;">EasyRide</div>
+      ${settings.adminEmail ? `<div>Email: <a href="mailto:${settings.adminEmail}" style="color:#0EA5E9;text-decoration:none;">${settings.adminEmail}</a></div>` : ''}
+      ${settings.adminMobile ? `<div>Phone: ${settings.adminMobile}</div>` : ''}
+      <div style="margin-top:8px;">Thanks for riding with EasyRide. Questions about this invoice? Just reply to this email.</div>
+    </div>
+  </div>
+</div>`.trim();
+}
+
+// Plain-text fallback - shown by the console mock (no SMTP configured) and
+// included alongside the HTML for mail clients that prefer/require text.
+function buildInvoiceText(booking, passenger, driver, driverName) {
+  const settings = getSettings();
+  const fare = booking.actualFare ?? booking.estimatedFare;
+  const total = fare + (booking.cardSurchargeAmount || 0);
+  const vLabel = vehicleLabel(driver);
+  return `Invoice for trip ${booking.bookingId}\n` +
+    `${passenger?.name ? `Billed to: ${passenger.name}${passenger.address ? `, ${passenger.address}` : ''}\n` : ''}` +
+    `Pickup: ${booking.pickupAddress}\nDrop-off: ${booking.dropAddress}\nDistance: ${booking.distanceKm} km\n` +
+    `${driverName ? `Driver: ${driverName}\n` : ''}${vLabel ? `Vehicle: ${vLabel}\n` : ''}` +
+    `Payment: ${booking.paymentMethod === 'card' ? 'Card (online)' : 'Cash'}, ${booking.paymentStatus === 'paid' ? 'paid' : 'unpaid'}\n` +
+    `Fare: $${fare.toFixed(2)}${booking.cardSurchargeAmount > 0 ? `\nOnline payment surcharge: $${booking.cardSurchargeAmount.toFixed(2)}` : ''}\n` +
+    `Total: $${total.toFixed(2)}\n\n` +
+    `EasyRide${settings.adminEmail ? ` - ${settings.adminEmail}` : ''}${settings.adminMobile ? ` - ${settings.adminMobile}` : ''}`;
+}
+
 const emailService = {
   sendVerificationEmail: (to, name) =>
     send(to, 'Welcome to EasyRide - verify your email', `Hi ${name}, welcome to EasyRide! Your account is ready to use.`),
@@ -181,6 +295,19 @@ const emailService = {
 
   sendBookingCompleted: (to, booking) =>
     send(to, `Trip completed (${booking.bookingId})`, `Your trip is complete. Final fare: $${booking.actualFare}.`),
+
+  // Triggered by "Email invoice" on a completed trip - available to the
+  // passenger themselves, and to admin/driver so either can (re)send it on
+  // the passenger's behalf later (see routes/booking.js POST /:id/invoice).
+  // passenger is {name, address} - address is included in "Billed to" when set.
+  sendInvoiceEmail: (to, booking, passenger, driver, driverName) =>
+    send(
+      to,
+      `Invoice - trip ${booking.bookingId}`,
+      buildInvoiceText(booking, passenger, driver, driverName),
+      undefined,
+      buildInvoiceHtml(booking, passenger, driver, driverName),
+    ),
 
   sendBookingCancelledByDriver: (to, booking, reason) =>
     send(to, `Your driver cancelled trip ${booking.bookingId}`,

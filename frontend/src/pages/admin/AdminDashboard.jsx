@@ -39,6 +39,7 @@ export default function AdminDashboard() {
   const [tripDriverFilter, setTripDriverFilter] = useState('');
   const [tripDateFrom, setTripDateFrom] = useState('');
   const [tripDateTo, setTripDateTo] = useState('');
+  const [invoiceStatus, setInvoiceStatus] = useState({});
   const [feedback, setFeedback] = useState([]);
   const [enquiries, setEnquiries] = useState([]);
   const [vehicleTypes, setVehicleTypes] = useState([]);
@@ -78,6 +79,16 @@ export default function AdminDashboard() {
       load();
     } catch (err) {
       setError(err.response?.data?.error || 'Could not add driver');
+    }
+  }
+
+  async function emailInvoice(id) {
+    setInvoiceStatus((s) => ({ ...s, [id]: 'sending' }));
+    try {
+      await client.post(`/booking/${id}/invoice`);
+      setInvoiceStatus((s) => ({ ...s, [id]: 'sent' }));
+    } catch (err) {
+      setInvoiceStatus((s) => ({ ...s, [id]: err.response?.data?.error || 'Could not send invoice' }));
     }
   }
 
@@ -560,7 +571,7 @@ export default function AdminDashboard() {
           </div>
           <div className="card">
             <table>
-              <thead><tr><th>Trip</th><th>Passenger</th><th>Driver</th><th>Fare</th><th>Status</th><th>When</th></tr></thead>
+              <thead><tr><th>Trip</th><th>Passenger</th><th>Driver</th><th>Fare</th><th>Status</th><th>When</th><th>Actions</th></tr></thead>
               <tbody>
                 {filteredTrips.map((t) => (
                   <tr key={t._id}>
@@ -574,9 +585,22 @@ export default function AdminDashboard() {
                     <td>${t.actualFare ?? t.estimatedFare}{t.rating && <div className="muted">⭐ {t.rating} (driver)</div>}</td>
                     <td><span className={`badge ${t.status}`}>{t.status}</span></td>
                     <td className="muted">{formatNzDateTime(t.createdAt)}</td>
+                    <td>
+                      {t.status === 'completed' && (
+                        <>
+                          <button className="btn secondary" onClick={() => emailInvoice(t._id)} disabled={invoiceStatus[t._id] === 'sending'}>
+                            {invoiceStatus[t._id] === 'sending' ? 'Sending...' : 'Email invoice'}
+                          </button>
+                          {invoiceStatus[t._id] === 'sent' && <div className="muted" style={{ color: 'var(--success)' }}>Sent.</div>}
+                          {invoiceStatus[t._id] && !['sending', 'sent'].includes(invoiceStatus[t._id]) && (
+                            <div className="error-text">{invoiceStatus[t._id]}</div>
+                          )}
+                        </>
+                      )}
+                    </td>
                   </tr>
                 ))}
-                {filteredTrips.length === 0 && <tr><td colSpan={6} className="muted">No trips match this filter.</td></tr>}
+                {filteredTrips.length === 0 && <tr><td colSpan={7} className="muted">No trips match this filter.</td></tr>}
               </tbody>
             </table>
           </div>
