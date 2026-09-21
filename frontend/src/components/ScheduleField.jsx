@@ -32,20 +32,29 @@ export default function ScheduleField({ onChange, defaultValue }) {
   const today = todayNz();
 
   return (
-    <div>
+    // minWidth: 0 - this sits directly inside a `display:flex` <form>
+    // (flex-direction: column). A flex item's default min-width is
+    // "auto", i.e. it refuses to shrink below its content's own intrinsic
+    // minimum - and a native date/time picker's intrinsic width can
+    // exceed the form's actual width on a narrow phone screen, pushing it
+    // past the card's edge (align-items: stretch still sets the *target*
+    // width, but without this the item won't actually shrink to it).
+    <div style={{ minWidth: 0 }}>
       <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <input type="checkbox" style={{ width: 'auto' }} checked={enabled} onChange={(e) => toggle(e.target.checked)} />
         Schedule for later (instead of now)
       </label>
       {enabled && (
-        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div>
+        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
+          <div style={{ minWidth: 0 }}>
             <label>Date</label>
-            <input type="date" min={today} value={date} required onChange={(e) => update(e.target.value, time)} />
+            <input type="date" min={today} value={date} required onChange={(e) => update(e.target.value, time)}
+              style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }} />
           </div>
-          <div>
+          <div style={{ minWidth: 0 }}>
             <label>Time</label>
-            <input type="time" value={time} required onChange={(e) => update(date, e.target.value)} />
+            <input type="time" value={time} required onChange={(e) => update(date, e.target.value)}
+              style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }} />
           </div>
         </div>
       )}
