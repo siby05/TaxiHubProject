@@ -219,7 +219,7 @@ export default function BookDriver() {
               <PhoneField label="Mobile" value={guestMobile} onChange={setGuestMobile} required hint="We'll remember your name and address for next time." />
               <div><label>Full name</label><input value={guestName} onChange={(e) => setGuestName(e.target.value)} required /></div>
               <div><label>Email (optional)</label><input type="email" value={guestEmail} onChange={(e) => setGuestEmail(e.target.value)} /></div>
-              <AddressAutocomplete label="Home address (optional)" defaultValue={guestAddress} onSelect={(r) => setGuestAddress(r ? r.label : '')} />
+              <AddressAutocomplete label="Home address" defaultValue={guestAddress} onSelect={(r) => setGuestAddress(r ? r.label : '')} required />
 
               <AddressAutocomplete label="Pickup address" onSelect={setGuestPickup} required allowLocate />
 
@@ -246,7 +246,7 @@ export default function BookDriver() {
                     <input type="radio" style={{ width: 'auto' }} checked={guestPaymentMethod === 'card'} onChange={() => setGuestPaymentMethod('card')} /> Pay online
                   </label>
                 </div>
-                {guestPaymentMethod === 'card' && <p className="muted">Card payment needs an account so we can send a secure payment link - cash is available right now with no sign-up.</p>}
+                {guestPaymentMethod === 'card' && <p className="muted">You'll be taken to a secure payment page once a driver accepts.</p>}
               </div>
 
               {guestQuoteLoading && <p className="muted">Calculating fare...</p>}
@@ -260,7 +260,7 @@ export default function BookDriver() {
                   {guestError && <p className="error-text">{guestError}</p>}
                   <button className="btn" style={{ marginTop: 8 }}
                     onClick={confirmGuestBooking}
-                    disabled={guestLoading || !guestName || !guestMobile || (guestPaymentMethod === 'card')}>
+                    disabled={guestLoading || !guestName || !guestMobile || !guestAddress}>
                     {guestLoading ? 'Requesting...' : 'Confirm & request ride'}
                   </button>
                 </div>

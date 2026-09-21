@@ -504,6 +504,13 @@ router.post('/guest', async (req, res) => {
 
     let passenger = await User.findOne({ role: 'passenger', mobile: passengerMobile });
     if (passenger) {
+      // Same record-keeping requirement as a brand-new guest below - an
+      // older account created before this was required might still have
+      // no address on file, so still ask for one this time rather than
+      // letting it slide forever.
+      if (!passenger.address && !passengerAddress) {
+        return res.status(400).json({ error: 'passengerAddress is required' });
+      }
       // Keep their saved details current if this visit gave new ones,
       // without clobbering a previously-saved address with a blank.
       const patch = {};
@@ -511,6 +518,10 @@ router.post('/guest', async (req, res) => {
       if (passengerAddress && passengerAddress !== passenger.address) patch.address = passengerAddress;
       if (Object.keys(patch).length) passenger = await User.findByIdAndUpdate(passenger._id, patch);
     } else {
+      // NZTA small passenger service record-keeping expects a way to
+      // identify who travelled - same reasoning routes/driver.js POST
+      // /bookings already applies to a driver-registered walk-up passenger.
+      if (!passengerAddress) return res.status(400).json({ error: 'passengerAddress is required' });
       const placeholderPassword = await bcrypt.hash(crypto.randomBytes(16).toString('hex'), 10);
       passenger = await User.create({
         name: passengerName,

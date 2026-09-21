@@ -37,6 +37,7 @@ export default function PassengerDashboard() {
   const [formKey, setFormKey] = useState(0); // bump to reset the autocomplete inputs after booking
   const [payingId, setPayingId] = useState(null);
   const [payError, setPayError] = useState('');
+  const [cancelError, setCancelError] = useState('');
   const [payModal, setPayModal] = useState(null);
   const [quote, setQuote] = useState(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
@@ -113,6 +114,17 @@ export default function PassengerDashboard() {
   async function rateDriver(bookingId, rating, review) {
     await client.put(`/booking/${bookingId}/rate`, { rating, review });
     refresh();
+  }
+
+  async function cancelBooking(id) {
+    if (!window.confirm("Cancel this ride? If a driver has already accepted, they'll be notified.")) return;
+    setCancelError('');
+    try {
+      await client.put(`/booking/${id}/cancel`, {});
+      refresh();
+    } catch (err) {
+      setCancelError(err.response?.data?.error || 'Could not cancel this booking');
+    }
   }
 
   function openEdit(b) {
@@ -338,6 +350,7 @@ export default function PassengerDashboard() {
         <div className="card">
           <h3>My bookings</h3>
           {payError && <p className="error-text">{payError}</p>}
+          {cancelError && <p className="error-text">{cancelError}</p>}
           {bookings.length === 0 && <p className="muted">No bookings yet.</p>}
           {bookings.map((b) => (
             <div className="booking-row" key={b._id}>
@@ -364,6 +377,9 @@ export default function PassengerDashboard() {
               <div className="booking-actions">
                 {b.status === 'pending' && (
                   <button className="btn secondary" onClick={() => openEdit(b)}>Edit ride</button>
+                )}
+                {['pending', 'accepted'].includes(b.status) && (
+                  <button className="btn danger" onClick={() => cancelBooking(b._id)}>Cancel ride</button>
                 )}
                 {['accepted', 'in-progress'].includes(b.status) && waLink(b.driverContact?.mobile, passengerToDriverMessage(b.driverContact?.name)) && (
                   <a className="btn whatsapp" target="_blank" rel="noreferrer"
