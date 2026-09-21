@@ -1,10 +1,22 @@
 require('dotenv').config();
+const dns = require('dns');
 const express = require('express');
 const http = require('http');
 const cors = require('cors');
 const path = require('path');
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
+
+// Render (and some other hosts) have no outbound IPv6 route, but plenty of
+// third-party hosts we call out to (Gmail's SMTP servers being the one
+// that actually surfaced this - "connect ENETUNREACH" on every email
+// send) resolve to both an IPv4 and IPv6 address. Node's default resolver
+// order tries IPv6 first regardless of whether the host can actually
+// route it - prefer IPv4 globally so nothing else (geocoding, Stripe,
+// anything added later) hits the same failure. services/emailService.js
+// also pins nodemailer's own socket to IPv4 directly, since it's the one
+// place this already bit us.
+dns.setDefaultResultOrder('ipv4first');
 
 const { connectDatabase } = require('./config/database');
 const { notFound, errorHandler } = require('./middleware/errorHandler');

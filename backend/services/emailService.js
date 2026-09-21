@@ -14,6 +14,13 @@ if (process.env.SMTP_HOST && process.env.SMTP_USER) {
       host: process.env.SMTP_HOST,
       port: Number(process.env.SMTP_PORT) || 587,
       auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+      // Render (and some other hosts) have no outbound IPv6 route, but
+      // smtp.gmail.com resolves to both an IPv4 and IPv6 address - Node's
+      // default resolver order tried the IPv6 one first and got
+      // "connect ENETUNREACH", every single send. Forcing IPv4 here (and
+      // the global dns.setDefaultResultOrder in server.js, for every
+      // other outbound connection this app makes) is the standard fix.
+      family: 4,
       // Nodemailer's own defaults can take a long time to give up on a
       // misconfigured/unreachable host, which made a "Sending..." button
       // (forgot-password, run-backup) look stuck rather than failing
