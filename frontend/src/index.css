@@ -294,7 +294,19 @@ th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--bor
 /* A6 printable QR card and A4 trip receipt: hidden on screen, shown only
    when printing. Each names its own @page context (Chrome/Edge support -
    see the `page:` property below) so the QR card's A6 size doesn't leak
-   into a receipt print, or vice versa. */
+   into a receipt print, or vice versa.
+
+   position: absolute (not fixed) is deliberate: `body * { visibility:
+   hidden }` hides every other element but still leaves its layout space
+   behind, so the printable element needs taking out of normal flow to
+   avoid printing a blank page of that leftover whitespace first - but
+   `position: fixed` (tried originally) is unreliable for multi-page
+   content specifically: several browsers only paint a fixed element on
+   the first printed page and leave the rest blank, which is exactly why
+   the receipt (tall enough to want two pages) came out broken while the
+   short, always-one-page QR card happened to still look fine. `absolute`
+   positions the same way for a single page but repeats/flows correctly
+   across a page break instead of being pinned to just the first one. */
 .printable-qr-card, .printable-receipt { display: none; }
 
 @media print {
@@ -303,8 +315,8 @@ th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--bor
   .printable-qr-card, .printable-qr-card * { visibility: visible; }
   .printable-qr-card {
     display: flex;
-    position: fixed;
-    inset: 0;
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
     flex-direction: column;
     align-items: center;
     justify-content: center;
@@ -317,9 +329,8 @@ th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--bor
   .printable-receipt, .printable-receipt * { visibility: visible; }
   .printable-receipt {
     display: block;
-    position: fixed;
-    inset: 0;
-    padding: 15mm;
+    position: absolute;
+    top: 0; left: 0; width: 100%;
     page: receipt;
   }
   @page receipt { size: auto; margin: 15mm; }
