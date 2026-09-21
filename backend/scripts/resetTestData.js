@@ -2,7 +2,8 @@
  * One-off maintenance script: wipes trip-related test data while leaving
  * Driver and User accounts (drivers, admins, passengers) untouched.
  *
- * Deletes: all Bookings, Complaints, Notifications, WeeklyPayments.
+ * Deletes: all Bookings, Complaints, Notifications, WeeklyPayments,
+ * Feedback, Enquiries.
  * Resets: each Driver's rating/totalTrips/totalEarnings back to zero (the
  * driver profile itself - vehicle, status, rate, documents, etc. - is left
  * alone).
@@ -24,6 +25,8 @@ const Booking = require('../models/Booking');
 const Complaint = require('../models/Complaint');
 const Notification = require('../models/Notification');
 const WeeklyPayment = require('../models/WeeklyPayment');
+const Feedback = require('../models/Feedback');
+const Enquiry = require('../models/Enquiry');
 const Driver = require('../models/Driver');
 
 async function main() {
@@ -36,13 +39,15 @@ async function main() {
   const mode = process.env.DB_MODE || 'memory';
   console.log(`[reset] DB_MODE=${mode}${mode === 'mongo' ? ` (database "${mongoose.connection.name}")` : ' - nothing persists here, this is a no-op'}`);
 
-  const [bookings, complaints, notifications, weeklyPayments] = await Promise.all([
+  const [bookings, complaints, notifications, weeklyPayments, feedback, enquiries] = await Promise.all([
     Booking.deleteMany({}),
     Complaint.deleteMany({}),
     Notification.deleteMany({}),
     WeeklyPayment.deleteMany({}),
+    Feedback.deleteMany({}),
+    Enquiry.deleteMany({}),
   ]);
-  console.log(`[reset] deleted bookings=${bookings.deletedCount} complaints=${complaints.deletedCount} notifications=${notifications.deletedCount} weeklyPayments=${weeklyPayments.deletedCount}`);
+  console.log(`[reset] deleted bookings=${bookings.deletedCount} complaints=${complaints.deletedCount} notifications=${notifications.deletedCount} weeklyPayments=${weeklyPayments.deletedCount} feedback=${feedback.deletedCount} enquiries=${enquiries.deletedCount}`);
 
   const drivers = await Driver.find({});
   for (const d of drivers) {
