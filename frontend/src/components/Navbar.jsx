@@ -18,7 +18,7 @@ export default function Navbar() {
 
   return (
     <div className="navbar">
-      <Link className="brand" to={user ? home : '/'}><Logo size={30} /></Link>
+      <Link className="brand" to={user ? home : '/'}><Logo size={30} dark /></Link>
       <nav>
         {user ? (
           <>
