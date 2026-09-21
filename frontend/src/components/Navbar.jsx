@@ -50,7 +50,7 @@ export default function Navbar() {
             )}
             <NotificationBell />
             <span className="muted" style={{ color: '#cbd5e1' }}>{user.name} · {user.role}</span>
-            <button onClick={() => { logout(); navigate('/login'); }}>Log out</button>
+            <button onClick={() => { logout(); navigate('/'); }}>Log out</button>
           </>
         ) : (
           <>
