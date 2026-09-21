@@ -233,7 +233,7 @@ export default function Home() {
 
       <footer className="home-footer">
         <p>© 2026 Easy Ride NZ</p>
-        <p><a href="mailto:easyride@gmail.com">easyride@gmail.com</a> · New Plymouth, New Zealand</p>
+        <p><a href="mailto:easyridenz@gmail.com">easyridenz@gmail.com</a> · New Plymouth, New Zealand</p>
       </footer>
     </div>
   );
