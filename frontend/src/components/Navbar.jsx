@@ -36,9 +36,9 @@ export default function Navbar() {
                 <Link to="/driver/schedule">Schedule</Link>
                 <Link to="/driver/qr-code">My QR code</Link>
                 <Link to="/driver/documents">Documents</Link>
-                <Link to="/driver/billing">Fees</Link>
                 <Link to="/driver/complaints">Complaints</Link>
                 <Link to="/driver/reports">Reports</Link>
+                <Link to="/driver/settings">Settings</Link>
                 <Link to="/terms">Terms</Link>
               </>
             )}

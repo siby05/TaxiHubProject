@@ -61,8 +61,8 @@ router.post('/onboard', auth, roleMiddleware(['driver']), async (req, res) => {
     const base = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
     const accountLink = await stripe.accountLinks.create({
       account: accountId,
-      refresh_url: `${base}/driver/billing?stripe=refresh`,
-      return_url: `${base}/driver/billing?stripe=return`,
+      refresh_url: `${base}/driver/settings?stripe=refresh`,
+      return_url: `${base}/driver/settings?stripe=return`,
       type: 'account_onboarding',
     });
 

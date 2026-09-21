@@ -12,6 +12,7 @@ import { waLink, passengerToDriverMessage } from '../../utils/whatsapp';
 import WhatsAppIcon from '../../components/WhatsAppIcon';
 import { newStopId, makeStopHandlers, stopsPayload } from '../../utils/stops';
 import ContactAdmin from '../../components/ContactAdmin';
+import InstallPrompt from '../../components/InstallPrompt';
 
 // Friendlier wording for the raw booking status - the CSS class (badge
 // pending/accepted/...) still keys off the raw status, just the visible
@@ -30,6 +31,7 @@ export default function PassengerDashboard() {
   const [scheduledFor, setScheduledFor] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [previousDrivers, setPreviousDrivers] = useState([]);
+  const [driverCount, setDriverCount] = useState(null);
   const [preferredDriverId, setPreferredDriverId] = useState('');
   const [vehicleTypes, setVehicleTypes] = useState([]);
   const [vehicleType, setVehicleType] = useState('');
@@ -66,6 +68,7 @@ export default function PassengerDashboard() {
     fetchMine();
     client.get('/passenger/stats').then((r) => setStats(r.data)).catch(() => {});
     client.get('/booking/previous-drivers').then((r) => setPreviousDrivers(r.data)).catch(() => {});
+    client.get('/booking/driver-count').then((r) => setDriverCount(r.data.count)).catch(() => {});
   }
 
   useEffect(() => {
@@ -253,6 +256,7 @@ export default function PassengerDashboard() {
   return (
     <div className="container">
       <h1>Passenger dashboard</h1>
+      <InstallPrompt />
       {notice && <div className="card" style={{ background: '#dcfce7' }}>{notice} <button className="btn secondary" onClick={() => setNotice('')}>Dismiss</button></div>}
 
       {stats && (
@@ -297,7 +301,7 @@ export default function PassengerDashboard() {
               </div>
             )}
 
-            {previousDrivers.length > 0 && (
+            {previousDrivers.length > 0 && driverCount !== 1 && (
               <div>
                 <label>Driver</label>
                 <select value={preferredDriverId} onChange={(e) => setPreferredDriverId(e.target.value)}>

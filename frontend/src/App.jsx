@@ -19,7 +19,7 @@ import DriverDashboard from './pages/driver/DriverDashboard';
 import DriverComplaints from './pages/driver/DriverComplaints';
 import DriverSchedule from './pages/driver/DriverSchedule';
 import DriverQrCode from './pages/driver/DriverQrCode';
-import DriverBilling from './pages/driver/DriverBilling';
+import DriverSettings from './pages/driver/DriverSettings';
 import DriverBookForPassenger from './pages/driver/DriverBookForPassenger';
 import DriverReports from './pages/driver/DriverReports';
 import DriverDocuments from './pages/driver/DriverDocuments';
@@ -55,7 +55,7 @@ export default function App() {
         <Route path="/driver" element={<ProtectedRoute roles={['driver']}><DriverDashboard /></ProtectedRoute>} />
         <Route path="/driver/schedule" element={<ProtectedRoute roles={['driver']}><DriverSchedule /></ProtectedRoute>} />
         <Route path="/driver/qr-code" element={<ProtectedRoute roles={['driver']}><DriverQrCode /></ProtectedRoute>} />
-        <Route path="/driver/billing" element={<ProtectedRoute roles={['driver']}><DriverBilling /></ProtectedRoute>} />
+        <Route path="/driver/settings" element={<ProtectedRoute roles={['driver']}><DriverSettings /></ProtectedRoute>} />
         <Route path="/driver/book" element={<ProtectedRoute roles={['driver']}><DriverBookForPassenger /></ProtectedRoute>} />
         <Route path="/driver/complaints" element={<ProtectedRoute roles={['driver']}><DriverComplaints /></ProtectedRoute>} />
         <Route path="/driver/reports" element={<ProtectedRoute roles={['driver']}><DriverReports /></ProtectedRoute>} />

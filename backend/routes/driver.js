@@ -7,7 +7,6 @@ const Driver = require('../models/Driver');
 const Booking = require('../models/Booking');
 const { auth, roleMiddleware } = require('../middleware/auth');
 const { ensureDriverQrCode } = require('../utils/qrcode');
-const { getDriverBilling } = require('../utils/billing');
 const { calculateTripFare, calculateCardSurcharge, routeDistanceKm, invalidStopsError, cleanStops } = require('../utils/distance');
 const { emailService } = require('../services/emailService');
 const { notifyUser, notifyAdmins } = require('../utils/notify');
@@ -107,14 +106,6 @@ router.put('/availability', auth, roleMiddleware(['driver']), async (req, res) =
   if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
 
   if (isAvailable) {
-    const billing = await getDriverBilling(driver);
-    if (billing.overLimit) {
-      return res.status(402).json({
-        error: `Your outstanding fees ($${billing.totalPending.toFixed(2)}) are over the $${billing.feeLimit} limit. Pay the balance or contact admin to go online again.`,
-        billing,
-      });
-    }
-
     const compliance = checkDriverCompliance(driver);
     if (!compliance.compliant) {
       return res.status(403).json({
@@ -191,13 +182,6 @@ router.put('/rate', auth, roleMiddleware(['driver']), async (req, res) => {
   });
 
   res.json({ message: 'Rate change submitted - awaiting admin approval before it goes live.', driver: updated });
-});
-
-// GET /api/driver/billing - own weekly commission/fee ledger
-router.get('/billing', auth, roleMiddleware(['driver']), async (req, res) => {
-  const driver = await Driver.findOne({ userId: req.user.id });
-  if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
-  res.json(await getDriverBilling(driver));
 });
 
 // GET /api/driver/passengers/search?q= - find an already-registered

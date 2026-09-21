@@ -4,35 +4,62 @@
  * visible and testable with zero setup. Set SMTP_* in .env to send real
  * mail via nodemailer without touching any calling code.
  */
+const dns = require('dns');
+const { promisify } = require('util');
 const { getSettings } = require('../config/platformSettings');
 
-let transporter = null;
-if (process.env.SMTP_HOST && process.env.SMTP_USER) {
+const resolve4 = promisify(dns.resolve4);
+const smtpConfigured = !!(process.env.SMTP_HOST && process.env.SMTP_USER);
+
+// Builds a fresh transporter for every send, pointed at a literal IPv4
+// address rather than the SMTP hostname. Render (and some other hosts) have
+// no outbound IPv6 route - passing `family: 4` to createTransport() and
+// setting dns.setDefaultResultOrder('ipv4first') (see server.js) both look
+// like the standard fix, but neither actually does anything here: nodemailer
+// v10 resolves the hostname itself (dist/cjs/shared/index.js), querying both
+// A and AAAA records and then picking *at random* between whatever it finds
+// - it never reads options.family, and setDefaultResultOrder only affects
+// dns.lookup(), not the dns.resolve4()/resolve6() calls nodemailer actually
+// makes. The result was a coin-flip on every single send: about half landed
+// on smtp.gmail.com's IPv6 address and failed with ENETUNREACH. Resolving to
+// an IPv4 literal ourselves sidesteps that logic entirely - nodemailer skips
+// its own DNS resolution whenever `host` is already an IP (net.isIP check) -
+// while tls.servername keeps TLS certificate validation working against the
+// real hostname instead of the raw IP.
+async function buildTransporter() {
+  if (!smtpConfigured) return null;
+  let nodemailer;
   try {
-    const nodemailer = require('nodemailer');
-    transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT) || 587,
-      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-      // Render (and some other hosts) have no outbound IPv6 route, but
-      // smtp.gmail.com resolves to both an IPv4 and IPv6 address - Node's
-      // default resolver order tried the IPv6 one first and got
-      // "connect ENETUNREACH", every single send. Forcing IPv4 here (and
-      // the global dns.setDefaultResultOrder in server.js, for every
-      // other outbound connection this app makes) is the standard fix.
-      family: 4,
-      // Nodemailer's own defaults can take a long time to give up on a
-      // misconfigured/unreachable host, which made a "Sending..." button
-      // (forgot-password, run-backup) look stuck rather than failing
-      // visibly - fail within ~10s instead so send() below always
-      // resolves quickly, whichever way.
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
-      socketTimeout: 10000,
-    });
+    nodemailer = require('nodemailer');
   } catch {
     console.warn('[email] nodemailer not installed; falling back to console mock. Run `npm install nodemailer` to enable real SMTP.');
+    return null;
   }
+
+  let host = process.env.SMTP_HOST;
+  try {
+    const addresses = await resolve4(process.env.SMTP_HOST);
+    if (addresses[0]) host = addresses[0];
+  } catch (err) {
+    // Fall back to the hostname - better to let nodemailer take its own
+    // (unreliable) shot than to fail the send outright over a DNS hiccup.
+    console.warn(`[email] could not resolve ${process.env.SMTP_HOST} to an IPv4 address (${err.message}); falling back to hostname`);
+  }
+
+  return nodemailer.createTransport({
+    host,
+    port: Number(process.env.SMTP_PORT) || 587,
+    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+    tls: { servername: process.env.SMTP_HOST },
+    // Nodemailer's own defaults can take a long time to give up on a
+    // misconfigured/unreachable host, which made a "Sending..." button
+    // (forgot-password, run-backup) look stuck rather than failing
+    // visibly - fail within ~10s instead so send() below always
+    // resolves quickly, whichever way.
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 10000,
+  });
 }
 
 // Never throws: a booking/complaint/enquiry must never fail (or, worse,
@@ -42,8 +69,10 @@ if (process.env.SMTP_HOST && process.env.SMTP_USER) {
 // needs to know about a real failure, so it's told via the return value
 // instead of a thrown error.
 async function send(to, subject, text, attachments) {
-  if (transporter) {
+  if (smtpConfigured) {
     try {
+      const transporter = await buildTransporter();
+      if (!transporter) throw new Error('SMTP transporter could not be created');
       // EMAIL_FROM is optional - defaults to the admin's own configured
       // inbox, which is also the SMTP account actually sending (most
       // providers, Gmail included, want the From address to match the
@@ -80,25 +109,25 @@ const emailService = {
     send(to, 'You are approved to drive on EasyRide', `Hi ${name}, your driver account has been approved. Log in, go online, and you can start receiving trip requests.`),
 
   sendBookingConfirmation: (to, booking) =>
-    send(to, `Booking confirmed (${booking._id})`, `Your ride from ${booking.pickupAddress} to ${booking.dropAddress} has been requested. Estimated fare: $${booking.estimatedFare}.`),
+    send(to, `Booking confirmed (${booking.bookingId})`, `Your ride from ${booking.pickupAddress} to ${booking.dropAddress} has been requested. Estimated fare: $${booking.estimatedFare}.`),
 
   sendDriverBookingAlert: (to, booking) =>
-    send(to, 'New ride request', `New booking from ${booking.pickupAddress} to ${booking.dropAddress}. You have 30 seconds to accept in-app.`),
+    send(to, `New ride request (${booking.bookingId})`, `New booking from ${booking.pickupAddress} to ${booking.dropAddress}. You have 30 seconds to accept in-app.`),
 
   // A QR-scan direct hail is auto-accepted (see routes/booking.js) - no
   // accept/decline step, so the driver is told it's already theirs
   // rather than asked to respond.
   sendDriverTripAssigned: (to, booking) =>
-    send(to, 'New confirmed trip', `A passenger scanned your QR code and booked you directly - already confirmed, head to ${booking.pickupAddress} for pickup.`),
+    send(to, `New confirmed trip (${booking.bookingId})`, `A passenger scanned your QR code and booked you directly - already confirmed, head to ${booking.pickupAddress} for pickup.`),
 
   sendBookingAccepted: (to, booking) =>
-    send(to, 'Driver accepted your ride', `Your driver has accepted booking ${booking._id} and is on the way.`),
+    send(to, `Driver accepted your ride (${booking.bookingId})`, `Your driver has accepted booking ${booking.bookingId} and is on the way.`),
 
   sendBookingConfirmedDirect: (to, booking) =>
-    send(to, 'Your ride is confirmed', `Your ride from ${booking.pickupAddress} to ${booking.dropAddress} is confirmed - the driver has been notified. Estimated fare: $${booking.estimatedFare}.`),
+    send(to, `Your ride is confirmed (${booking.bookingId})`, `Your ride from ${booking.pickupAddress} to ${booking.dropAddress} is confirmed - the driver has been notified. Estimated fare: $${booking.estimatedFare}.`),
 
   sendBookingCompleted: (to, booking) =>
-    send(to, 'Trip completed', `Your trip is complete. Final fare: $${booking.actualFare}.`),
+    send(to, `Trip completed (${booking.bookingId})`, `Your trip is complete. Final fare: $${booking.actualFare}.`),
 
   sendBookingCancelledByDriver: (to, booking, reason) =>
     send(to, `Your driver cancelled trip ${booking.bookingId}`,

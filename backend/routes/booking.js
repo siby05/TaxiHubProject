@@ -23,7 +23,6 @@ const { VEHICLE_TYPES, isValidVehicleType } = require('../config/vehicleTypes');
 const { notifyUser, notifyAdmins } = require('../utils/notify');
 const { getPassengerRatingAvg } = require('../utils/ratings');
 const { isWithinSchedule } = require('../utils/schedule');
-const { getDriverBilling } = require('../utils/billing');
 const { getSettings } = require('../config/platformSettings');
 const { getDriverReadyTime, isReadyInTime } = require('../utils/driverAvailability');
 
@@ -848,6 +847,14 @@ router.get('/previous-drivers', auth, roleMiddleware(['passenger']), async (req,
   res.json(drivers);
 });
 
+// GET /api/booking/driver-count - how many approved (bookable) drivers exist
+// platform-wide. The passenger booking form uses this to hide its "specific
+// driver vs. auto-match" choice when there's only one driver anyway - a
+// choice between one option isn't a choice, and it's confusing UI otherwise.
+router.get('/driver-count', auth, roleMiddleware(['passenger']), async (req, res) => {
+  res.json({ count: await Driver.countDocuments({ status: 'approved' }) });
+});
+
 // GET /api/booking/:id - single booking for its own passenger. Backs the
 // /pay/:bookingId deep link a driver can WhatsApp to a passenger who
 // completed a trip without having paid online yet (see PUT /:id/complete
@@ -1047,29 +1054,6 @@ router.put('/:id/complete', auth, roleMiddleware(['driver']), async (req, res) =
       message: `${driverUser?.name || 'A driver'} completed booking ${updated._id} - $${updated.actualFare}`,
       link: '/admin',
     });
-
-    // Completing a trip can push a per-trip-commission driver's outstanding
-    // balance over their limit - take them offline immediately rather than
-    // waiting for their next go-online attempt.
-    const freshDriver = await Driver.findById(driver._id);
-    const billing = await getDriverBilling(freshDriver);
-    if (billing.overLimit && freshDriver.isAvailable) {
-      await Driver.findByIdAndUpdate(driver._id, { isAvailable: false });
-      if (driverUser) {
-        await notifyUser(driverUser._id, {
-          type: 'driver-disabled',
-          title: 'You have been taken offline',
-          message: `Outstanding fees ($${billing.totalPending.toFixed(2)}) are over the $${billing.feeLimit} limit. Pay the balance or contact admin to go online again.`,
-          link: '/driver/billing',
-        });
-      }
-      await notifyAdmins({
-        type: 'driver-disabled',
-        title: 'Driver auto-disabled (fee limit)',
-        message: `${driverUser?.name || 'A driver'} exceeded their $${billing.feeLimit} outstanding fee limit ($${billing.totalPending.toFixed(2)} owed) and was taken offline`,
-        link: `/admin/drivers/${driver._id}/report`,
-      });
-    }
 
     res.json(updated);
   } catch (err) {
