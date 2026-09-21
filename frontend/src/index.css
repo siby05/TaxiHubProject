@@ -231,12 +231,8 @@ th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--bor
 @media (max-width: 700px) { .pricing-card { grid-template-columns: 1fr; padding: 26px; } }
 
 .photo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; }
-.photo-grid-item { position: relative; border-radius: 14px; overflow: hidden; aspect-ratio: 4 / 3; }
+.photo-grid-item { border-radius: 14px; overflow: hidden; aspect-ratio: 4 / 3; }
 .photo-grid-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.photo-credit {
-  position: absolute; right: 6px; bottom: 6px; padding: 2px 8px; border-radius: 6px;
-  background: rgba(0, 0, 0, 0.55); color: #fff; font-size: 0.7rem; text-decoration: none;
-}
 
 .role-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
 .role-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 28px; }

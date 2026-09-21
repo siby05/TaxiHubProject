@@ -3,14 +3,12 @@ import { Link } from 'react-router-dom';
 import client from '../api/client';
 
 const HERO_IMAGE = 'https://images.unsplash.com/photo-1449824913935-59a10b8d2000?auto=format&fit=crop&w=1800&q=80';
+// Unsplash photos only from here on - no attribution required, unlike the
+// BYD Atto 3 photo this used to include (Wikimedia Commons, CC BY 4.0,
+// which requires a visible credit - removing the credit text without
+// dropping that photo would have left the image used without the
+// attribution its license requires).
 const SHOWCASE_IMAGES = [
-  {
-    src: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/4/46/BYD_Atto_3_front-left.jpg/960px-BYD_Atto_3_front-left.jpg',
-    alt: 'BYD Atto 3 electric SUV',
-    // CC BY 4.0 requires attribution, unlike the Unsplash photos below -
-    // shown as plain text, not linked out.
-    credit: 'Photo: Hubert Berberich / Wikimedia Commons (CC BY 4.0)',
-  },
   { src: 'https://images.unsplash.com/photo-1502877338535-766e1452684a?auto=format&fit=crop&w=900&q=80', alt: 'Driver behind the wheel on a trip' },
   { src: 'https://images.unsplash.com/photo-1519003722824-194d4455a60c?auto=format&fit=crop&w=900&q=80', alt: 'Open road heading toward the coast' },
 ];
@@ -158,7 +156,6 @@ export default function Home() {
             {SHOWCASE_IMAGES.map((img) => (
               <div className="photo-grid-item" key={img.src}>
                 <img src={img.src} alt={img.alt} loading="lazy" />
-                {img.credit && <span className="photo-credit">{img.credit}</span>}
               </div>
             ))}
           </div>
