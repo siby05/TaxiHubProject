@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../../api/client';
+import { useAuthStore } from '../../store/authStore';
 import { useBookingStore } from '../../store/bookingStore';
 import { useSocket } from '../../hooks/useSocket';
 import AddressAutocomplete from '../../components/AddressAutocomplete';
@@ -25,8 +26,10 @@ const STATUS_LABELS = {
 };
 
 export default function PassengerDashboard() {
+  const { user } = useAuthStore();
   const { bookings, fetchMine, createBooking } = useBookingStore();
   const [stats, setStats] = useState(null);
+  const [adminContact, setAdminContact] = useState(null);
   const [pickup, setPickup] = useState(null);
   const [drop, setDrop] = useState(null);
   const [stops, setStops] = useState([]);
@@ -79,6 +82,8 @@ export default function PassengerDashboard() {
     refresh();
     client.get('/booking/vehicle-types').then((r) => setVehicleTypes(r.data)).catch(() => {});
     client.get('/booking/vehicle-selection-enabled').then((r) => setVehicleSelectionEnabled(r.data.enabled)).catch(() => {});
+    // For the printable/emailed invoice footer - see components/PrintableReceipt.jsx.
+    client.get('/booking/admin-contact').then((r) => setAdminContact(r.data)).catch(() => {});
 
     // Belt-and-suspenders alongside the socket events below: a trip's
     // status (e.g. a driver accepting) should show up without the
@@ -453,7 +458,7 @@ export default function PassengerDashboard() {
         </div>
       </div>
 
-      <PrintableReceipt booking={printingBooking} />
+      <PrintableReceipt booking={printingBooking} passenger={{ name: user?.name, address: user?.address }} adminContact={adminContact} />
 
       {payModal && (
         <StripePaymentModal
