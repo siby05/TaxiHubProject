@@ -13,6 +13,14 @@ import WhatsAppIcon from '../../components/WhatsAppIcon';
 import { newStopId, makeStopHandlers, stopsPayload } from '../../utils/stops';
 import ContactAdmin from '../../components/ContactAdmin';
 
+// Friendlier wording for the raw booking status - the CSS class (badge
+// pending/accepted/...) still keys off the raw status, just the visible
+// text changes, so existing .badge.* styling needs no changes.
+const STATUS_LABELS = {
+  pending: 'Requesting', accepted: 'Confirmed', 'in-progress': 'Trip in progress',
+  completed: 'Completed', cancelled: 'Cancelled', expired: 'Expired',
+};
+
 export default function PassengerDashboard() {
   const { bookings, fetchMine, createBooking } = useBookingStore();
   const [stats, setStats] = useState(null);
@@ -63,6 +71,15 @@ export default function PassengerDashboard() {
     refresh();
     client.get('/booking/vehicle-types').then((r) => setVehicleTypes(r.data)).catch(() => {});
     client.get('/booking/vehicle-selection-enabled').then((r) => setVehicleSelectionEnabled(r.data.enabled)).catch(() => {});
+
+    // Belt-and-suspenders alongside the socket events below: a trip's
+    // status (e.g. a driver accepting) should show up without the
+    // passenger having to refresh, and this keeps that true even if the
+    // socket connection itself isn't up (a misconfigured VITE_SOCKET_URL
+    // in production, a dropped connection, etc.) - 20s is frequent enough
+    // to feel live without hammering the API.
+    const poll = setInterval(refresh, 20000);
+    return () => clearInterval(poll);
   }, []);
 
   useSocket({
@@ -337,7 +354,7 @@ export default function PassengerDashboard() {
                   )}
                   {b.rating && <div className="muted">You rated: {'★'.repeat(b.rating)}{'☆'.repeat(5 - b.rating)}</div>}
                 </div>
-                <span className={`badge ${b.status}`}>{b.status}</span>
+                <span className={`badge ${b.status}`}>{STATUS_LABELS[b.status] || b.status}</span>
               </div>
 
               {b.status === 'completed' && !b.rating && (

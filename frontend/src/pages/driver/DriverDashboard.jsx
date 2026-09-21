@@ -24,6 +24,13 @@ export default function DriverDashboard() {
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({ name: '', email: '', mobile: '', vehicleNumber: '', currentPassword: '' });
   const [profileMsg, setProfileMsg] = useState('');
+  // A link the driver can tap to send a WhatsApp update, offered *after*
+  // an action succeeds rather than auto-opened during it - opening a new
+  // tab mid-click backgrounds this one, and some browsers throttle a
+  // backgrounded tab's JS enough that the accept/complete/cancel request
+  // and the subsequent load() were delayed long enough to look like the
+  // button hadn't done anything (reported as Accept needing two clicks).
+  const [waSuggestion, setWaSuggestion] = useState(null);
 
   function load() {
     fetchDriverBookings(showAllTrips ? { all: true } : undefined);
@@ -32,6 +39,14 @@ export default function DriverDashboard() {
   }
 
   useEffect(() => { load(); }, [showAllTrips]);
+
+  // Belt-and-suspenders alongside the socket events below - keeps new
+  // requests/status changes showing up without a manual refresh even if
+  // the socket connection itself isn't up.
+  useEffect(() => {
+    const poll = setInterval(load, 20000);
+    return () => clearInterval(poll);
+  }, [showAllTrips]);
 
   useSocket({
     'booking:new': (booking) => {
@@ -117,27 +132,14 @@ export default function DriverDashboard() {
   }
 
   async function accept(id) {
-    // Open the WhatsApp tab synchronously, in the same click, before any
-    // await - browsers only allow window.open without a popup-blocker
-    // prompt when it's called directly inside a user gesture's call stack.
-    // Booking details are already in state, so the link doesn't need to
-    // wait on the accept API call. Guarded in its own try/catch: a popup
-    // blocked/throwing here must never stop the actual Accept call below -
-    // that was the cause of Accept appearing to need two clicks.
-    let popup = null;
-    try {
-      const booking = bookings.find((b) => b._id === id);
-      const link = booking && waLink(booking.passengerId?.mobile, driverConfirmedMessage(booking, profile?.userId?.name, profile ? `${profile.vehicleType} · ${profile.vehicleNumber}` : ''));
-      popup = link ? window.open(link, '_blank') : null;
-    } catch {
-      popup = null;
-    }
-
+    setWaSuggestion(null);
     try {
       await client.put(`/booking/${id}/accept`);
+      const booking = bookings.find((b) => b._id === id);
+      const link = booking && waLink(booking.passengerId?.mobile, driverConfirmedMessage(booking, profile?.userId?.name, profile ? `${profile.vehicleType} · ${profile.vehicleNumber}` : ''));
+      if (link) setWaSuggestion({ link, label: 'Message passenger: trip confirmed' });
     } catch (err) {
       setAlert(err.response?.data?.error || 'Could not accept this trip');
-      if (popup) popup.close();
     }
     load();
   }
@@ -149,29 +151,22 @@ export default function DriverDashboard() {
 
   // Cancelling an already-accepted trip is more disruptive than declining
   // one that's still pending - the passenger is expecting this driver, so
-  // they're told twice: an immediate WhatsApp heads-up (opened here, same
-  // synchronous-before-await trick as accept()/complete()) and an email
-  // from the backend (see routes/booking.js PUT /:id/cancel), which works
-  // even if the driver doesn't have the passenger's number confirmed.
+  // they're told twice: an email from the backend (see routes/booking.js
+  // PUT /:id/cancel, which works even without the passenger's number) and
+  // a WhatsApp link offered here once the cancel itself has gone through.
   async function cancelTrip(id) {
     const reason = window.prompt("Why are you cancelling this trip? The passenger will see this reason.");
     if (reason === null) return; // dismissed the prompt - don't cancel
-    if (!window.confirm('Cancel this trip? The passenger will be notified by email and WhatsApp.')) return;
+    if (!window.confirm('Cancel this trip? The passenger will be notified by email.')) return;
 
-    let popup = null;
+    setWaSuggestion(null);
     try {
       const booking = bookings.find((b) => b._id === id);
-      const link = booking && waLink(booking.passengerId?.mobile, driverCancelledMessage(booking, profile?.userId?.name, reason));
-      popup = link ? window.open(link, '_blank') : null;
-    } catch {
-      popup = null;
-    }
-
-    try {
       await client.put(`/booking/${id}/cancel`, { reason });
+      const link = booking && waLink(booking.passengerId?.mobile, driverCancelledMessage(booking, profile?.userId?.name, reason));
+      if (link) setWaSuggestion({ link, label: 'Message passenger: trip cancelled' });
     } catch (err) {
       setAlert(err.response?.data?.error || 'Could not cancel this trip');
-      if (popup) popup.close();
     }
     load();
   }
@@ -182,31 +177,20 @@ export default function DriverDashboard() {
   }
 
   async function complete(id) {
+    setWaSuggestion(null);
     const booking = bookings.find((b) => b._id === id);
     const actualFare = Number(fareInputs[id]) || undefined;
 
-    // Same synchronous-before-await trick as accept(): if this is a card
-    // trip that's still unpaid, open WhatsApp with a payment-reminder link
-    // right away, in this click, before the popup-blocker window closes.
-    // Guarded the same way too, so a blocked/throwing popup can never stop
-    // the actual Complete call below.
-    let popup = null;
     try {
+      await client.put(`/booking/${id}/complete`, { actualFare });
       if (booking && booking.paymentMethod === 'card' && booking.paymentStatus !== 'paid') {
         const payLink = `${window.location.origin}/pay/${id}`;
         const finalBooking = { ...booking, actualFare: actualFare || booking.estimatedFare };
         const link = waLink(booking.passengerId?.mobile, paymentReminderMessage(finalBooking, profile?.userId?.name, payLink));
-        popup = link ? window.open(link, '_blank') : null;
+        if (link) setWaSuggestion({ link, label: 'Message passenger: payment reminder' });
       }
-    } catch {
-      popup = null;
-    }
-
-    try {
-      await client.put(`/booking/${id}/complete`, { actualFare });
     } catch (err) {
       setAlert(err.response?.data?.error || 'Could not complete this trip');
-      if (popup) popup.close();
     }
     load();
   }
@@ -220,6 +204,12 @@ export default function DriverDashboard() {
     <div className="container">
       <h1>Driver dashboard</h1>
       {alert && <div className="card" style={{ background: '#fef3c7' }}>{alert} <button className="btn secondary" onClick={() => setAlert('')}>Dismiss</button></div>}
+      {waSuggestion && (
+        <div className="card" style={{ background: '#dcfce7', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <a className="btn whatsapp" target="_blank" rel="noreferrer" href={waSuggestion.link}><WhatsAppIcon /> {waSuggestion.label}</a>
+          <button className="btn secondary" onClick={() => setWaSuggestion(null)}>Dismiss</button>
+        </div>
+      )}
       {profile?.compliance && !profile.compliance.compliant && (
         <div className="card" style={{ background: '#fef3c7' }}>
           ⚠️ <strong>NZTA compliance incomplete:</strong> {profile.compliance.issues.join('; ')}. Contact an admin to update your record - this blocks going online.
@@ -312,7 +302,7 @@ export default function DriverDashboard() {
                   {b.bookingId}
                   {b.status === 'pending' && !b.driverId && <span className="badge" style={{ marginLeft: 6 }}>open request - first to accept gets it</span>}
                 </div>
-                <div>{b.pickupAddress} → {b.dropAddress}</div>
+                <div>{b.pickupAddress}{b.stops?.map((s, i) => <span key={i}> → {s.address}</span>)} → {b.dropAddress}</div>
                 <div className="muted">
                   {b.passengerId?.name}{b.passengerRatingAvg ? ` (⭐${b.passengerRatingAvg})` : ''} · {b.distanceKm} km · est. ${b.estimatedFare} · {b.paymentMethod === 'card' ? (b.paymentStatus === 'paid' ? 'paid online' : 'awaiting online payment') : 'cash'}
                 </div>

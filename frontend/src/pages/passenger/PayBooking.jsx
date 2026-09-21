@@ -26,6 +26,16 @@ export default function PayBooking() {
 
   useEffect(() => { load(); }, [bookingId]);
 
+  // A guest who paid online via QR-scan checkout can land here before any
+  // driver has accepted (payment isn't allowed until then - see
+  // routes/payment.js) - poll instead of leaving them looking at a dead
+  // end, so this updates on its own the moment a driver accepts.
+  useEffect(() => {
+    if (booking?.status !== 'pending') return undefined;
+    const poll = setInterval(load, 8000);
+    return () => clearInterval(poll);
+  }, [booking?.status]);
+
   async function payNow() {
     setError('');
     setPaying(true);
@@ -61,13 +71,17 @@ export default function PayBooking() {
       <div className="card" style={{ maxWidth: 420 }}>
         <h2 style={{ marginTop: 0 }}>Trip payment</h2>
         <p className="muted">{booking.bookingId}</p>
-        <p>{booking.pickupAddress} → {booking.dropAddress}</p>
+        <p>{booking.pickupAddress}{booking.stops?.map((s, i) => <span key={i}> → {s.address}</span>)} → {booking.dropAddress}</p>
         <p><strong>Fare: ${booking.actualFare ?? booking.estimatedFare}</strong></p>
 
         {booking.paymentMethod !== 'card' ? (
           <p className="muted">This trip is set to pay by cash - no online payment needed.</p>
         ) : booking.paymentStatus === 'paid' ? (
           <p style={{ color: 'var(--success)', fontWeight: 600 }}>✅ Already paid - thanks!</p>
+        ) : booking.status === 'pending' ? (
+          <p className="muted">Waiting for a driver to accept your ride - you'll be able to pay the moment they do. This page updates on its own, no need to refresh.</p>
+        ) : booking.status === 'cancelled' ? (
+          <p className="error-text">This trip was cancelled - no payment is needed.</p>
         ) : (
           <>
             {error && <p className="error-text">{error}</p>}

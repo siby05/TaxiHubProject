@@ -1,7 +1,18 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
 const router = express.Router();
+
+// Mirrors routes/auth.js's signToken() - duplicated rather than imported
+// since that one isn't exported (auth.js only exports its router). Only
+// used for the one guest-checkout exception below: a card-paying guest
+// needs a real session to reach the existing (login-gated) payment flow.
+function signToken(user) {
+  return jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRES_IN || '30d',
+  });
+}
 const Booking = require('../models/Booking');
 const Driver = require('../models/Driver');
 const User = require('../models/User');
@@ -554,12 +565,23 @@ router.post('/guest', async (req, res) => {
     await emailService.sendBookingConfirmation(passenger.email, booking);
     await alertDriverOfBooking(req, resolved.driver.userId, booking, passenger.name, passengerRatingAvg);
 
+    // A guest who chose to pay online has no other way back into the app
+    // to pay once accepted - no account/login was ever set up for them
+    // (that's the whole point of guest checkout). Rather than build a
+    // separate unauthenticated payment path, quietly give them a real
+    // session for their (already-created) passenger account here, so the
+    // frontend can land them on the same login-gated /pay/:bookingId page
+    // and Stripe flow every other passenger already uses. A cash guest
+    // gets no token at all - guest checkout stays a true one-off for them.
+    const { password: _pw, ...passengerPublic } = passenger;
+
     res.status(201).json({
       ...booking,
       usedFallback: resolved.usedFallback,
       requestedUnavailable: resolved.requestedUnavailable,
       requestedCashOnly: resolved.requestedCashOnly,
       requestedName: resolved.requestedName,
+      ...(booking.paymentMethod === 'card' && { token: signToken(passenger), user: passengerPublic }),
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -10,7 +10,7 @@ import ContactAdmin from '../../components/ContactAdmin';
 
 export default function BookDriver() {
   const { driverId } = useParams();
-  const { user } = useAuthStore();
+  const { user, setSession } = useAuthStore();
   const navigate = useNavigate();
   const [driver, setDriver] = useState(null);
   const [preview, setPreview] = useState(null);
@@ -155,6 +155,15 @@ export default function BookDriver() {
         scheduledFor: guestScheduledFor,
         paymentMethod: guestPaymentMethod,
       });
+      if (data.token) {
+        // Card payment: quietly log them into the (already-created)
+        // passenger account behind this guest booking, so they can reach
+        // the same login-gated /pay/:bookingId + Stripe flow every other
+        // passenger uses - guest checkout has no other way back in to pay.
+        setSession(data.token, data.user);
+        navigate(`/pay/${data._id}`);
+        return;
+      }
       setGuestSuccess(data);
     } catch (err) {
       setGuestError(err.response?.data?.error || 'Could not create booking');

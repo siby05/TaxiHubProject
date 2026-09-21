@@ -14,6 +14,14 @@ if (process.env.SMTP_HOST && process.env.SMTP_USER) {
       host: process.env.SMTP_HOST,
       port: Number(process.env.SMTP_PORT) || 587,
       auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+      // Nodemailer's own defaults can take a long time to give up on a
+      // misconfigured/unreachable host, which made a "Sending..." button
+      // (forgot-password, run-backup) look stuck rather than failing
+      // visibly - fail within ~10s instead so send() below always
+      // resolves quickly, whichever way.
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 10000,
     });
   } catch {
     console.warn('[email] nodemailer not installed; falling back to console mock. Run `npm install nodemailer` to enable real SMTP.');
@@ -29,7 +37,13 @@ if (process.env.SMTP_HOST && process.env.SMTP_USER) {
 async function send(to, subject, text, attachments) {
   if (transporter) {
     try {
-      await transporter.sendMail({ from: process.env.EMAIL_FROM, to, subject, text, ...(attachments && { attachments }) });
+      // EMAIL_FROM is optional - defaults to the admin's own configured
+      // inbox, which is also the SMTP account actually sending (most
+      // providers, Gmail included, want the From address to match the
+      // authenticated account anyway; an unset/mismatched From is a
+      // common reason a send silently never arrives).
+      const from = process.env.EMAIL_FROM || getSettings().adminEmail;
+      await transporter.sendMail({ from, to, subject, text, ...(attachments && { attachments }) });
       return { ok: true };
     } catch (err) {
       console.error(`[email] send to ${to} failed: ${err.message}`);

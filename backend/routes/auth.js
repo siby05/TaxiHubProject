@@ -139,7 +139,14 @@ router.post('/forgot-password', async (req, res) => {
     });
 
     const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password/${token}`;
-    await emailService.sendPasswordResetEmail(user.email, user.name, resetLink);
+    // Fire-and-forget: the token is already saved, so the link works the
+    // instant this responds - no need to make the requester's "Sending..."
+    // button wait on an SMTP round-trip that (misconfigured or not) can
+    // take real time. send() never throws, but log a failure anyway since
+    // there's no other visibility into whether it actually went out.
+    emailService.sendPasswordResetEmail(user.email, user.name, resetLink).then((result) => {
+      if (!result.ok) console.error(`[forgot-password] email to ${user.email} failed: ${result.error}`);
+    });
 
     res.json({ ...generic, resetLink });
   } catch (err) {

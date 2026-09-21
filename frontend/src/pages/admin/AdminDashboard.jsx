@@ -565,7 +565,7 @@ export default function AdminDashboard() {
                   <tr key={t._id}>
                     <td>
                       <div className="muted">{t.bookingId}</div>
-                      {t.pickupAddress} → {t.dropAddress}
+                      {t.pickupAddress}{t.stops?.map((s, i) => <span key={i}> → {s.address}</span>)} → {t.dropAddress}
                       {t.scheduledFor && <div className="muted">Scheduled: {new Date(t.scheduledFor).toLocaleString()}</div>}
                     </td>
                     <td>{t.passengerId?.name}{t.passengerRatingAvg ? <div className="muted">⭐ {t.passengerRatingAvg}</div> : ''}</td>

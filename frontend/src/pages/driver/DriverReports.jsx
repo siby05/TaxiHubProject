@@ -60,7 +60,7 @@ export default function DriverReports() {
                 <tr key={t._id}>
                   <td>
                     <div className="muted">{t.bookingId}</div>
-                    {t.pickupAddress} → {t.dropAddress}
+                    {t.pickupAddress}{t.stops?.map((s, i) => <span key={i}> → {s.address}</span>)} → {t.dropAddress}
                   </td>
                   <td>{t.passengerId?.name}</td>
                   <td>${t.actualFare ?? t.estimatedFare}</td>
