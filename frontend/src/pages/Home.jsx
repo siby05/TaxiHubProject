@@ -4,7 +4,13 @@ import client from '../api/client';
 
 const HERO_IMAGE = 'https://images.unsplash.com/photo-1449824913935-59a10b8d2000?auto=format&fit=crop&w=1800&q=80';
 const SHOWCASE_IMAGES = [
-  { src: 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=900&q=80', alt: 'Taxi parked on a city street' },
+  {
+    src: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/4/46/BYD_Atto_3_front-left.jpg/960px-BYD_Atto_3_front-left.jpg',
+    alt: 'BYD Atto 3 electric SUV',
+    // CC BY 4.0 requires attribution, unlike the Unsplash photos below - see
+    // https://commons.wikimedia.org/wiki/File:BYD_Atto_3_front-left.jpg
+    credit: { text: 'Photo: Hubert Berberich / Wikimedia Commons (CC BY 4.0)', href: 'https://commons.wikimedia.org/wiki/File:BYD_Atto_3_front-left.jpg' },
+  },
   { src: 'https://images.unsplash.com/photo-1502877338535-766e1452684a?auto=format&fit=crop&w=900&q=80', alt: 'Driver behind the wheel on a trip' },
   { src: 'https://images.unsplash.com/photo-1519003722824-194d4455a60c?auto=format&fit=crop&w=900&q=80', alt: 'Open road heading toward the coast' },
 ];
@@ -152,6 +158,7 @@ export default function Home() {
             {SHOWCASE_IMAGES.map((img) => (
               <div className="photo-grid-item" key={img.src}>
                 <img src={img.src} alt={img.alt} loading="lazy" />
+                {img.credit && <a className="photo-credit" href={img.credit.href} target="_blank" rel="noreferrer">{img.credit.text}</a>}
               </div>
             ))}
           </div>
@@ -223,6 +230,11 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      <footer className="home-footer">
+        <p>© 2026 Easy Ride NZ</p>
+        <p><a href="mailto:easyride@gmail.com">easyride@gmail.com</a> · New Plymouth, New Zealand</p>
+      </footer>
     </div>
   );
 }
