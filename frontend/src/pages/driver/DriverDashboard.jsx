@@ -168,19 +168,16 @@ export default function DriverDashboard() {
     load();
   }
 
+  // "I've arrived" and Complete are single buttons that also send their
+  // WhatsApp update, on the same click - no separate message button for
+  // either. Safe to open the popup before the await here (unlike accept/
+  // cancel, there's no "already did this" conflict a stray second click
+  // could hit): worst case is a resend, not a confusing error.
   async function markArrived(id) {
-    // Unlike accept()/complete()/cancelTrip(), there's no "already did
-    // this" conflict a stray second click could hit here, so it's safe
-    // to open WhatsApp in the same click as every other trip-lifecycle
-    // action used to - the driver asked for this to go out on the first
-    // tap instead of needing a second click on a link that only appears
-    // after the page re-renders. The persistent "I've arrived" link
-    // rendered below (data-derived off arrivedAt, same as trip-confirmed
-    // and payment-reminder) is still there afterward as a manual resend.
     const booking = bookings.find((b) => b._id === id);
     const link = booking && waLink(booking.passengerId?.mobile, driverArrivedMessage(booking, profile?.userId?.name, profile ? `${profile.vehicleType} · ${profile.vehicleNumber}` : ''));
     if (link) {
-      try { window.open(link, '_blank'); } catch { /* popup blocked - the persistent link below still covers it */ }
+      try { window.open(link, '_blank'); } catch { /* popup blocked - nothing else to fall back to, per "no separate button" */ }
     }
 
     try {
@@ -192,13 +189,35 @@ export default function DriverDashboard() {
   }
 
   async function complete(id) {
+    const booking = bookings.find((b) => b._id === id);
     const actualFare = Number(fareInputs[id]) || undefined;
+    // Only a card trip that's still unpaid has anything worth messaging
+    // about on completion - a cash trip is auto-marked paid by the
+    // backend, nothing to remind the passenger of.
+    if (booking && booking.paymentMethod === 'card' && booking.paymentStatus !== 'paid') {
+      const finalBooking = { ...booking, actualFare: actualFare || booking.estimatedFare };
+      const link = waLink(booking.passengerId?.mobile, paymentReminderMessage(finalBooking, profile?.userId?.name, `${window.location.origin}/pay/${id}`));
+      if (link) {
+        try { window.open(link, '_blank'); } catch { /* the payment-reminder link still rendered below covers a blocked popup */ }
+      }
+    }
+
     try {
       await client.put(`/booking/${id}/complete`, { actualFare });
     } catch (err) {
       setAlert(err.response?.data?.error || 'Could not complete this trip');
     }
     load();
+  }
+
+  async function markPaid(id) {
+    if (!window.confirm('Mark this trip as paid? Use this once you have received payment outside the app (e.g. cash in person).')) return;
+    try {
+      await client.put(`/booking/${id}/mark-paid`);
+      load();
+    } catch (err) {
+      setAlert(err.response?.data?.error || 'Could not mark this trip as paid');
+    }
   }
 
   async function ratePassenger(id, rating, review) {
@@ -340,10 +359,6 @@ export default function DriverDashboard() {
                     )}
                   </>
                 )}
-                {b.status === 'accepted' && b.arrivedAt && waLink(b.passengerId?.mobile, driverArrivedMessage(b, profile?.userId?.name, `${profile?.vehicleType} · ${profile?.vehicleNumber}`)) && (
-                  <a className="btn whatsapp" target="_blank" rel="noreferrer"
-                    href={waLink(b.passengerId?.mobile, driverArrivedMessage(b, profile?.userId?.name, `${profile?.vehicleType} · ${profile?.vehicleNumber}`))}><WhatsAppIcon /> Message passenger: I've arrived</a>
-                )}
                 <input style={{ width: 90 }} type="number" step="0.01" placeholder="Actual $"
                   value={fareInputs[b._id] || ''} onChange={(e) => setFareInputs((f) => ({ ...f, [b._id]: e.target.value }))} />
                 <button className="btn" onClick={() => complete(b._id)}>Complete</button>
@@ -356,6 +371,7 @@ export default function DriverDashboard() {
                   <a className="btn whatsapp" target="_blank" rel="noreferrer"
                     href={waLink(b.passengerId?.mobile, paymentReminderMessage(b, profile?.userId?.name, `${window.location.origin}/pay/${b._id}`))}><WhatsAppIcon /> Message passenger: payment reminder</a>
                 )}
+                <button className="btn secondary" onClick={() => markPaid(b._id)}>Mark as paid</button>
               </div>
             )}
             {b.status === 'cancelled' && cancelWaLinks[b._id] && (

@@ -64,9 +64,17 @@ function emitToUser(req, userId, event, payload) {
 // accept online payment. Shared by the /quote estimate, the broadcast
 // booking flow below, GET /driver's live request list, and the notify-others
 // step on accept.
-async function findEligibleCandidates(paymentMethod, vehicleType) {
+async function findEligibleCandidates(paymentMethod, vehicleType, requestedTime) {
   const candidates = await Driver.find({ isAvailable: true, status: 'approved' });
-  return candidates.filter((d) => isWithinSchedule(d)
+  // requestedTime defaults to "now" - correct for every existing caller
+  // that omits it (GET /driver, accept/decline/cancel's notify-others),
+  // which really do mean "right now". findEligibleCandidatesWithTiming
+  // below is the one that needs this to actually be the *scheduled* time
+  // for a future booking - without it, scheduling ahead only ever checked
+  // whether a driver happened to be within their own hours at the moment
+  // of booking, not at the time being scheduled for, so it could let a
+  // trip through for a time no driver's schedule will actually cover.
+  return candidates.filter((d) => isWithinSchedule(d, requestedTime || new Date())
     && (paymentMethod !== 'card' || d.acceptsOnlinePayment !== false)
     && (!vehicleType || d.vehicleType === vehicleType));
 }
@@ -86,7 +94,7 @@ async function findEligibleCandidates(paymentMethod, vehicleType) {
 // caller can offer "try scheduling for then" instead of a flat rejection
 // when that's genuinely the only blocker.
 async function findEligibleCandidatesWithTiming(paymentMethod, vehicleType, pickup, requestedTime) {
-  const scheduleOk = await findEligibleCandidates(paymentMethod, vehicleType);
+  const scheduleOk = await findEligibleCandidates(paymentMethod, vehicleType, requestedTime);
   if (!pickup) return { usable: scheduleOk, nextAvailableTime: null };
 
   const when = requestedTime || new Date();
@@ -1003,6 +1011,9 @@ router.put('/:id/complete', auth, roleMiddleware(['driver']), async (req, res) =
     const { actualFare } = req.body;
     const booking = await Booking.findById(req.params.id);
     if (!booking) return res.status(404).json({ error: 'Booking not found' });
+    // Guards against double-incrementing the driver's totalTrips/
+    // totalEarnings below if Complete is ever hit twice for the same trip.
+    if (booking.status === 'completed') return res.status(400).json({ error: 'Trip already completed' });
 
     const updated = await Booking.findByIdAndUpdate(req.params.id, {
       status: 'completed',
@@ -1151,6 +1162,72 @@ router.put('/:id/rate-passenger', auth, roleMiddleware(['driver']), async (req, 
   if (booking.status !== 'completed') return res.status(400).json({ error: 'Only completed trips can be rated' });
 
   const updated = await Booking.findByIdAndUpdate(req.params.id, { passengerRating: rating, passengerReview: review });
+  res.json(updated);
+});
+
+// PUT /api/booking/:id/payment-method - passenger changes how they're
+// paying, any time before the trip wraps up (not just while still
+// pending) - QR-scan direct hails are auto-accepted straight past
+// 'pending' now, so this is the only way to switch on one of those.
+// Blocked once paid (nothing left to switch) or once the trip is
+// finished (completed/cancelled).
+router.put('/:id/payment-method', auth, roleMiddleware(['passenger']), async (req, res) => {
+  try {
+    const { paymentMethod } = req.body;
+    if (!['cash', 'card'].includes(paymentMethod)) return res.status(400).json({ error: 'paymentMethod must be "cash" or "card"' });
+
+    const booking = await Booking.findById(req.params.id);
+    if (!booking) return res.status(404).json({ error: 'Booking not found' });
+    if (String(booking.passengerId) !== String(req.user.id)) return res.status(403).json({ error: 'Not your booking' });
+    if (['completed', 'cancelled'].includes(booking.status)) {
+      return res.status(400).json({ error: `Can't change payment method - trip is already ${booking.status}` });
+    }
+    if (booking.paymentStatus === 'paid') return res.status(400).json({ error: 'This trip is already paid - payment method can\'t be changed' });
+    if (paymentMethod === booking.paymentMethod) return res.json(booking);
+
+    if (paymentMethod === 'card' && booking.driverId) {
+      const driver = await Driver.findById(booking.driverId);
+      if (driver?.acceptsOnlinePayment === false) {
+        return res.status(400).json({ error: 'This driver only accepts cash, so this trip can\'t be switched to online payment' });
+      }
+    }
+
+    const settings = getSettings();
+    const fare = booking.actualFare || booking.estimatedFare;
+    const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(fare, settings.cardSurchargePercent) : 0;
+    const updated = await Booking.findByIdAndUpdate(booking._id, { paymentMethod, cardSurchargeAmount });
+
+    if (booking.driverId) {
+      const driverUser = await User.findById((await Driver.findById(booking.driverId)).userId);
+      if (driverUser) {
+        emitToUser(req, driverUser._id, 'booking:updated', { bookingId: booking._id });
+        await notifyUser(driverUser._id, {
+          type: 'booking-updated',
+          title: 'Passenger changed payment method',
+          message: `${updated.bookingId}: now paying by ${paymentMethod === 'card' ? 'card (online)' : 'cash'}`,
+          link: '/driver',
+        });
+      }
+    }
+
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/booking/:id/mark-paid - driver manually confirms payment was
+// received outside the app (e.g. the passenger paid cash in person
+// despite booking as card, or an online payment was arranged another
+// way) - an alternative to the Stripe flow, not a replacement for it.
+router.put('/:id/mark-paid', auth, roleMiddleware(['driver']), async (req, res) => {
+  const booking = await Booking.findById(req.params.id);
+  if (!booking) return res.status(404).json({ error: 'Booking not found' });
+  const driver = await Driver.findOne({ userId: req.user.id });
+  if (!driver || String(booking.driverId) !== String(driver._id)) return res.status(403).json({ error: 'Not your trip' });
+  if (booking.paymentStatus === 'paid') return res.status(400).json({ error: 'This trip is already marked paid' });
+
+  const updated = await Booking.findByIdAndUpdate(booking._id, { paymentStatus: 'paid' });
   res.json(updated);
 });
 

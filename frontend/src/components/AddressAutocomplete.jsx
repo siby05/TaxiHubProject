@@ -8,6 +8,15 @@ import client from '../api/client';
 // their current location.
 export default function AddressAutocomplete({ label, placeholder, onSelect, required, allowLocate, defaultValue }) {
   const [query, setQuery] = useState(defaultValue || '');
+
+  // defaultValue only seeded the initial state above - a caller that
+  // resolves it asynchronously after mount (e.g. the QR-scan guest
+  // checkout's returning-passenger lookup by mobile number, which sets
+  // the saved address once the lookup responds) needs this to actually
+  // show up in the field, not just in the parent's own state.
+  useEffect(() => {
+    if (defaultValue) setQuery(defaultValue);
+  }, [defaultValue]);
   const [results, setResults] = useState([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
