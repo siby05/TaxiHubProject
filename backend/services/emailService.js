@@ -56,7 +56,12 @@ async function sendViaBrevo({ from, to, subject, text, html, attachments }) {
 async function brevoError(res) {
   const body = await res.json().catch(() => ({}));
   let msg = `Brevo ${res.status}: ${body.message || body.code || res.statusText}`;
-  if (res.status === 401) {
+  if (res.status === 401 && /unrecognised IP|authorised_ips/i.test(msg)) {
+    // The key is fine - Brevo's optional "Authorised IPs" allow-list is on
+    // and this host isn't in it. Hosts like Render don't have one fixed
+    // egress IP, so turning the restriction off is the reliable fix.
+    msg += ' - the key is valid but Brevo\'s "Authorised IPs" restriction is blocking this server: turn it off at https://app.brevo.com/security/authorised_ips (or add this host\'s outbound IPs there)';
+  } else if (res.status === 401) {
     msg += BREVO_API_KEY.startsWith('xkeysib-')
       ? ' - BREVO_API_KEY is not recognised by Brevo (deleted/regenerated, or a character got lost when pasting). Generate a new key under Brevo > SMTP & API > API Keys and update the env var'
       : ' - BREVO_API_KEY must be an API key from Brevo > SMTP & API > "API Keys" (starts with xkeysib-), not the SMTP password from the "SMTP" tab';
