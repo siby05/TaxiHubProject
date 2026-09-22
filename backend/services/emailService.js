@@ -11,8 +11,15 @@ const { getSettings } = require('../config/platformSettings');
 const { formatNzDateTime, formatNzDate } = require('../utils/nzTime');
 
 const resolve4 = promisify(dns.resolve4);
-const brevoConfigured = !!process.env.BREVO_API_KEY;
+// Trim whitespace and strip wrapping quotes: a key pasted into a hosting
+// dashboard with a trailing space or as "xkeysib-..." is byte-for-byte
+// different from the real key, and Brevo answers with a bare "401 Key not
+// found" - identical to the error for a genuinely wrong key, which is why
+// this was so hard to spot from the logs alone.
+const BREVO_API_KEY = (process.env.BREVO_API_KEY || '').trim().replace(/^["']|["']$/g, '');
+const brevoConfigured = !!BREVO_API_KEY;
 const smtpConfigured = !!(process.env.SMTP_HOST && process.env.SMTP_USER);
+const BREVO_HEADERS = { 'api-key': BREVO_API_KEY, accept: 'application/json' };
 
 // Sends over Brevo's HTTPS API (free tier: 300 emails/day, only needs the
 // From address verified as a sender - no domain required). This exists
@@ -24,7 +31,7 @@ const smtpConfigured = !!(process.env.SMTP_HOST && process.env.SMTP_USER);
 async function sendViaBrevo({ from, to, subject, text, html, attachments }) {
   const res = await fetch('https://api.brevo.com/v3/smtp/email', {
     method: 'POST',
-    headers: { 'api-key': process.env.BREVO_API_KEY, 'content-type': 'application/json', accept: 'application/json' },
+    headers: { ...BREVO_HEADERS, 'content-type': 'application/json' },
     body: JSON.stringify({
       sender: { name: process.env.EMAIL_FROM_NAME || 'EasyRide', email: from },
       to: [{ email: to }],
@@ -38,10 +45,57 @@ async function sendViaBrevo({ from, to, subject, text, html, attachments }) {
     }),
     signal: AbortSignal.timeout(15000),
   });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(`Brevo ${res.status}: ${body.message || body.code || res.statusText}`);
+  if (!res.ok) throw new Error(await brevoError(res));
+}
+
+// Turns a failed Brevo response into a message that says what to actually
+// do. Brevo's own text for a rejected key is just "Key not found", which
+// reads like a missing env var when the far more common cause is the
+// *SMTP* key (Brevo > SMTP & API > "SMTP" tab) having been pasted where the
+// *API* key (the "API Keys" tab, starts with xkeysib-) belongs.
+async function brevoError(res) {
+  const body = await res.json().catch(() => ({}));
+  let msg = `Brevo ${res.status}: ${body.message || body.code || res.statusText}`;
+  if (res.status === 401) {
+    msg += BREVO_API_KEY.startsWith('xkeysib-')
+      ? ' - BREVO_API_KEY is not recognised by Brevo (deleted/regenerated, or a character got lost when pasting). Generate a new key under Brevo > SMTP & API > API Keys and update the env var'
+      : ' - BREVO_API_KEY must be an API key from Brevo > SMTP & API > "API Keys" (starts with xkeysib-), not the SMTP password from the "SMTP" tab';
   }
+  return msg;
+}
+
+// Called once at startup (server.js). Checks the key against Brevo's
+// account endpoint and that the From address is a verified sender, so a
+// bad deploy config shows up in the deploy log the moment the service
+// boots - not hours later as a silent "failed" line on the first real
+// booking. Never throws: email being down must not stop the API serving.
+const status = { provider: brevoConfigured ? 'brevo' : smtpConfigured ? 'smtp' : 'mock', verified: null, error: null };
+async function verifyEmailConfig() {
+  if (!brevoConfigured) {
+    console.log(`[email] provider: ${status.provider}${status.provider === 'mock' ? ' (set BREVO_API_KEY to send real mail)' : ''}`);
+    return status;
+  }
+  const from = process.env.EMAIL_FROM || getSettings().adminEmail;
+  try {
+    const res = await fetch('https://api.brevo.com/v3/account', { headers: BREVO_HEADERS, signal: AbortSignal.timeout(10000) });
+    if (!res.ok) throw new Error(await brevoError(res));
+    const account = await res.json();
+    status.verified = true;
+    console.log(`[email] provider: brevo - key OK (account ${account.email}), sending as ${from}`);
+
+    const senders = await fetch('https://api.brevo.com/v3/senders', { headers: BREVO_HEADERS, signal: AbortSignal.timeout(10000) });
+    if (senders.ok) {
+      const list = (await senders.json()).senders || [];
+      const match = list.find((s) => s.email?.toLowerCase() === String(from).toLowerCase());
+      if (!match) console.warn(`[email] WARNING: ${from} is not a sender on this Brevo account - add and verify it under Brevo > Senders, or set EMAIL_FROM to one of: ${list.map((s) => s.email).join(', ') || '(none yet)'}`);
+      else if (!match.active) console.warn(`[email] WARNING: sender ${from} exists on Brevo but is not verified yet - sends will be rejected until it is`);
+    }
+  } catch (err) {
+    status.verified = false;
+    status.error = err.message;
+    console.error(`[email] provider: brevo - key check FAILED: ${err.message}`);
+  }
+  return status;
 }
 
 // Builds a fresh transporter for every send, pointed at a literal IPv4
@@ -130,6 +184,7 @@ async function send(to, subject, text, attachments, html) {
   if (brevoConfigured) {
     try {
       await sendViaBrevo({ from, to, subject, text, html, attachments });
+      console.log(`[email] sent to ${to} via Brevo: ${subject}`);
       return { ok: true };
     } catch (err) {
       console.error(`[email] send to ${to} via Brevo failed: ${err.message}`);
@@ -157,6 +212,7 @@ async function send(to, subject, text, attachments, html) {
         const transporter = await buildTransporter(port);
         if (!transporter) throw new Error('SMTP transporter could not be created');
         await transporter.sendMail({ from, to, subject, text, ...(html && { html }), ...(attachments && { attachments }) });
+        console.log(`[email] sent to ${to} via SMTP port ${port}: ${subject}`);
         return { ok: true };
       } catch (err) {
         lastErr = err;
@@ -473,4 +529,4 @@ const emailService = {
     ),
 };
 
-module.exports = { emailService, buildReceiptPage };
+module.exports = { emailService, buildReceiptPage, verifyEmailConfig, emailStatus: status };

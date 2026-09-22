@@ -39,6 +39,7 @@ const { startReminderScheduler } = require('./utils/reminders');
 const { startBackupScheduler } = require('./utils/backup');
 const { startRetentionScheduler } = require('./utils/retention');
 const { loadSettings } = require('./config/platformSettings');
+const { verifyEmailConfig, emailStatus } = require('./services/emailService');
 
 // Defense in depth: a single unhandled promise rejection anywhere (a
 // missed try/catch, a third-party call that throws unexpectedly) should
@@ -61,7 +62,7 @@ app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-app.get('/api/health', (req, res) => res.json({ status: 'ok', dbMode: process.env.DB_MODE || 'memory' }));
+app.get('/api/health', (req, res) => res.json({ status: 'ok', dbMode: process.env.DB_MODE || 'memory', email: emailStatus }));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/passenger', passengerRoutes);
@@ -111,6 +112,9 @@ connectDatabase().then(async () => {
   // requests, so a real (mongo) deployment doesn't silently reset every
   // setting back to hardcoded defaults on each restart/redeploy.
   await loadSettings();
+  // After loadSettings() so the admin-configured From address is known.
+  // Not awaited: a slow/unreachable Brevo must not delay the API coming up.
+  verifyEmailConfig();
   server.listen(PORT, () => console.log(`EasyRide API listening on http://localhost:${PORT}`));
   startReminderScheduler();
   startBackupScheduler();
