@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import client from '../../api/client';
-import { useAuthStore } from '../../store/authStore';
+import client, { API_URL } from '../../api/client';
 import { useBookingStore } from '../../store/bookingStore';
 import { useSocket } from '../../hooks/useSocket';
 import AddressAutocomplete from '../../components/AddressAutocomplete';
@@ -14,7 +13,6 @@ import WhatsAppIcon from '../../components/WhatsAppIcon';
 import { newStopId, makeStopHandlers, stopsPayload } from '../../utils/stops';
 import ContactAdmin from '../../components/ContactAdmin';
 import InstallPrompt from '../../components/InstallPrompt';
-import PrintableReceipt from '../../components/PrintableReceipt';
 import { formatNzDateTime } from '../../utils/nzTime';
 
 // Friendlier wording for the raw booking status - the CSS class (badge
@@ -26,10 +24,8 @@ const STATUS_LABELS = {
 };
 
 export default function PassengerDashboard() {
-  const { user } = useAuthStore();
   const { bookings, fetchMine, createBooking } = useBookingStore();
   const [stats, setStats] = useState(null);
-  const [adminContact, setAdminContact] = useState(null);
   const [pickup, setPickup] = useState(null);
   const [drop, setDrop] = useState(null);
   const [stops, setStops] = useState([]);
@@ -46,7 +42,6 @@ export default function PassengerDashboard() {
   const [payError, setPayError] = useState('');
   const [bookingActionError, setBookingActionError] = useState('');
   const [payModal, setPayModal] = useState(null);
-  const [printingBooking, setPrintingBooking] = useState(null);
   const [invoiceStatus, setInvoiceStatus] = useState({});
   const [quote, setQuote] = useState(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
@@ -82,8 +77,6 @@ export default function PassengerDashboard() {
     refresh();
     client.get('/booking/vehicle-types').then((r) => setVehicleTypes(r.data)).catch(() => {});
     client.get('/booking/vehicle-selection-enabled').then((r) => setVehicleSelectionEnabled(r.data.enabled)).catch(() => {});
-    // For the printable/emailed invoice footer - see components/PrintableReceipt.jsx.
-    client.get('/booking/admin-contact').then((r) => setAdminContact(r.data)).catch(() => {});
 
     // Belt-and-suspenders alongside the socket events below: a trip's
     // status (e.g. a driver accepting) should show up without the
@@ -137,13 +130,6 @@ export default function PassengerDashboard() {
       setInvoiceStatus((s) => ({ ...s, [bookingId]: err.response?.data?.error || 'Could not send invoice' }));
     }
   }
-
-  // Setting state and calling window.print() synchronously would print
-  // before React has actually rendered the (freshly-swapped) receipt into
-  // the DOM - wait for that render via an effect instead.
-  useEffect(() => {
-    if (printingBooking) window.print();
-  }, [printingBooking]);
 
   async function cancelBooking(id) {
     if (!window.confirm("Cancel this ride? If a driver has already accepted, they'll be notified.")) return;
@@ -441,7 +427,9 @@ export default function PassengerDashboard() {
                 )}
                 {b.status === 'completed' && (
                   <>
-                    <button className="btn secondary" onClick={() => setPrintingBooking(b)}>Print receipt</button>
+                    {b.receiptToken && (
+                      <a className="btn secondary" target="_blank" rel="noreferrer" href={`${API_URL}/booking/${b._id}/receipt?t=${b.receiptToken}`}>Print receipt</a>
+                    )}
                     <button className="btn secondary" onClick={() => emailInvoice(b._id)} disabled={invoiceStatus[b._id] === 'sending'}>
                       {invoiceStatus[b._id] === 'sending' ? 'Sending...' : 'Email invoice'}
                     </button>
@@ -457,8 +445,6 @@ export default function PassengerDashboard() {
           ))}
         </div>
       </div>
-
-      <PrintableReceipt booking={printingBooking} passenger={{ name: user?.name, address: user?.address }} adminContact={adminContact} />
 
       {payModal && (
         <StripePaymentModal

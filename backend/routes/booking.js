@@ -17,7 +17,7 @@ const Booking = require('../models/Booking');
 const Driver = require('../models/Driver');
 const User = require('../models/User');
 const { auth, roleMiddleware } = require('../middleware/auth');
-const { emailService } = require('../services/emailService');
+const { emailService, buildReceiptPage } = require('../services/emailService');
 const { haversineKm, calculateTripFare, calculateCardSurcharge, routeDistanceKm, invalidStopsError, cleanStops } = require('../utils/distance');
 const { VEHICLE_TYPES, isValidVehicleType } = require('../config/vehicleTypes');
 const { notifyUser, notifyAdmins } = require('../utils/notify');
@@ -32,6 +32,20 @@ const { getDriverReadyTime, isReadyInTime } = require('../utils/driverAvailabili
 function hidePassengerRating(booking) {
   const { passengerRating, passengerReview, ...rest } = booking;
   return rest;
+}
+
+// The "Print receipt" link (GET /:id/receipt below) is a plain <a> opened
+// in a new tab, which can't carry the Authorization header - so each
+// completed booking in the passenger's list gets its own short-lived token
+// scoped to just that one receipt. A fresh one is issued every time the
+// list loads, so the button never goes stale in-app; only a copied link
+// eventually expires.
+function receiptToken(bookingId) {
+  return jwt.sign({ receipt: String(bookingId) }, process.env.JWT_SECRET, { expiresIn: '30d' });
+}
+
+function withReceiptToken(booking) {
+  return booking.status === 'completed' ? { ...booking, receiptToken: receiptToken(booking._id) } : booking;
 }
 
 function emitToUser(req, userId, event, payload) {
@@ -796,7 +810,7 @@ router.get('/mine', auth, roleMiddleware(['passenger']), async (req, res) => {
     if (driverUser) b.driverContact = { name: driverUser.name, mobile: driverUser.mobile };
   }
 
-  res.json(bookings.map(hidePassengerRating));
+  res.json(bookings.map(hidePassengerRating).map(withReceiptToken));
 });
 
 // GET /api/booking/driver - bookings assigned to the logged-in driver, plus
@@ -1181,6 +1195,29 @@ router.post('/:id/invoice', auth, roleMiddleware(['passenger', 'driver', 'admin'
   const result = await emailService.sendInvoiceEmail(passenger.email, booking, { name: passenger.name, address: passenger.address }, booking.driverId, driverUser?.name);
   if (!result.ok) return res.status(502).json({ error: 'Could not send the invoice email - please try again shortly' });
   res.json({ ok: true, sentTo: passenger.email });
+});
+
+// GET /api/booking/:id/receipt?t=<receiptToken> - the same invoice as the
+// email above, as a standalone printable page. Authenticated by the
+// per-booking token from GET /mine rather than the JWT header, because
+// this is opened as a plain link in a new tab (see the "Print receipt"
+// button in PassengerDashboard.jsx) - window.print() from inside the app
+// itself is a silent no-op in an installed PWA on iOS.
+router.get('/:id/receipt', async (req, res) => {
+  let payload;
+  try {
+    payload = jwt.verify(String(req.query.t || ''), process.env.JWT_SECRET);
+  } catch {
+    return res.status(401).type('text').send('This receipt link is invalid or has expired - open it again from your bookings.');
+  }
+  if (payload.receipt !== req.params.id) return res.status(403).type('text').send('This link is for a different booking.');
+
+  const booking = await Booking.findById(req.params.id).populate('driverId');
+  if (!booking || booking.status !== 'completed') return res.status(404).type('text').send('Receipt not found');
+  const passenger = await User.findById(booking.passengerId);
+  const driverUser = booking.driverId ? await User.findById(booking.driverId.userId) : null;
+
+  res.type('html').send(buildReceiptPage(booking, { name: passenger?.name, address: passenger?.address }, booking.driverId, driverUser?.name));
 });
 
 // PUT /api/booking/:id/payment-method - passenger changes how they're

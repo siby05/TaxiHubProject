@@ -1,8 +1,9 @@
 /**
  * Mock-by-default email service: logs to the console so the whole booking
  * and complaint flow (acknowledgements, escalations, resolutions) is
- * visible and testable with zero setup. Set SMTP_* in .env to send real
- * mail via nodemailer without touching any calling code.
+ * visible and testable with zero setup. Set BREVO_API_KEY in .env to send
+ * real mail over HTTPS (preferred - see below), or SMTP_* to send via
+ * nodemailer, without touching any calling code.
  */
 const dns = require('dns');
 const { promisify } = require('util');
@@ -10,7 +11,38 @@ const { getSettings } = require('../config/platformSettings');
 const { formatNzDateTime, formatNzDate } = require('../utils/nzTime');
 
 const resolve4 = promisify(dns.resolve4);
+const brevoConfigured = !!process.env.BREVO_API_KEY;
 const smtpConfigured = !!(process.env.SMTP_HOST && process.env.SMTP_USER);
+
+// Sends over Brevo's HTTPS API (free tier: 300 emails/day, only needs the
+// From address verified as a sender - no domain required). This exists
+// because Render's free tier blocks *all* outbound SMTP ports (25/465/587),
+// which is why every SMTP attempt below - on either port, after both
+// retries - timed out in production: there's no port to fall back to, the
+// only way out is not to use SMTP at all. Plain HTTPS on 443 is never
+// blocked.
+async function sendViaBrevo({ from, to, subject, text, html, attachments }) {
+  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: { 'api-key': process.env.BREVO_API_KEY, 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify({
+      sender: { name: process.env.EMAIL_FROM_NAME || 'EasyRide', email: from },
+      to: [{ email: to }],
+      ...(adminInbox() && { replyTo: { email: adminInbox() } }),
+      subject,
+      textContent: text,
+      ...(html && { htmlContent: html }),
+      ...(attachments && {
+        attachment: attachments.map((a) => ({ name: a.filename, content: Buffer.from(a.content).toString('base64') })),
+      }),
+    }),
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(`Brevo ${res.status}: ${body.message || body.code || res.statusText}`);
+  }
+}
 
 // Builds a fresh transporter for every send, pointed at a literal IPv4
 // address rather than the SMTP hostname. Render (and some other hosts) have
@@ -87,13 +119,25 @@ function isRetryable(err) {
 // needs to know about a real failure, so it's told via the return value
 // instead of a thrown error.
 async function send(to, subject, text, attachments, html) {
+  // EMAIL_FROM is optional - defaults to the admin's own configured inbox.
+  // For Brevo that address must be a verified sender on the account; for
+  // SMTP it's the account actually sending (most providers, Gmail
+  // included, want the From address to match the authenticated account
+  // anyway; an unset/mismatched From is a common reason a send silently
+  // never arrives).
+  const from = process.env.EMAIL_FROM || getSettings().adminEmail;
+
+  if (brevoConfigured) {
+    try {
+      await sendViaBrevo({ from, to, subject, text, html, attachments });
+      return { ok: true };
+    } catch (err) {
+      console.error(`[email] send to ${to} via Brevo failed: ${err.message}`);
+      return { ok: false, error: err.message };
+    }
+  }
+
   if (smtpConfigured) {
-    // EMAIL_FROM is optional - defaults to the admin's own configured inbox,
-    // which is also the SMTP account actually sending (most providers,
-    // Gmail included, want the From address to match the authenticated
-    // account anyway; an unset/mismatched From is a common reason a send
-    // silently never arrives).
-    const from = process.env.EMAIL_FROM || getSettings().adminEmail;
     let lastErr;
     // A same-port retry alone wasn't enough in production: Render logs
     // showed the *final* failure (both the first attempt and the 1s-later
@@ -165,13 +209,21 @@ function driverLine(driver, driverName) {
   return label ? `\nDriver: ${driverName || 'assigned'} - ${label}` : '';
 }
 
+// Addresses, names and vehicle details are typed by users and end up in
+// HTML that is both emailed and served as a page (GET /:id/receipt).
+function esc(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 // A row of the invoice's details table - kept as one helper so every row
 // shares the same border/padding instead of repeating inline styles.
 function invoiceRow(label, value) {
   if (!value) return '';
   return `<tr>
     <td style="padding:8px 0;color:#64748b;font-size:13px;border-bottom:1px solid #e2e8f0;">${label}</td>
-    <td style="padding:8px 0;color:#0f172a;font-size:13px;text-align:right;border-bottom:1px solid #e2e8f0;">${value}</td>
+    <td style="padding:8px 0;color:#0f172a;font-size:13px;text-align:right;border-bottom:1px solid #e2e8f0;">${esc(value)}</td>
   </tr>`;
 }
 
@@ -183,41 +235,50 @@ function invoiceRow(label, value) {
 // content so the emailed and printed versions agree, but styled as a
 // proper company invoice: branded header, admin contact details for
 // queries, and a clearly totalled fare breakdown.
-function buildInvoiceHtml(booking, passenger, driver, driverName) {
+function buildInvoiceHtml(booking, passenger, driver, driverName, { forPrint = false } = {}) {
   const settings = getSettings();
   const fare = booking.actualFare ?? booking.estimatedFare;
   const total = fare + (booking.cardSurchargeAmount || 0);
   const vLabel = vehicleLabel(driver);
   const stopsRows = (booking.stops || []).map((s, i) => invoiceRow(`Stop ${i + 1}`, s.address)).join('');
 
+  // The header's navy band is a <table bgcolor> rather than a <div
+  // style="background"> on purpose: Outlook (desktop) and a few other
+  // clients ignore CSS backgrounds on divs but honour the bgcolor
+  // attribute on table cells, so this is the one way the band renders
+  // everywhere. Same for the logo badge cell.
   return `
 <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:560px;margin:0 auto;background:#ffffff;">
-  <div style="background:#0B2942;padding:24px 32px;border-radius:10px 10px 0 0;">
-    <table style="border-collapse:collapse;" cellpadding="0" cellspacing="0" role="presentation">
-      <tr>
-        <td style="width:40px;vertical-align:middle;">
-          <!-- CSS-only badge (no external/attached image - the one asset guaranteed to render in every mail client, including ones that block remote images by default), matching frontend/src/components/Logo.jsx's chevron-in-a-badge mark. -->
-          <div style="width:34px;height:34px;background:#38BDF8;border-radius:9px;text-align:center;line-height:34px;">
-            <span style="color:#ffffff;font-size:18px;font-weight:800;font-family:Georgia,serif;">&rsaquo;</span>
-          </div>
-        </td>
-        <td style="vertical-align:middle;padding-left:10px;">
-          <span style="font-size:22px;font-weight:800;"><span style="color:#ffffff;">Easy</span><span style="color:#38BDF8;">Ride</span></span>
-          <div style="color:#94a3b8;font-size:11px;letter-spacing:0.08em;margin-top:2px;">PREMIUM TRANSPORT · NEW PLYMOUTH, NZ</div>
-        </td>
-      </tr>
-    </table>
-  </div>
+  <table width="100%" bgcolor="#0B2942" style="width:100%;border-collapse:separate;background:#0B2942;border-radius:10px 10px 0 0;" cellpadding="0" cellspacing="0" role="presentation">
+    <tr>
+      <td style="padding:24px 32px;">
+        <table style="border-collapse:collapse;" cellpadding="0" cellspacing="0" role="presentation">
+          <tr>
+            <td style="width:40px;vertical-align:middle;">
+              <!-- CSS-only badge (no external/attached image - the one asset guaranteed to render in every mail client, including ones that block remote images by default), matching frontend/src/components/Logo.jsx's chevron-in-a-badge mark. -->
+              <table bgcolor="#38BDF8" style="border-collapse:separate;background:#38BDF8;border-radius:9px;" cellpadding="0" cellspacing="0" role="presentation">
+                <tr><td style="width:34px;height:34px;text-align:center;vertical-align:middle;line-height:34px;color:#ffffff;font-size:18px;font-weight:800;font-family:Georgia,serif;">&rsaquo;</td></tr>
+              </table>
+            </td>
+            <td style="vertical-align:middle;padding-left:10px;">
+              <span style="font-size:22px;font-weight:800;"><span style="color:#ffffff;">Easy</span><span style="color:#38BDF8;">Ride</span></span>
+              <div style="color:#94a3b8;font-size:11px;letter-spacing:0.08em;margin-top:2px;">PREMIUM TRANSPORT · NEW PLYMOUTH, NZ</div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
   <div style="border:1px solid #e2e8f0;border-top:none;border-radius:0 0 10px 10px;padding:32px;">
     <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
       <tr>
         <td style="font-size:20px;font-weight:700;color:#0f172a;">Invoice</td>
         <td style="text-align:right;color:#64748b;font-size:13px;">${formatNzDate(booking.completedAt || booking.requestedAt)}</td>
       </tr>
-      <tr><td colspan="2" style="color:#64748b;font-size:13px;padding-top:2px;">${booking.bookingId}</td></tr>
+      <tr><td colspan="2" style="color:#64748b;font-size:13px;padding-top:2px;">${esc(booking.bookingId)}</td></tr>
     </table>
 
-    ${passenger?.name ? `<div style="margin-bottom:20px;"><div style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px;">Billed to</div><div style="color:#0f172a;font-size:14px;font-weight:600;">${passenger.name}</div>${passenger.address ? `<div style="color:#64748b;font-size:13px;margin-top:2px;">${passenger.address}</div>` : ''}</div>` : ''}
+    ${passenger?.name ? `<div style="margin-bottom:20px;"><div style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px;">Billed to</div><div style="color:#0f172a;font-size:14px;font-weight:600;">${esc(passenger.name)}</div>${passenger.address ? `<div style="color:#64748b;font-size:13px;margin-top:2px;">${esc(passenger.address)}</div>` : ''}</div>` : ''}
 
     <table style="width:100%;border-collapse:collapse;margin-bottom:8px;">
       ${invoiceRow('Pickup', booking.pickupAddress)}
@@ -245,12 +306,50 @@ function buildInvoiceHtml(booking, passenger, driver, driverName) {
 
     <div style="margin-top:32px;padding-top:20px;border-top:1px solid #e2e8f0;color:#64748b;font-size:12px;line-height:1.6;">
       <div style="font-weight:700;color:#0f172a;margin-bottom:4px;">EasyRide</div>
-      ${settings.adminEmail ? `<div>Email: <a href="mailto:${settings.adminEmail}" style="color:#0EA5E9;text-decoration:none;">${settings.adminEmail}</a></div>` : ''}
-      ${settings.adminMobile ? `<div>Phone: ${settings.adminMobile}</div>` : ''}
-      <div style="margin-top:8px;">Thanks for riding with EasyRide. Questions about this invoice? Just reply to this email.</div>
+      ${settings.adminEmail ? `<div>Email: <a href="mailto:${esc(settings.adminEmail)}" style="color:#0EA5E9;text-decoration:none;">${esc(settings.adminEmail)}</a></div>` : ''}
+      ${settings.adminMobile ? `<div>Phone: ${esc(settings.adminMobile)}</div>` : ''}
+      <div style="margin-top:8px;">Thanks for riding with EasyRide.${forPrint ? '' : ' Questions about this invoice? Just reply to this email.'}</div>
     </div>
   </div>
 </div>`.trim();
+}
+
+// A complete, self-contained page around the same invoice HTML the email
+// uses, for the "Print receipt" button (see routes/booking.js GET
+// /:id/receipt). Opened as its own tab/page rather than printed from
+// inside the app because window.print() is a silent no-op inside an
+// installed (standalone) PWA on iOS - from a real browser tab the user
+// always has the browser's own Print / Save as PDF, plus the button here.
+// print-color-adjust:exact keeps the navy header band: browsers strip
+// background colours when printing unless told not to, which is exactly
+// how the old in-app receipt lost its header.
+function buildReceiptPage(booking, passenger, driver, driverName) {
+  const invoice = buildInvoiceHtml(booking, passenger, driver, driverName, { forPrint: true });
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Receipt ${esc(booking.bookingId)} - EasyRide</title>
+<style>
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin: 0; background: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  .toolbar { display: flex; gap: 10px; justify-content: center; padding: 16px; }
+  .toolbar button { font: inherit; font-weight: 600; padding: 10px 18px; border: none; border-radius: 6px; background: #0EA5E9; color: #fff; cursor: pointer; }
+  .sheet { padding: 0 16px 32px; }
+  @media print {
+    body { background: #fff; }
+    .toolbar { display: none; }
+    .sheet { padding: 0; }
+  }
+  @page { margin: 15mm; }
+</style>
+</head>
+<body>
+  <div class="toolbar"><button type="button" onclick="window.print()">Print / Save as PDF</button></div>
+  <div class="sheet">${invoice}</div>
+</body>
+</html>`;
 }
 
 // Plain-text fallback - shown by the console mock (no SMTP configured) and
@@ -371,4 +470,4 @@ const emailService = {
     ),
 };
 
-module.exports = { emailService };
+module.exports = { emailService, buildReceiptPage };

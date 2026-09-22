@@ -83,6 +83,32 @@ input, select, textarea {
 }
 textarea { resize: vertical; min-height: 80px; }
 
+/* Native date/time pickers (ScheduleField.jsx) don't behave like text
+   inputs on iOS Safari: they're laid out as an intrinsically-sized
+   inline-flex box (so width:100% doesn't reliably stretch them to match
+   the fields above/below), the value inside is centred instead of
+   left-aligned, and an empty one collapses shorter than its siblings.
+   Resetting appearance + display:block makes them size like every other
+   field; the ::-webkit-date-and-time-value rules fix the centred text and
+   the collapsed height; min-height pins them to a text input's height
+   (9px padding x2 + 1px border x2 + one line of text) so the row lines up
+   on every browser regardless of what the picker's own chrome measures. */
+input[type="date"], input[type="time"] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  min-width: 0;
+  min-height: calc(1.2rem + 20px);
+  text-align: left;
+  background: var(--surface);
+  color: var(--text);
+}
+input[type="date"]::-webkit-date-and-time-value,
+input[type="time"]::-webkit-date-and-time-value {
+  text-align: left;
+  min-height: 1.25em;
+}
+
 .btn {
   display: inline-block;
   padding: 10px 16px;
@@ -147,10 +173,11 @@ th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--bor
   table { display: block; overflow-x: auto; white-space: nowrap; }
   .card { padding: 14px; }
   h1 { font-size: 1.4rem; }
-  /* Narrower padding/font gives the native picker's internal segments
-     (day/month/year, hour/minute/AM-PM) more room to actually fit within
-     100% width on a small phone screen - see ScheduleField.jsx. */
-  input[type="date"], input[type="time"] { padding: 9px 6px; font-size: 0.85rem; }
+  /* Narrower side padding gives the native picker's internal segments
+     (day/month/year, hour/minute/AM-PM) more room to fit within 100% width
+     on a small phone screen - see ScheduleField.jsx. Font size stays at
+     16px on purpose: anything smaller makes iOS zoom the page on focus. */
+  input[type="date"], input[type="time"] { padding: 9px 6px; }
 }
 
 @media (max-width: 400px) {
@@ -297,23 +324,17 @@ th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--bor
   .hero h1 { font-size: 1.5rem; }
 }
 
-/* A6 printable QR card and A4 trip receipt: hidden on screen, shown only
-   when printing. Each names its own @page context (Chrome/Edge support -
-   see the `page:` property below) so the QR card's A6 size doesn't leak
-   into a receipt print, or vice versa.
+/* A6 printable QR card: hidden on screen, shown only when printing.
+   (The trip receipt is no longer printed from inside the app - it's a
+   standalone page served by the backend, see GET /api/booking/:id/receipt.)
 
    position: absolute (not fixed) is deliberate: `body * { visibility:
    hidden }` hides every other element but still leaves its layout space
    behind, so the printable element needs taking out of normal flow to
-   avoid printing a blank page of that leftover whitespace first - but
-   `position: fixed` (tried originally) is unreliable for multi-page
-   content specifically: several browsers only paint a fixed element on
-   the first printed page and leave the rest blank, which is exactly why
-   the receipt (tall enough to want two pages) came out broken while the
-   short, always-one-page QR card happened to still look fine. `absolute`
-   positions the same way for a single page but repeats/flows correctly
-   across a page break instead of being pinned to just the first one. */
-.printable-qr-card, .printable-receipt { display: none; }
+   avoid printing a blank page of that leftover whitespace first - and
+   `position: fixed` is unreliable for anything that spans a page break
+   (several browsers only paint a fixed element on the first page). */
+.printable-qr-card { display: none; }
 
 @media print {
   body * { visibility: hidden; }
@@ -331,13 +352,4 @@ th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--bor
     page: qr-card;
   }
   @page qr-card { size: A6; margin: 8mm; }
-
-  .printable-receipt, .printable-receipt * { visibility: visible; }
-  .printable-receipt {
-    display: block;
-    position: absolute;
-    top: 0; left: 0; width: 100%;
-    page: receipt;
-  }
-  @page receipt { size: auto; margin: 15mm; }
 }

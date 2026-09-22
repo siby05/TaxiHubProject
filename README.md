@@ -92,6 +92,16 @@ platforms authenticate through your browser when you connect them yourself.
    - Add the env vars from `backend/.env.example` in the dashboard
      (`JWT_SECRET` especially - set it to a real random secret, not the
      placeholder), plus `FRONTEND_URL` = your Vercel URL.
+   - **Email**: Render's free tier blocks outbound SMTP, so Gmail/SMTP
+     settings will never connect from there. Use Brevo (free, 300
+     emails/day, sent over HTTPS) instead:
+     1. Sign up at brevo.com, then *Senders & IPs → Senders → Add a
+        sender* with the address you want mail to come from (e.g. the
+        admin Gmail) and click the verification email it sends.
+     2. *SMTP & API → API Keys → Generate a new API key*.
+     3. On Render set `BREVO_API_KEY` to that key and `EMAIL_FROM` to the
+        verified address. Remove any `SMTP_*` vars. Redeploy.
+     Admin → *Run backup now* is a quick way to confirm mail is flowing.
    - Once live, go back to the Vercel project and set `VITE_API_URL` /
      `VITE_SOCKET_URL` to this backend's URL, then redeploy the frontend.
 
