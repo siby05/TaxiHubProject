@@ -34,6 +34,7 @@
 .hm-trust { display: flex; flex-wrap: wrap; gap: 8px 18px; color: #94a3b8; font-size: 0.86rem; }
 .hm-trust span { display: inline-flex; align-items: center; gap: 6px; }
 .hm-trust svg { width: 16px; height: 16px; color: #22c55e; }
+.hm-trust-mobile { display: none; }
 
 /* Live-trip card: a mock of the passenger's status screen */
 .hm-visual { position: relative; }
@@ -48,8 +49,6 @@
 .hm-map .hm-route-bg { stroke: rgba(255,255,255,0.14); }
 .hm-map .hm-route { stroke: #38bdf8; stroke-dasharray: 600; stroke-dashoffset: 600; animation: hm-draw 9s ease-in-out infinite; filter: drop-shadow(0 0 6px rgba(56,189,248,0.7)); }
 @keyframes hm-draw { 0% { stroke-dashoffset: 600; } 55% { stroke-dashoffset: 0; } 85% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: 600; } }
-.hm-map .hm-car { offset-path: path('M46 178 C 110 150, 120 80, 200 92 S 330 130, 372 46'); offset-rotate: auto; animation: hm-ride 9s ease-in-out infinite; }
-@keyframes hm-ride { 0% { offset-distance: 0%; } 55% { offset-distance: 100%; } 85% { offset-distance: 100%; } 100% { offset-distance: 0%; } }
 .hm-map .hm-pin-pulse { transform-box: fill-box; transform-origin: center; animation: hm-pulse 2s ease-out infinite; }
 @keyframes hm-pulse { 0% { transform: scale(0.6); opacity: 0.8; } 100% { transform: scale(2.2); opacity: 0; } }
 .hm-trip-rows { margin-top: 12px; display: grid; gap: 8px; }
@@ -138,8 +137,19 @@
 
 /* ---------- Responsive ---------- */
 @media (max-width: 900px) {
-  .hm-hero-inner { grid-template-columns: 1fr; padding: 56px 16px 24px; gap: 36px; }
+  .hm-hero-inner { grid-template-columns: 1fr; padding: 40px 16px 16px; gap: 28px; }
   .hm-visual { max-width: 460px; margin: 0 auto; width: 100%; }
+  /* Keep the animated map inside the first screen on a phone: tighter
+     copy above it, and the pickup/drop/fare rows (which just repeat the
+     headline's story) are dropped so the card is mostly map. */
+  .hm-hero h1 { margin-bottom: 12px; }
+  .hm-hero .hm-tagline { font-size: 0.98rem; margin-bottom: 18px; }
+  .hm-cta { margin-bottom: 16px; }
+  /* The trust strip moves below the card on phones (see .hm-trust-mobile). */
+  .hm-trust { display: none; }
+  .hm-trust-mobile { display: flex; justify-content: center; margin-top: 4px; }
+  .hm-trip-rows { display: none; }
+  .hm-trip { padding: 14px; }
   .hm-toast { left: 6px; }
   .hm-steps { grid-template-columns: 1fr; }
   .hm-fleet { grid-template-columns: 1fr; padding: 24px; }
@@ -150,7 +160,6 @@
 @media (prefers-reduced-motion: reduce) {
   .hm *, .hm *::before, .hm *::after { animation: none !important; transition: none !important; }
   .hm-map .hm-route { stroke-dashoffset: 0; }
-  .hm-map .hm-car { offset-distance: 100%; }
   .hm-toast { opacity: 1; transform: none; }
   .hm-reveal { opacity: 1; transform: none; }
   .hm-road svg { left: 60%; }

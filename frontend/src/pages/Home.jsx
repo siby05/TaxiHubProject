@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../api/client';
 import './home.css';
@@ -44,6 +44,16 @@ function CarSide() {
 
 function TripCard() {
   const [state, setState] = useState(TRIP_STATES[0]);
+  const mapRef = useRef(null);
+
+  // SMIL ignores prefers-reduced-motion, so park the car at the
+  // destination ourselves, matching what the CSS does for everything else.
+  useEffect(() => {
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches && mapRef.current) {
+      mapRef.current.pauseAnimations();
+      mapRef.current.setCurrentTime(5);
+    }
+  }, []);
 
   useEffect(() => {
     let timers = [];
@@ -65,7 +75,7 @@ function TripCard() {
             {state.label}
           </span>
         </div>
-        <svg className="hm-map" viewBox="0 0 420 220">
+        <svg className="hm-map" viewBox="0 0 420 220" ref={mapRef}>
           <defs>
             <pattern id="hm-blocks" width="42" height="42" patternUnits="userSpaceOnUse">
               <rect x="4" y="4" width="34" height="34" rx="4" fill="rgba(255,255,255,0.035)" />
@@ -74,14 +84,21 @@ function TripCard() {
           <rect width="420" height="220" fill="url(#hm-blocks)" />
           <path d="M0 60H420M0 140H420M120 0V220M300 0V220" stroke="rgba(255,255,255,0.06)" strokeWidth="6" />
           <path className="hm-route-bg" d="M46 178 C 110 150, 120 80, 200 92 S 330 130, 372 46" fill="none" strokeWidth="6" strokeLinecap="round" />
-          <path className="hm-route" d="M46 178 C 110 150, 120 80, 200 92 S 330 130, 372 46" fill="none" strokeWidth="4" strokeLinecap="round" />
+          <path id="hm-route-path" className="hm-route" d="M46 178 C 110 150, 120 80, 200 92 S 330 130, 372 46" fill="none" strokeWidth="4" strokeLinecap="round" />
           <circle cx="46" cy="178" r="7" fill="#0b2942" stroke="#38bdf8" strokeWidth="3" />
           <circle className="hm-pin-pulse" cx="372" cy="46" r="9" fill="none" stroke="#22c55e" strokeWidth="2" />
           <circle cx="372" cy="46" r="7" fill="#22c55e" stroke="#0b2942" strokeWidth="3" />
+          {/* SMIL rather than CSS offset-path: motion paths on SVG elements
+              are still unsupported in iOS Safari, which left the car stuck
+              in the corner on iPhones; animateMotion works everywhere. */}
           <g className="hm-car">
             <rect x="-13" y="-7" width="26" height="14" rx="4" fill="#fff" />
             <rect x="-8" y="-4" width="9" height="8" rx="1.5" fill="#0b2942" opacity="0.8" />
             <rect x="9" y="-3" width="3" height="6" rx="1" fill="#fbbf24" />
+            <animateMotion dur="9s" repeatCount="indefinite" rotate="auto" calcMode="spline"
+              keyPoints="0;1;1;0" keyTimes="0;0.55;0.85;1" keySplines="0.42 0 0.58 1;0 0 1 1;0.42 0 0.58 1">
+              <mpath href="#hm-route-path" />
+            </animateMotion>
           </g>
         </svg>
         <div className="hm-trip-rows">
@@ -185,6 +202,12 @@ export default function Home() {
             </div>
           </div>
           <TripCard />
+          <div className="hm-trust hm-trust-mobile">
+            <span><Icon.check /> Admin-approved drivers</span>
+            <span><Icon.check /> NZTA compliant</span>
+            <span><Icon.check /> Upfront fares</span>
+            <span><Icon.check /> Cash or card</span>
+          </div>
         </div>
         <div className="hm-road" aria-hidden="true"><CarSide /></div>
       </section>
