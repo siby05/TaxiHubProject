@@ -62,12 +62,31 @@ router.post('/create-intent', auth, roleMiddleware(['passenger']), async (req, r
   }
 });
 
-// POST /api/payment/confirm - marks a booking paid (mock flow / webhook stand-in)
+// POST /api/payment/confirm - the client reports that Stripe's checkout
+// succeeded. Never trusted on its own: the booking must be the caller's,
+// and with real Stripe the PaymentIntent created above is fetched back
+// and must actually be succeeded for the full amount before anything is
+// marked paid. (Without STRIPE_SECRET_KEY, create-intent already marked
+// the mock payment paid, so this just confirms ownership.)
 router.post('/confirm', auth, roleMiddleware(['passenger']), async (req, res) => {
   try {
     const { bookingId } = req.body;
-    const booking = await Booking.findByIdAndUpdate(bookingId, { paymentStatus: 'paid' });
-    res.json(booking);
+    const booking = await Booking.findById(bookingId);
+    if (!booking) return res.status(404).json({ error: 'Booking not found' });
+    if (String(booking.passengerId) !== String(req.user.id)) return res.status(403).json({ error: 'Not your booking' });
+    if (booking.paymentStatus === 'paid') return res.json(booking);
+
+    if (stripe) {
+      if (!booking.paymentIntentId) return res.status(400).json({ error: 'No payment has been started for this booking' });
+      const intent = await stripe.paymentIntents.retrieve(booking.paymentIntentId);
+      const fare = booking.actualFare || booking.estimatedFare;
+      const expected = Math.round((fare + (booking.cardSurchargeAmount || 0)) * 100);
+      if (intent.status !== 'succeeded' || intent.amount_received < expected) {
+        return res.status(402).json({ error: `Payment not completed (status: ${intent.status})` });
+      }
+    }
+
+    res.json(await Booking.findByIdAndUpdate(bookingId, { paymentStatus: 'paid' }));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

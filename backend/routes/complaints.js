@@ -21,7 +21,7 @@ const upload = multer({
   dest: 'uploads/complaints/',
   fileFilter: (req, file, cb) => {
     const allowedTypes = ['image/jpeg', 'image/png', 'application/pdf', 'text/plain'];
-    cb(allowedTypes.includes(file.mimetype) ? null : new Error('Invalid file type'), allowedTypes.includes(file.mimetype));
+    cb(allowedTypes.includes(file.mimetype) ? null : Object.assign(new Error('Invalid file type'), { status: 400 }), allowedTypes.includes(file.mimetype));
   },
   limits: { fileSize: 5 * 1024 * 1024 },
 });

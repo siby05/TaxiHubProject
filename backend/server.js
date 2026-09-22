@@ -40,6 +40,8 @@ const { startBackupScheduler } = require('./utils/backup');
 const { startRetentionScheduler } = require('./utils/retention');
 const { loadSettings } = require('./config/platformSettings');
 const { verifyEmailConfig, emailStatus } = require('./services/emailService');
+const { signUploadsInResponses, serveSignedUpload } = require('./middleware/signedUploads');
+const { checkStartupSecurity } = require('./utils/startupChecks');
 
 // Defense in depth: a single unhandled promise rejection anywhere (a
 // missed try/catch, a third-party call that throws unexpectedly) should
@@ -64,7 +66,22 @@ setIo(io);
 app.set('trust proxy', 1);
 app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
 app.use(express.json());
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Baseline hardening headers (what helmet would set, minus CSP - the API
+// serves JSON plus a few self-contained HTML pages).
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  next();
+});
+
+// Personal documents: every /uploads URL in a response is signed on the
+// way out and the file route only serves with a valid token - see
+// middleware/signedUploads.js.
+app.use(signUploadsInResponses);
+app.use('/uploads', serveSignedUpload(path.join(__dirname, 'uploads')));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', dbMode: process.env.DB_MODE || 'memory', email: emailStatus }));
 
@@ -104,6 +121,7 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 5000;
 
 connectDatabase().then(async () => {
+  checkStartupSecurity();
   // Memory mode always starts empty, so this reseeds fresh demo/test
   // accounts on every restart exactly as before. A real (mongo) database
   // only gets seeded once, the first time it's ever genuinely empty -
@@ -116,6 +134,7 @@ connectDatabase().then(async () => {
   // requests, so a real (mongo) deployment doesn't silently reset every
   // setting back to hardcoded defaults on each restart/redeploy.
   await loadSettings();
+  await checkStartupSecurity.demoAccounts();
   // After loadSettings() so the admin-configured From address is known.
   // Not awaited: a slow/unreachable Brevo must not delay the API coming up.
   verifyEmailConfig();

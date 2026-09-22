@@ -8,6 +8,7 @@ const { emailService } = require('../services/emailService');
 const { notifyAdmins } = require('../utils/notify');
 const { isValidVehicleType } = require('../config/vehicleTypes');
 const { DRIVER_DOCUMENTS } = require('../config/driverDocuments');
+const { rateLimit } = require('../middleware/rateLimit');
 const { documentUpload, documentUrl } = require('../utils/documentUpload');
 const { getSettings } = require('../config/platformSettings');
 
@@ -35,6 +36,7 @@ router.get('/enabled', (req, res) => res.json({ enabled: getSettings().driverSig
 // acceptance (see frontend/src/pages/DriverSignup.jsx for the popup).
 router.post(
   '/',
+  rateLimit({ windowMs: 60 * 60 * 1000, max: 5, message: 'Too many applications from this connection - please try again later' }),
   (req, res, next) => (getSettings().driverSignupEnabled === false
     ? res.status(403).json({ error: 'Driver sign-up is closed right now. Please check back later.' })
     : next()),

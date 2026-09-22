@@ -5,6 +5,10 @@ const crypto = require('crypto');
 const router = express.Router();
 const User = require('../models/User');
 const { auth } = require('../middleware/auth');
+const { rateLimit } = require('../middleware/rateLimit');
+
+// Credential guessing / reset-token guessing / signup floods.
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: 'Too many attempts - please wait 15 minutes and try again' });
 const { emailService } = require('../services/emailService');
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -23,7 +27,7 @@ function publicUser(user) {
 }
 
 // POST /api/auth/register - passengers self-register; drivers/admins are created by admin (see routes/admin.js)
-router.post('/register', async (req, res) => {
+router.post('/register', authLimiter, async (req, res) => {
   try {
     const { name, email, password, mobile, address } = req.body;
     if (!name || !email || !password) return res.status(400).json({ error: 'name, email and password are required' });
@@ -52,7 +56,7 @@ router.post('/register', async (req, res) => {
 });
 
 // POST /api/auth/login - used by passengers, drivers and admin alike
-router.post('/login', async (req, res) => {
+router.post('/login', authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'email and password are required' });
@@ -123,7 +127,7 @@ router.put('/me', auth, async (req, res) => {
 // side WhatsApp sending (see frontend/src/utils/whatsapp.js), so a
 // link the user's own device can hand to WhatsApp is the only way that
 // channel works at all.
-router.post('/forgot-password', async (req, res) => {
+router.post('/forgot-password', authLimiter, async (req, res) => {
   try {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: 'email is required' });
@@ -158,7 +162,7 @@ router.post('/forgot-password', async (req, res) => {
 // admin-shared one - same token shape) to set a new password. One-time
 // use: the token is cleared immediately so the same link can't be reused
 // or shared after the fact.
-router.post('/reset-password', async (req, res) => {
+router.post('/reset-password', authLimiter, async (req, res) => {
   try {
     const { token, newPassword } = req.body;
     if (!token || !newPassword) return res.status(400).json({ error: 'token and newPassword are required' });

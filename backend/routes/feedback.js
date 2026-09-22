@@ -3,11 +3,12 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const Feedback = require('../models/Feedback');
 const { notifyAdmins } = require('../utils/notify');
+const { rateLimit } = require('../middleware/rateLimit');
 
 // POST /api/feedback - public (works whether or not the sender is logged
 // in; attaches userId when a valid token is present, but doesn't require
 // one - the About/Contact page is reachable before signing in).
-router.post('/', async (req, res) => {
+router.post('/', rateLimit({ windowMs: 60 * 60 * 1000, max: 10 }), async (req, res) => {
   const { name, email, message, rating } = req.body;
   if (!message || !message.trim()) return res.status(400).json({ error: 'Message is required' });
 

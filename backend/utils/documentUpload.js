@@ -8,7 +8,7 @@ const documentUpload = multer({
   fileFilter: (req, file, cb) => {
     const allowed = ['image/jpeg', 'image/png', 'application/pdf'];
     const ok = allowed.includes(file.mimetype);
-    cb(ok ? null : new Error('Documents must be JPG, PNG or PDF'), ok);
+    cb(ok ? null : Object.assign(new Error('Documents must be JPG, PNG or PDF'), { status: 400 }), ok);
   },
   limits: { fileSize: 8 * 1024 * 1024 },
 });

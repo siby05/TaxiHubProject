@@ -24,6 +24,11 @@ const { VEHICLE_TYPES, isValidVehicleType } = require('../config/vehicleTypes');
 const { notifyUser, notifyAdmins } = require('../utils/notify');
 const { getPassengerRatingAvg } = require('../utils/ratings');
 const { placeholderEmail, hasRealEmail } = require('../utils/users');
+const { rateLimit } = require('../middleware/rateLimit');
+
+// The guest (QR-scan, no login) endpoints are the only unauthenticated
+// way to create data or look people up.
+const guestLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 30 });
 const { isWithinSchedule } = require('../utils/schedule');
 const { getSettings } = require('../config/platformSettings');
 const { getDriverReadyTime, isReadyInTime } = require('../utils/driverAvailability');
@@ -266,19 +271,18 @@ router.get('/admin-contact', (req, res) => {
 
 // GET /api/booking/guest-lookup?mobile= - public. As a returning guest
 // types their phone number on the QR landing page (see POST /guest below),
-// this looks them up so their name/email/address can auto-fill - saves a
-// repeat visitor from retyping their details every time they scan a car's
-// QR code. Deliberately returns only name/email/address, never pickup/drop
-// (those are per-trip, not part of a person's saved details) and never an
-// account id or anything that would let this be used to enumerate users.
-router.get('/guest-lookup', async (req, res) => {
+// this recognises them so the form can greet them and skip the fields
+// already on file. It is unauthenticated, so it must not hand out what it
+// knows: only the first name and whether an email/address exist come
+// back - the saved values themselves are applied server-side by POST
+// /guest. (Returning the full name, email and home address for any phone
+// number typed in was a personal-data lookup service for anyone.)
+router.get('/guest-lookup', guestLimiter, async (req, res) => {
   const mobile = (req.query.mobile || '').trim();
   if (!mobile) return res.json({ found: false });
   const existing = await User.findOne({ role: 'passenger', mobile });
   if (!existing) return res.json({ found: false });
-  // A guest who never gave a real email got a generated placeholder (see
-  // utils/users.js) - never surface that as if it were a saved address.
-  res.json({ found: true, name: existing.name, email: hasRealEmail(existing) ? existing.email : null, address: existing.address || null });
+  res.json({ found: true, firstName: String(existing.name || '').split(' ')[0], hasEmail: hasRealEmail(existing), hasAddress: !!existing.address });
 });
 
 // GET /api/booking/driver-preview/:id - unauthenticated, minimal driver info
@@ -327,7 +331,7 @@ function buildQuote(distanceKm, ratePerKm, paymentMethod) {
 // the QR-scan guest checkout (see POST /guest) which has no logged-in user
 // to authenticate. driverId is required - a guest is always quoting a
 // specific scanned driver, never an open auto-match.
-router.post('/guest-quote', async (req, res) => {
+router.post('/guest-quote', guestLimiter, async (req, res) => {
   try {
     const { pickupLat, pickupLng, dropLat, dropLng, driverId, paymentMethod, vehicleType, scheduledFor, stops } = req.body;
     if (!driverId) return res.status(400).json({ error: 'driverId is required' });
@@ -557,7 +561,7 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
 // email/address (not pickup/drop - those are always entered fresh). No
 // session/token is issued; this intentionally stays a one-off guest
 // checkout rather than logging them in.
-router.post('/guest', async (req, res) => {
+router.post('/guest', guestLimiter, async (req, res) => {
   try {
     const {
       driverId, passengerName, passengerMobile, passengerEmail, passengerAddress,
@@ -565,7 +569,7 @@ router.post('/guest', async (req, res) => {
     } = req.body;
 
     if (!driverId) return res.status(400).json({ error: 'driverId is required' });
-    if (!passengerName || !passengerMobile) return res.status(400).json({ error: 'passengerName and passengerMobile are required' });
+    if (!passengerMobile) return res.status(400).json({ error: 'passengerMobile is required' });
     if (!pickupAddress || !dropAddress || pickupLat == null || dropLat == null) {
       return res.status(400).json({ error: 'pickupAddress, dropAddress and lat/lng for both are required' });
     }
@@ -590,13 +594,14 @@ router.post('/guest', async (req, res) => {
       if (!passenger.address && !passengerAddress) {
         return res.status(400).json({ error: 'passengerAddress is required' });
       }
-      // Keep their saved details current if this visit gave new ones,
-      // without clobbering a previously-saved address with a blank.
+      // Only fill gaps in their saved details, never overwrite them: this
+      // request isn't authenticated beyond knowing the phone number, so
+      // it must not be able to rename someone or change their address.
       const patch = {};
-      if (passengerName && passengerName !== passenger.name) patch.name = passengerName;
-      if (passengerAddress && passengerAddress !== passenger.address) patch.address = passengerAddress;
+      if (!passenger.address && passengerAddress) patch.address = passengerAddress;
       if (Object.keys(patch).length) passenger = await User.findByIdAndUpdate(passenger._id, patch);
     } else {
+      if (!passengerName) return res.status(400).json({ error: 'passengerName is required' });
       // NZTA small passenger service record-keeping expects a way to
       // identify who travelled - same reasoning routes/driver.js POST
       // /bookings already applies to a driver-registered walk-up passenger.

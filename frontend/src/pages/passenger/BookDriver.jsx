@@ -95,7 +95,9 @@ export default function BookDriver() {
   const [guestMobile, setGuestMobile] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
   const [guestAddress, setGuestAddress] = useState('');
-  const [guestReturning, setGuestReturning] = useState(false);
+  // null = new guest; otherwise { firstName, hasEmail, hasAddress } from
+  // /guest-lookup - the saved values themselves stay server-side.
+  const [guestReturning, setGuestReturning] = useState(null);
   const [guestPickup, setGuestPickup] = useState(null);
   const [guestDrop, setGuestDrop] = useState(null);
   const [guestStops, setGuestStops] = useState([]);
@@ -113,16 +115,13 @@ export default function BookDriver() {
   // prefills name/email/address (never pickup/drop, those are per-trip)
   // for a returning guest instead of making them retype everything.
   useEffect(() => {
-    setGuestReturning(false);
+    setGuestReturning(null);
     if (!guestMobile || guestMobile.replace(/\D/g, '').length < 8) return;
     let cancelled = false;
     const t = setTimeout(() => {
       client.get('/booking/guest-lookup', { params: { mobile: guestMobile } }).then((r) => {
         if (cancelled || !r.data.found) return;
-        setGuestReturning(true);
-        setGuestName((v) => v || r.data.name || '');
-        setGuestEmail((v) => v || r.data.email || '');
-        setGuestAddress((v) => v || r.data.address || '');
+        setGuestReturning(r.data);
       }).catch(() => {});
     }, 500);
     return () => { cancelled = true; clearTimeout(t); };
@@ -153,7 +152,7 @@ export default function BookDriver() {
     try {
       const { data } = await client.post('/booking/guest', {
         driverId,
-        passengerName: guestName, passengerMobile: guestMobile, passengerEmail: guestEmail || undefined, passengerAddress: guestAddress || undefined,
+        passengerName: guestName || undefined, passengerMobile: guestMobile, passengerEmail: guestEmail || undefined, passengerAddress: guestAddress || undefined,
         pickupAddress: guestPickup.label, pickupLat: guestPickup.lat, pickupLng: guestPickup.lng,
         dropAddress: guestDrop.label, dropLat: guestDrop.lat, dropLng: guestDrop.lng,
         stops: stopsPayload(guestStops),
@@ -219,12 +218,12 @@ export default function BookDriver() {
         {preview && preview.available && (
           <div className="card" style={{ maxWidth: 460, margin: '0 auto', textAlign: 'left' }}>
             <h3 style={{ marginTop: 0 }}>Book now - no account needed</h3>
-            {guestReturning && <p className="muted" style={{ color: 'var(--success)' }}>👋 Welcome back - we've filled in your saved details.</p>}
+            {guestReturning && <p className="muted" style={{ color: 'var(--success)' }}>👋 Welcome back{guestReturning.firstName ? `, ${guestReturning.firstName}` : ''} - we have your details on file, so you only need to fill in what's new.</p>}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <PhoneField label="Mobile" value={guestMobile} onChange={setGuestMobile} required hint="We'll remember your name and address for next time." />
-              <div><label>Full name</label><input value={guestName} onChange={(e) => setGuestName(e.target.value)} required /></div>
-              <div><label>Email (optional)</label><input type="email" value={guestEmail} onChange={(e) => setGuestEmail(e.target.value)} /></div>
-              <AddressAutocomplete label="Home address" defaultValue={guestAddress} onSelect={(r) => setGuestAddress(r ? r.label : '')} required />
+              {!guestReturning && <div><label>Full name</label><input value={guestName} onChange={(e) => setGuestName(e.target.value)} required /></div>}
+              {!guestReturning?.hasEmail && <div><label>Email (optional)</label><input type="email" value={guestEmail} onChange={(e) => setGuestEmail(e.target.value)} /></div>}
+              {!guestReturning?.hasAddress && <AddressAutocomplete label="Home address" defaultValue={guestAddress} onSelect={(r) => setGuestAddress(r ? r.label : '')} required />}
 
               <AddressAutocomplete label="Pickup address" onSelect={setGuestPickup} required allowLocate />
 

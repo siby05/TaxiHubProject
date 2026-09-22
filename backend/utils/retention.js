@@ -1,5 +1,6 @@
 const Booking = require('../models/Booking');
 const Complaint = require('../models/Complaint');
+const Notification = require('../models/Notification');
 const { getSettings } = require('../config/platformSettings');
 
 // NZ Transport Agency requires complaint records to be kept for 2 years.
@@ -45,11 +46,26 @@ async function cleanupOldTrips() {
   return result.deletedCount;
 }
 
+// In-app notifications are ephemeral by nature (the bell shows the recent
+// ones) but nothing removed them, so every trip's half-dozen events and
+// every admin fan-out accumulated forever. Read ones go after 30 days,
+// anything after 90 - well past when anyone scrolls back for them.
+async function cleanupOldNotifications() {
+  const day = 24 * 60 * 60 * 1000;
+  const [read, stale] = await Promise.all([
+    Notification.deleteMany({ read: true, createdAt: { $lt: new Date(Date.now() - 30 * day) } }),
+    Notification.deleteMany({ createdAt: { $lt: new Date(Date.now() - 90 * day) } }),
+  ]);
+  const removed = (read.deletedCount || 0) + (stale.deletedCount || 0);
+  if (removed) console.log(`[retention] removed ${removed} old notification(s)`);
+  return removed;
+}
+
 function startRetentionScheduler(pollIntervalMs = 24 * 60 * 60 * 1000) {
-  const run = () => Promise.all([cleanupOldComplaints(), cleanupOldTrips()])
+  const run = () => Promise.all([cleanupOldComplaints(), cleanupOldTrips(), cleanupOldNotifications()])
     .catch((err) => console.error('[retention] check failed:', err.message));
   run();
   return setInterval(run, pollIntervalMs);
 }
 
-module.exports = { cleanupOldComplaints, cleanupOldTrips, startRetentionScheduler };
+module.exports = { cleanupOldComplaints, cleanupOldTrips, cleanupOldNotifications, startRetentionScheduler };

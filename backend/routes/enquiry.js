@@ -3,13 +3,14 @@ const router = express.Router();
 const Enquiry = require('../models/Enquiry');
 const { emailService } = require('../services/emailService');
 const { notifyAdmins } = require('../utils/notify');
+const { rateLimit } = require('../middleware/rateLimit');
 
 // POST /api/enquiry - public "get in touch" form on the homepage. Distinct
 // from POST /api/feedback (post-trip/app feedback): this is for visitors
 // who haven't necessarily booked yet, so it's also emailed straight to the
 // admin inbox (see services/emailService.js sendEnquiryEmail) rather than
 // just landing as an in-app notification.
-router.post('/', async (req, res) => {
+router.post('/', rateLimit({ windowMs: 60 * 60 * 1000, max: 5, message: 'Too many enquiries from this connection - please try again later' }), async (req, res) => {
   const { name, email, phone, message } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required' });
   if (!email || !/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: 'A valid email is required' });
