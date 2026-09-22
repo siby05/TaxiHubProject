@@ -17,10 +17,16 @@
 
 * { box-sizing: border-box; }
 
-body {
+html, body {
   margin: 0;
   background: #f8fafc;
   color: var(--text);
+  /* Safety net: a native <input type="date"/"time"> can refuse to shrink
+     below its own internal minimum width on some mobile browsers, wider
+     than authored CSS can override (see the mobile-only max-width rule
+     below) - this keeps that from dragging the whole page into a
+     horizontal scroll instead of just clipping at its own edge. */
+  overflow-x: hidden;
 }
 
 a { color: var(--primary); text-decoration: none; }
@@ -141,6 +147,10 @@ th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--bor
   table { display: block; overflow-x: auto; white-space: nowrap; }
   .card { padding: 14px; }
   h1 { font-size: 1.4rem; }
+  /* Narrower padding/font gives the native picker's internal segments
+     (day/month/year, hour/minute/AM-PM) more room to actually fit within
+     100% width on a small phone screen - see ScheduleField.jsx. */
+  input[type="date"], input[type="time"] { padding: 9px 6px; font-size: 0.85rem; }
 }
 
 @media (max-width: 400px) {
