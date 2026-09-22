@@ -75,7 +75,7 @@ export default function AdminComplaints() {
         {visibleComplaints.map((c) => (
           <div className="card" key={c._id}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <strong>{c.complaintId}</strong>
+              <strong>{c.complaintId}{c.bookingRef ? <span className="muted" style={{ fontWeight: 400 }}> · trip {c.bookingRef}</span> : null}</strong>
               <div>
                 {c.isSerious && <span className="badge critical" style={{ marginRight: 6 }}>serious</span>}
                 <span className={`badge ${c.status}`}>{c.status}</span>

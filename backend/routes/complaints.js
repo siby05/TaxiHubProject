@@ -36,8 +36,13 @@ router.post('/', auth, roleMiddleware(['passenger']), upload.array('attachments'
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    const booking = await Booking.findById(bookingId);
-    if (!booking) return res.status(404).json({ error: 'Booking not found' });
+    // Accepts the trip's human reference (TRIP-...) as typed from My
+    // bookings, or the internal id when arriving via the trip's own
+    // "Lodge complaint" button.
+    const ref = String(bookingId).trim();
+    const booking = (await Booking.findOne({ bookingId: ref.toUpperCase() })) || (/^[0-9a-f]{24}$/i.test(ref) ? await Booking.findById(ref) : null);
+    if (!booking) return res.status(404).json({ error: 'No trip found with that reference - check it against My bookings' });
+    if (String(booking.passengerId) !== String(req.user.id)) return res.status(403).json({ error: 'That trip is not one of yours' });
 
     const passenger = await User.findById(req.user.id);
     const driver = await Driver.findById(booking.driverId);
@@ -62,7 +67,8 @@ router.post('/', auth, roleMiddleware(['passenger']), upload.array('attachments'
       incidentDate: new Date(incidentDate),
       incidentTime,
       incidentLocation,
-      bookingId,
+      bookingId: booking._id,
+      bookingRef: booking.bookingId,
       driverId: booking.driverId,
       driverName: driverUser?.name || 'Unknown',
       vehicleNumber: driver?.vehicleNumber,
@@ -227,7 +233,7 @@ router.get('/admin/compliance-report', auth, roleMiddleware(['admin']), async (r
   if (startDate && endDate) filter.createdAt = { $gte: new Date(startDate), $lte: new Date(endDate) };
 
   const complaints = await Complaint.find(filter).select(
-    'complaintId complainantName complaintType description incidentDate incidentTime incidentLocation '
+    'complaintId bookingRef complainantName complaintType description incidentDate incidentTime incidentLocation '
     + 'driverName vehicleNumber severity status resolutionSummary requiresTransportAgencyReport '
     + 'transportAgencyReportNumber requiresPoliceReport policeCaseNumber attachments createdAt',
   );

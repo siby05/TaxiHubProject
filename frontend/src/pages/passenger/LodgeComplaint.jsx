@@ -11,8 +11,13 @@ const COMPLAINT_TYPES = [
 export default function LodgeComplaint() {
   const location = useLocation();
   const navigate = useNavigate();
+  // Arriving from "Lodge complaint" on a trip pre-fills the trip's
+  // reference (TRIP-...) and locks it; the internal id travels alongside
+  // so the server doesn't have to look the reference up. Opened from the
+  // nav instead, the passenger types the reference from My bookings.
+  const linkedBooking = location.state?.bookingId ? { id: location.state.bookingId, ref: location.state.bookingRef } : null;
   const [form, setForm] = useState({
-    bookingId: location.state?.bookingId || '',
+    bookingId: linkedBooking?.ref || '',
     complaintType: 'driver-behaviour',
     description: '',
     incidentDate: '',
@@ -35,7 +40,7 @@ export default function LodgeComplaint() {
     }
     setLoading(true);
     try {
-      await client.post('/complaints', form);
+      await client.post('/complaints', { ...form, bookingId: linkedBooking?.id || form.bookingId.trim() });
       navigate('/passenger/complaints');
     } catch (err) {
       setError(err.response?.data?.error || 'Could not submit complaint');
@@ -53,8 +58,9 @@ export default function LodgeComplaint() {
         <p className="muted">Records are retained for 2 years per NZ Transport Agency requirements. Serious incidents are escalated to authorities.</p>
         <form onSubmit={onSubmit}>
           <div>
-            <label>Booking ID</label>
-            <input value={form.bookingId} onChange={(e) => update('bookingId', e.target.value)} required placeholder="From My Bookings" />
+            <label>Trip reference</label>
+            <input value={form.bookingId} onChange={(e) => update('bookingId', e.target.value)} required readOnly={!!linkedBooking} placeholder="e.g. TRIP-20260922-00042, from My bookings" />
+            {linkedBooking?.ref && location.state?.driverName && <p className="muted" style={{ marginTop: 4 }}>Driver: {location.state.driverName}</p>}
           </div>
           <div>
             <label>Complaint type</label>

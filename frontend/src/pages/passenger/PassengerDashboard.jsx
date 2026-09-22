@@ -419,7 +419,7 @@ export default function PassengerDashboard() {
                     {b.receiptToken && (
                       <a className="btn secondary" target="_blank" rel="noreferrer" href={`${API_URL}/booking/${b._id}/receipt?t=${b.receiptToken}`}>Receipt</a>
                     )}
-                    <Link className="btn secondary" to="/passenger/complaints/new" state={{ bookingId: b._id, driverName: b.driverId?.userId?.name }}>Lodge complaint</Link>
+                    <Link className="btn secondary" to="/passenger/complaints/new" state={{ bookingId: b._id, bookingRef: b.bookingId, driverName: b.driverId?.userId?.name }}>Lodge complaint</Link>
                   </>
                 )}
               </div>

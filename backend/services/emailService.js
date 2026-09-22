@@ -262,6 +262,14 @@ function appUrl(path = '/driver') {
   return `${(process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '')}${path}`;
 }
 
+// "Log in to view" is useless without saying where - every complaint
+// email ends with the deep link to the right list for that recipient.
+function complaintLink(path) {
+  return `
+
+View it here: ${appUrl(path)}`;
+}
+
 // "Toyota Corolla (Comfort) · ABC123" - brand/model are optional (older
 // driver profiles may not have set them yet via PUT /api/driver/profile),
 // so this degrades to just "Comfort · ABC123" when they're missing.
@@ -517,8 +525,17 @@ const emailService = {
   sendDriverApproved: (to, name) =>
     send(to, 'You are approved to drive on EasyRide', `Hi ${name}, your driver account has been approved. Log in, go online, and you can start receiving trip requests.`),
 
+  // Deliberately NOT "confirmed": at this point the request has only been
+  // sent out, and a separate email follows when a driver actually accepts
+  // (sendBookingAccepted) - calling this one "confirmed" had passengers
+  // expecting a car that nobody had agreed to yet.
   sendBookingConfirmation: (to, booking, driver, driverName) =>
-    send(to, `Booking confirmed (${booking.bookingId})`, `Your ride from ${booking.pickupAddress} to ${booking.dropAddress} has been requested. Estimated fare: $${booking.estimatedFare}.${driverLine(driver, driverName)}`),
+    send(to, `Ride requested - waiting for a driver (${booking.bookingId})`,
+      `We've sent your request for ${booking.pickupAddress} to ${booking.dropAddress}. Estimated fare: $${booking.estimatedFare}.`
+      + `${driverLine(driver, driverName)}`
+      + `
+
+You'll get another email as soon as a driver accepts. Track it here: ${appUrl('/passenger')}`),
 
   // respond is { acceptUrl, declineUrl } - signed, single-driver links to
   // GET /api/booking/:id/respond (see routes/booking.js), so a driver can
@@ -567,28 +584,28 @@ const emailService = {
       `${reason ? `\nReason: ${reason}` : ''}\nPlease rebook in the app when you're ready.`),
 
   sendComplaintAcknowledgement: (to, complaint) =>
-    send(to, `Complaint received (${complaint.complaintId})`, `We've received your complaint and will investigate. Reference: ${complaint.complaintId}.`),
+    send(to, `Complaint received (${complaint.complaintId})`, `We've received your complaint and will investigate. Reference: ${complaint.complaintId}.${complaintLink('/passenger/complaints')}`),
 
   sendComplaintNotification: (to, complaint) =>
-    send(to, `A complaint has been lodged (${complaint.complaintId})`, `A passenger has lodged a complaint regarding a recent trip. Please log in to review and respond.`),
+    send(to, `A complaint has been lodged (${complaint.complaintId})`, `A passenger has lodged a complaint regarding a recent trip. Please review and respond.${complaintLink('/driver/complaints')}`),
 
   sendAdminAlertSerious: (complaint) =>
-    send(adminInbox(), `SERIOUS INCIDENT: ${complaint.complaintId}`, `A serious complaint (${complaint.complaintType}) was lodged and requires immediate review.`),
+    send(adminInbox(), `SERIOUS INCIDENT: ${complaint.complaintId}`, `A serious complaint (${complaint.complaintType}) was lodged and requires immediate review.${complaintLink('/admin/complaints')}`),
 
   sendDriverResponseNotification: (to, complaint) =>
-    send(to, `Driver responded to your complaint (${complaint.complaintId})`, `The driver has responded to your complaint. Log in to view the response.`),
+    send(to, `Driver responded to your complaint (${complaint.complaintId})`, `The driver has responded to your complaint (${complaint.complaintId}).${complaintLink('/passenger/complaints')}`),
 
   sendComplaintResolution: (to, complaint) =>
-    send(to, `Complaint resolved (${complaint.complaintId})`, `Your complaint has been ${complaint.status}. Summary: ${complaint.resolutionSummary || 'See app for details.'}`),
+    send(to, `Complaint resolved (${complaint.complaintId})`, `Your complaint has been ${complaint.status}. Summary: ${complaint.resolutionSummary || 'See the app for details.'}${complaintLink('/passenger/complaints')}`),
 
   sendComplaintStatusChanged: (to, complaint) =>
-    send(to, `Complaint update (${complaint.complaintId})`, `Your complaint is now marked "${complaint.status}". Log in to view details.`),
+    send(to, `Complaint update (${complaint.complaintId})`, `Your complaint is now marked "${complaint.status}".${complaintLink('/passenger/complaints')}`),
 
   sendReopenedConfirmation: (to, complaint) =>
-    send(to, `Complaint reopened (${complaint.complaintId})`, `We've reopened your complaint and will review it again.`),
+    send(to, `Complaint reopened (${complaint.complaintId})`, `We've reopened your complaint and will review it again.${complaintLink('/passenger/complaints')}`),
 
   sendEscalationAlert: (complaint) =>
-    send(adminInbox(), `ESCALATED: ${complaint.complaintId}`, `Complaint ${complaint.complaintId} has been escalated to authorities.`),
+    send(adminInbox(), `ESCALATED: ${complaint.complaintId}`, `Complaint ${complaint.complaintId} has been escalated to authorities.${complaintLink('/admin/complaints')}`),
 
   sendTripReminder: (to, booking, whenLabel) =>
     send(to, `Reminder: trip ${whenLabel} (${booking.bookingId})`, `Your trip from ${booking.pickupAddress} to ${booking.dropAddress} is scheduled for ${formatNzDateTime(booking.scheduledFor)}.`),
