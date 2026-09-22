@@ -58,6 +58,10 @@ const io = new Server(server, { cors: { origin: process.env.FRONTEND_URL || '*' 
 app.set('io', io);
 setIo(io);
 
+// Behind Render's (or any PaaS's) TLS-terminating proxy, so req.protocol
+// and req.ip reflect the real request - email links (routes/booking.js
+// apiBase) and rate limiting depend on it.
+app.set('trust proxy', 1);
 app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));

@@ -17,7 +17,7 @@ const Booking = require('../models/Booking');
 const Driver = require('../models/Driver');
 const User = require('../models/User');
 const { auth, roleMiddleware } = require('../middleware/auth');
-const { emailService, buildReceiptPage } = require('../services/emailService');
+const { emailService, buildReceiptPage, buildRespondPage, buildRespondResultPage } = require('../services/emailService');
 const { buildInvoicePdf } = require('../services/invoicePdf');
 const { haversineKm, calculateTripFare, calculateCardSurcharge, routeDistanceKm, invalidStopsError, cleanStops } = require('../utils/distance');
 const { VEHICLE_TYPES, isValidVehicleType } = require('../config/vehicleTypes');
@@ -44,6 +44,21 @@ function hidePassengerRating(booking) {
 // eventually expires.
 function receiptToken(bookingId) {
   return jwt.sign({ receipt: String(bookingId) }, process.env.JWT_SECRET, { expiresIn: '30d' });
+}
+
+// Signed accept/decline links for the "new ride request" email (see
+// alertDriverOfBooking / GET+POST /:id/respond). Bound to one driver as
+// well as one booking, so a forwarded email can't let someone else claim
+// the trip, and short-lived because a request that old is stale anyway.
+function respondToken(bookingId, driverId) {
+  return jwt.sign({ respond: String(bookingId), driver: String(driverId) }, process.env.JWT_SECRET, { expiresIn: '2d' });
+}
+
+// Public base URL of this API for links in emails. Render/most PaaS sit
+// behind a TLS-terminating proxy, hence trust proxy in server.js so
+// req.protocol reports https; API_URL overrides it if ever needed.
+function apiBase(req) {
+  return (process.env.API_URL || `${req.protocol}://${req.get('host')}/api`).replace(/\/$/, '');
 }
 
 function withReceiptToken(booking) {
@@ -197,7 +212,12 @@ function noDriverError(requestedUnavailable, requestedName, requestedCashOnly, v
 async function alertDriverOfBooking(req, driverUserId, booking, passengerName, passengerRatingAvg) {
   const driverUser = await User.findById(driverUserId);
   if (!driverUser) return;
-  await emailService.sendDriverBookingAlert(driverUser.email, booking);
+  const driver = await Driver.findOne({ userId: driverUserId });
+  if (driver) {
+    const t = respondToken(booking._id, driver._id);
+    const base = `${apiBase(req)}/booking/${booking._id}/respond?t=${encodeURIComponent(t)}&action=`;
+    await emailService.sendDriverBookingAlert(driverUser.email, booking, { acceptUrl: `${base}accept`, declineUrl: `${base}decline` });
+  }
   emitToUser(req, driverUserId, 'booking:new', { ...booking, passengerName, passengerRatingAvg });
   await notifyUser(driverUserId, {
     type: 'booking-new',
@@ -906,6 +926,57 @@ router.get('/:id', auth, roleMiddleware(['passenger']), async (req, res) => {
 // request (driverId still null - see POST / above), this claims it: first
 // driver to accept wins, and everyone else who was shown the request gets
 // a real-time nudge to drop it from their pending list.
+// Shared by PUT /:id/accept (in-app) and POST /:id/respond (email link).
+// Resolves to { updated } or { status, error }.
+async function acceptBooking(req, booking, driver, driverName) {
+  if (booking.status !== 'pending') return { status: 400, error: `Booking already ${booking.status}` };
+
+  const isBroadcast = booking.driverId == null;
+  if (!isBroadcast && String(booking.driverId) !== String(driver._id)) {
+    return { status: 403, error: 'This trip was not sent to you' };
+  }
+
+  const updated = await Booking.findByIdAndUpdate(booking._id, {
+    status: 'accepted',
+    acceptedAt: new Date(),
+    ...(isBroadcast && { driverId: driver._id }),
+  });
+
+  // Narrow (not eliminate) the race window: if another driver's claim on
+  // this same broadcast request landed between our update and this
+  // re-check, back out rather than reporting a false success.
+  if (isBroadcast) {
+    const verify = await Booking.findById(booking._id);
+    if (String(verify.driverId) !== String(driver._id)) {
+      return { status: 409, error: 'This trip was just accepted by another driver.' };
+    }
+  }
+
+  const passenger = await User.findById(booking.passengerId);
+  await emailService.sendBookingAccepted(passenger.email, updated, driver, driverName);
+  emitToUser(req, booking.passengerId, 'booking:accepted', updated);
+  await notifyUser(booking.passengerId, {
+    type: 'booking-accepted',
+    title: 'A driver accepted your ride',
+    message: `${updated.pickupAddress} → ${updated.dropAddress}`,
+    link: '/passenger',
+  });
+
+  if (isBroadcast) {
+    const others = (await findEligibleCandidates(booking.paymentMethod, booking.requestedVehicleType)).filter((d) => String(d._id) !== String(driver._id));
+    for (const d of others) emitToUser(req, d.userId, 'booking:claimed', { bookingId: booking._id });
+  }
+
+  await notifyAdmins({
+    type: 'driver-action',
+    title: 'Driver accepted a trip',
+    message: `${driverName || 'A driver'} accepted booking ${updated._id}`,
+    link: '/admin',
+  });
+
+  return { updated };
+}
+
 router.put('/:id/accept', auth, roleMiddleware(['driver']), async (req, res) => {
   try {
     const driver = await Driver.findOne({ userId: req.user.id });
@@ -913,54 +984,10 @@ router.put('/:id/accept', auth, roleMiddleware(['driver']), async (req, res) => 
 
     const booking = await Booking.findById(req.params.id);
     if (!booking) return res.status(404).json({ error: 'Booking not found' });
-    if (booking.status !== 'pending') return res.status(400).json({ error: `Booking already ${booking.status}` });
 
-    const isBroadcast = booking.driverId == null;
-    if (!isBroadcast && String(booking.driverId) !== String(driver._id)) {
-      return res.status(403).json({ error: 'This trip was not sent to you' });
-    }
-
-    const updated = await Booking.findByIdAndUpdate(req.params.id, {
-      status: 'accepted',
-      acceptedAt: new Date(),
-      ...(isBroadcast && { driverId: driver._id }),
-    });
-
-    // Narrow (not eliminate) the race window: if another driver's claim on
-    // this same broadcast request landed between our update and this
-    // re-check, back out rather than reporting a false success.
-    if (isBroadcast) {
-      const verify = await Booking.findById(req.params.id);
-      if (String(verify.driverId) !== String(driver._id)) {
-        return res.status(409).json({ error: 'This trip was just accepted by another driver.' });
-      }
-    }
-
-    const passenger = await User.findById(booking.passengerId);
-    await emailService.sendBookingAccepted(passenger.email, updated, driver, req.user.name);
-    emitToUser(req, booking.passengerId, 'booking:accepted', updated);
-    await notifyUser(booking.passengerId, {
-      type: 'booking-accepted',
-      title: 'A driver accepted your ride',
-      message: `${updated.pickupAddress} → ${updated.dropAddress}`,
-      link: '/passenger',
-    });
-
-    if (isBroadcast) {
-      const others = (await findEligibleCandidates(booking.paymentMethod, booking.requestedVehicleType)).filter((d) => String(d._id) !== String(driver._id));
-      for (const d of others) emitToUser(req, d.userId, 'booking:claimed', { bookingId: booking._id });
-    }
-
-    const driverUser = await User.findById(driver.userId);
-
-    await notifyAdmins({
-      type: 'driver-action',
-      title: 'Driver accepted a trip',
-      message: `${driverUser?.name || 'A driver'} accepted booking ${updated._id}`,
-      link: '/admin',
-    });
-
-    res.json(updated);
+    const result = await acceptBooking(req, booking, driver, req.user.name);
+    if (result.error) return res.status(result.status).json({ error: result.error });
+    res.json(result.updated);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -971,16 +998,11 @@ router.put('/:id/accept', auth, roleMiddleware(['driver']), async (req, res) => 
 // back around as a broadcast either). A request that was assigned directly
 // to them is released back to the pool as a broadcast, so the passenger
 // still gets a ride from whoever else is eligible rather than being stuck.
-router.put('/:id/decline', auth, roleMiddleware(['driver']), async (req, res) => {
-  const driver = await Driver.findOne({ userId: req.user.id });
-  if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
-
-  const booking = await Booking.findById(req.params.id);
-  if (!booking) return res.status(404).json({ error: 'Booking not found' });
-  if (booking.status !== 'pending') return res.status(400).json({ error: `Booking already ${booking.status}` });
+async function declineBooking(req, booking, driver) {
+  if (booking.status !== 'pending') return { status: 400, error: `Booking already ${booking.status}` };
 
   const wasAssignedToMe = booking.driverId != null && String(booking.driverId) === String(driver._id);
-  const updated = await Booking.findByIdAndUpdate(req.params.id, {
+  const updated = await Booking.findByIdAndUpdate(booking._id, {
     $push: { declinedBy: driver._id },
     ...(wasAssignedToMe && { driverId: null }),
   });
@@ -1006,7 +1028,72 @@ router.put('/:id/decline', auth, roleMiddleware(['driver']), async (req, res) =>
     emitToUser(req, booking.passengerId, 'booking:declined', updated);
   }
 
-  res.json(updated);
+  return { updated };
+}
+
+router.put('/:id/decline', auth, roleMiddleware(['driver']), async (req, res) => {
+  const driver = await Driver.findOne({ userId: req.user.id });
+  if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
+
+  const booking = await Booking.findById(req.params.id);
+  if (!booking) return res.status(404).json({ error: 'Booking not found' });
+
+  const result = await declineBooking(req, booking, driver);
+  if (result.error) return res.status(result.status).json({ error: result.error });
+  res.json(result.updated);
+});
+
+// GET/POST /api/booking/:id/respond - accept or decline from the "new ride
+// request" email without logging in. The token (respondToken above) is
+// bound to this booking + this driver. GET only shows a confirm page - it
+// must never change state, because mail clients and link scanners fetch
+// links in emails - and the actual accept/decline happens on the POST
+// from that page's form.
+function verifyRespondToken(req, res) {
+  let payload;
+  try {
+    payload = jwt.verify(String((req.method === 'POST' ? req.body.t : req.query.t) || ''), process.env.JWT_SECRET);
+  } catch {
+    res.status(401).type('html').send(buildRespondResultPage('Link expired', 'This link is no longer valid - please respond to the request in the app.', false));
+    return null;
+  }
+  if (payload.respond !== req.params.id) {
+    res.status(403).type('html').send(buildRespondResultPage('Wrong link', 'This link is for a different trip.', false));
+    return null;
+  }
+  return payload;
+}
+
+router.get('/:id/respond', async (req, res) => {
+  const payload = verifyRespondToken(req, res);
+  if (!payload) return;
+  const booking = await Booking.findById(req.params.id);
+  if (!booking) return res.status(404).type('html').send(buildRespondResultPage('Not found', 'This trip no longer exists.', false));
+  if (booking.status !== 'pending') {
+    return res.type('html').send(buildRespondResultPage('Already answered', `This request is already ${booking.status}.`, false));
+  }
+  res.type('html').send(buildRespondPage(booking, req.query.action, String(req.query.t)));
+});
+
+router.post('/:id/respond', express.urlencoded({ extended: false }), async (req, res) => {
+  const payload = verifyRespondToken(req, res);
+  if (!payload) return;
+  const [booking, driver] = await Promise.all([Booking.findById(req.params.id), Driver.findById(payload.driver)]);
+  if (!booking || !driver) return res.status(404).type('html').send(buildRespondResultPage('Not found', 'This trip no longer exists.', false));
+  const driverUser = await User.findById(driver.userId);
+  if (!driverUser?.isActive || driver.status !== 'approved') {
+    return res.status(403).type('html').send(buildRespondResultPage('Not available', 'Your driver account is not currently active - contact the admin.', false));
+  }
+
+  const action = req.body.action === 'decline' ? 'decline' : 'accept';
+  const result = action === 'accept'
+    ? await acceptBooking(req, booking, driver, driverUser.name)
+    : await declineBooking(req, booking, driver);
+  if (result.error) return res.status(result.status).type('html').send(buildRespondResultPage('Could not respond', result.error, false));
+
+  res.type('html').send(action === 'accept'
+    ? buildRespondResultPage('Trip accepted', `You're confirmed for ${booking.pickupAddress} → ${booking.dropAddress}. The passenger has been told you're on the way - open the app for directions and to mark your arrival.`, true)
+    : buildRespondResultPage('Trip declined', 'No problem - the request has been passed to other available drivers.', true));
 });
 
 // PUT /api/booking/:id/arrived - driver is at the pickup point. Keeps the

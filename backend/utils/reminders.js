@@ -5,11 +5,21 @@ const { emailService } = require('../services/emailService');
 const { notifyUser } = require('./notify');
 const { formatNzDateTime } = require('./nzTime');
 
+const HOUR = 60 * 60 * 1000;
+
+// Each reminder fires exactly once per booking, tracked by its flag on the
+// booking regardless of poll cadence. The 2-hour one is driver-only: it's
+// the "leave now / plan your run" nudge, which the passenger doesn't need
+// on top of their 24h and 1h ones.
+const REMINDERS = [
+  { flag: 'reminderDayEmailSent', within: 24 * HOUR, label: 'tomorrow', to: ['passenger', 'driver'] },
+  { flag: 'reminderTwoHourDriverEmailSent', within: 2 * HOUR, label: 'in about 2 hours', to: ['driver'] },
+  { flag: 'reminderHourEmailSent', within: HOUR, label: 'in about 1 hour', to: ['passenger', 'driver'] },
+];
+
 /**
- * Polls for scheduled (not-yet-completed) trips and fires a reminder email
- * + in-app notification to both passenger and driver once a trip crosses
- * the 24h and 1h marks - each fires exactly once per booking (tracked via
- * reminderDayEmailSent/reminderHourEmailSent), regardless of poll cadence.
+ * Polls for scheduled (not-yet-completed) trips and fires reminder emails
+ * + in-app notifications as each trip crosses the marks above.
  *
  * Caveat: this is an in-process interval, not a real cron - it only runs
  * while this Node process is up, and doesn't coordinate across multiple
@@ -25,30 +35,34 @@ async function checkReminders() {
     const msUntil = new Date(booking.scheduledFor).getTime() - now;
     if (msUntil <= 0) continue;
 
-    const dueForDay = msUntil <= 24 * 60 * 60 * 1000 && !booking.reminderDayEmailSent;
-    const dueForHour = msUntil <= 60 * 60 * 1000 && !booking.reminderHourEmailSent;
-    if (!dueForDay && !dueForHour) continue;
+    const due = REMINDERS.filter((r) => msUntil <= r.within && !booking[r.flag]);
+    if (!due.length) continue;
 
-    const whenLabel = dueForHour ? 'in about 1 hour' : 'tomorrow';
     const [passenger, driver] = await Promise.all([
       User.findById(booking.passengerId),
       Driver.findById(booking.driverId).then((d) => (d ? User.findById(d.userId) : null)),
     ]);
 
-    for (const recipient of [passenger, driver].filter(Boolean)) {
-      await emailService.sendTripReminder(recipient.email, booking, whenLabel);
-      await notifyUser(recipient._id, {
-        type: 'trip-reminder',
-        title: `Trip reminder - ${whenLabel}`,
-        message: `${booking.pickupAddress} → ${booking.dropAddress} at ${formatNzDateTime(booking.scheduledFor)}`,
-        link: recipient._id === passenger._id ? '/passenger' : '/driver',
-      });
+    // When several marks are crossed at once (e.g. the process was down),
+    // each recipient gets only the most imminent reminder, not a backlog.
+    const byRole = { passenger, driver };
+    const sentTo = new Set();
+    for (const r of [...due].sort((a, b) => a.within - b.within)) {
+      for (const role of r.to) {
+        const recipient = byRole[role];
+        if (!recipient || sentTo.has(role)) continue;
+        sentTo.add(role);
+        await emailService.sendTripReminder(recipient.email, booking, r.label);
+        await notifyUser(recipient._id, {
+          type: 'trip-reminder',
+          title: `Trip reminder - ${r.label}`,
+          message: `${booking.pickupAddress} → ${booking.dropAddress} at ${formatNzDateTime(booking.scheduledFor)}`,
+          link: role === 'passenger' ? '/passenger' : '/driver',
+        });
+      }
     }
 
-    await Booking.findByIdAndUpdate(booking._id, {
-      ...(dueForDay && { reminderDayEmailSent: true }),
-      ...(dueForHour && { reminderHourEmailSent: true }),
-    });
+    await Booking.findByIdAndUpdate(booking._id, Object.fromEntries(due.map((r) => [r.flag, true])));
   }
 }
 

@@ -9,6 +9,7 @@ const dns = require('dns');
 const { promisify } = require('util');
 const { getSettings } = require('../config/platformSettings');
 const { formatNzDateTime, formatNzDate } = require('../utils/nzTime');
+const { hasRealEmail } = require('../utils/users');
 
 const resolve4 = promisify(dns.resolve4);
 // Trim whitespace and strip wrapping quotes: a key pasted into a hosting
@@ -178,6 +179,15 @@ function isRetryable(err) {
 // needs to know about a real failure, so it's told via the return value
 // instead of a thrown error.
 async function send(to, subject, text, attachments, html) {
+  // Passengers registered without an email carry a generated placeholder
+  // (utils/users.js) so the unique-email login model still holds - it is
+  // not a mailbox. Dropping those here, once, keeps every caller simple
+  // and stops the provider bouncing them against our sending reputation.
+  if (!hasRealEmail({ email: to })) {
+    console.log(`[email] skipped "${subject}" - ${to || '(no address)'} is not a real mailbox`);
+    return { ok: false, error: 'Recipient has no email address' };
+  }
+
   // EMAIL_FROM is optional - defaults to the admin's own configured inbox.
   // For Brevo that address must be a verified sender on the account; for
   // SMTP it's the account actually sending (most providers, Gmail
@@ -384,6 +394,68 @@ function buildInvoiceHtml(booking, passenger, driver, driverName, { forPrint = f
 // receipts actually get asked for. The Print button stays as a desktop
 // convenience; print-color-adjust:exact keeps the navy header band there
 // (browsers strip background colours when printing unless told not to).
+// Trip facts shared by the driver alert email and the respond page.
+function tripRows(booking) {
+  return [
+    ['Pickup', booking.pickupAddress],
+    ...(booking.stops || []).map((s, i) => [`Stop ${i + 1}`, s.address]),
+    ['Drop-off', booking.dropAddress],
+    ['When', booking.scheduledFor ? formatNzDateTime(booking.scheduledFor) : 'Now'],
+    ['Distance', `${booking.distanceKm} km`],
+    ['Fare', `${booking.estimatedFare}`],
+    ['Payment', booking.paymentMethod === 'card' ? 'Card (online)' : 'Cash'],
+  ].map(([label, value]) => invoiceRow(label, value)).join('');
+}
+
+const BTN = 'display:inline-block;padding:13px 26px;border-radius:8px;font-weight:700;text-decoration:none;font-size:15px;';
+
+function buildDriverAlertHtml(booking, respond) {
+  return `
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:560px;margin:0 auto;background:#ffffff;">
+  <table width="100%" bgcolor="#0B2942" style="width:100%;border-collapse:separate;background:#0B2942;border-radius:10px 10px 0 0;" cellpadding="0" cellspacing="0" role="presentation">
+    <tr><td style="padding:20px 28px;color:#ffffff;font-size:20px;font-weight:800;">New ride request</td></tr>
+  </table>
+  <div style="border:1px solid #e2e8f0;border-top:none;border-radius:0 0 10px 10px;padding:24px 28px;">
+    <div style="color:#64748b;font-size:13px;margin-bottom:12px;">${esc(booking.bookingId)}</div>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:22px;">${tripRows(booking)}</table>
+    <table cellpadding="0" cellspacing="0" role="presentation"><tr>
+      <td style="padding-right:10px;"><a href="${esc(respond.acceptUrl)}" style="${BTN}background:#16a34a;color:#ffffff;">Accept trip</a></td>
+      <td><a href="${esc(respond.declineUrl)}" style="${BTN}background:#e2e8f0;color:#1e293b;">Decline</a></td>
+    </tr></table>
+    <p style="color:#64748b;font-size:12px;margin-top:20px;line-height:1.6;">Each button opens a page to confirm your answer. These links are only for you and stop working after 2 days or once the trip is taken. You can also respond in the app: <a href="${esc(appUrl())}" style="color:#0EA5E9;">${esc(appUrl())}</a></p>
+  </div>
+</div>`.trim();
+}
+
+// GET /api/booking/:id/respond - the confirm step behind the email
+// buttons. Both actions are offered so a mis-tap in the email isn't
+// final; the one the driver clicked is shown first.
+function buildRespondPage(booking, action, token) {
+  const primary = action === 'decline' ? 'decline' : 'accept';
+  const button = (a, style) => `<form method="post" style="display:inline"><input type="hidden" name="t" value="${esc(token)}"><input type="hidden" name="action" value="${a}"><button type="submit" style="${BTN}border:none;cursor:pointer;${style}">${a === 'accept' ? 'Accept trip' : 'Decline trip'}</button></form>`;
+  return pageShell(`Respond to trip ${esc(booking.bookingId)}`, `
+    <h1 style="font-size:20px;margin:0 0 4px;">${primary === 'accept' ? 'Accept this trip?' : 'Decline this trip?'}</h1>
+    <div style="color:#64748b;font-size:13px;margin-bottom:14px;">${esc(booking.bookingId)}</div>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:22px;">${tripRows(booking)}</table>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      ${primary === 'accept' ? button('accept', 'background:#16a34a;color:#fff;') + button('decline', 'background:#e2e8f0;color:#1e293b;') : button('decline', 'background:#dc2626;color:#fff;') + button('accept', 'background:#e2e8f0;color:#1e293b;')}
+    </div>`);
+}
+
+function buildRespondResultPage(title, message, ok) {
+  return pageShell(title, `
+    <h1 style="font-size:20px;margin:0 0 8px;color:${ok ? '#16a34a' : '#dc2626'};">${esc(title)}</h1>
+    <p style="color:#334155;line-height:1.6;margin:0 0 20px;">${esc(message)}</p>
+    <a href="${esc(appUrl())}" style="${BTN}background:#0EA5E9;color:#fff;">Open the app</a>`);
+}
+
+function pageShell(title, body) {
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(title)} - EasyRide</title>
+<style>body{margin:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#0f172a}.card{max-width:520px;margin:24px auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:24px}.brand{max-width:520px;margin:20px auto 0;padding:0 4px;font-weight:800;font-size:18px;color:#0B2942}.brand span{color:#0EA5E9}</style>
+</head><body><div class="brand">Easy<span>Ride</span></div><div class="card">${body}</div></body></html>`;
+}
+
 function buildReceiptPage(booking, passenger, driver, driverName, pdfUrl) {
   const invoice = buildInvoiceHtml(booking, passenger, driver, driverName, { forPrint: true });
   return `<!doctype html>
@@ -448,8 +520,20 @@ const emailService = {
   sendBookingConfirmation: (to, booking, driver, driverName) =>
     send(to, `Booking confirmed (${booking.bookingId})`, `Your ride from ${booking.pickupAddress} to ${booking.dropAddress} has been requested. Estimated fare: $${booking.estimatedFare}.${driverLine(driver, driverName)}`),
 
-  sendDriverBookingAlert: (to, booking) =>
-    send(to, `New ride request (${booking.bookingId})`, `New booking from ${booking.pickupAddress} to ${booking.dropAddress}. You have 30 seconds to accept in-app.\nOpen the app: ${appUrl()}`),
+  // respond is { acceptUrl, declineUrl } - signed, single-driver links to
+  // GET /api/booking/:id/respond (see routes/booking.js), so a driver can
+  // answer straight from the email without logging in first. Each link
+  // opens a confirm page rather than acting on the click itself, because
+  // mail clients and link scanners pre-fetch URLs in emails.
+  sendDriverBookingAlert: (to, booking, respond) =>
+    send(
+      to,
+      `New ride request (${booking.bookingId})`,
+      `New booking from ${booking.pickupAddress} to ${booking.dropAddress}${booking.scheduledFor ? ` scheduled for ${formatNzDateTime(booking.scheduledFor)}` : ''}. Fare: ${booking.estimatedFare}.\n` +
+        `Accept: ${respond.acceptUrl}\nDecline: ${respond.declineUrl}\nOr open the app: ${appUrl()}`,
+      undefined,
+      buildDriverAlertHtml(booking, respond),
+    ),
 
   // A QR-scan direct hail is auto-accepted (see routes/booking.js) - no
   // accept/decline step, so the driver is told it's already theirs
@@ -534,4 +618,4 @@ const emailService = {
     ),
 };
 
-module.exports = { emailService, buildReceiptPage, verifyEmailConfig, emailStatus: status };
+module.exports = { emailService, buildReceiptPage, buildRespondPage, buildRespondResultPage, verifyEmailConfig, emailStatus: status };
