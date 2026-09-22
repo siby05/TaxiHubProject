@@ -34,6 +34,10 @@ export default function AdminDashboard() {
   const [settingsMsg, setSettingsMsg] = useState('');
   const [backupMsg, setBackupMsg] = useState('');
   const [passengers, setPassengers] = useState([]);
+  const [passengerView, setPassengerView] = useState('list');
+  const [passengerForm, setPassengerForm] = useState({ name: '', mobile: '', email: '', address: '' });
+  const [passengerError, setPassengerError] = useState('');
+  const [passengerEdit, setPassengerEdit] = useState(null);
   const [trips, setTrips] = useState([]);
   const [tripFilter, setTripFilter] = useState('');
   const [tripDriverFilter, setTripDriverFilter] = useState('');
@@ -121,6 +125,32 @@ export default function AdminDashboard() {
   }
   async function approveRate(id) { await client.put(`/admin/drivers/${id}/rate/approve`); load(); }
   async function rejectRate(id) { await client.put(`/admin/drivers/${id}/rate/reject`); load(); }
+
+  async function addPassenger(e) {
+    e.preventDefault();
+    setPassengerError('');
+    try {
+      await client.post('/admin/passengers', passengerForm);
+      setPassengerForm({ name: '', mobile: '', email: '', address: '' });
+      setPassengerView('list');
+      load();
+    } catch (err) {
+      setPassengerError(err.response?.data?.error || 'Could not add passenger');
+    }
+  }
+
+  async function savePassenger(e) {
+    e.preventDefault();
+    setPassengerError('');
+    try {
+      const { _id, ...fields } = passengerEdit;
+      await client.put(`/admin/passengers/${_id}`, fields);
+      setPassengerEdit(null);
+      load();
+    } catch (err) {
+      setPassengerError(err.response?.data?.error || 'Could not save passenger');
+    }
+  }
 
   async function toggleBookingBlock(p) {
     await client.put(`/admin/users/${p._id}/${p.bookingBlocked ? 'unblock-booking' : 'block-booking'}`);
@@ -509,31 +539,74 @@ export default function AdminDashboard() {
       )}
 
       {tab === 'passengers' && (
-        <div className="grid cols-2">
-          {passengers.map((p) => (
-            <div className="card" key={p._id}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                  <strong>{p.name}</strong>
-                  <div className="muted">{p.email}</div>
-                  {p.mobile && <div className="muted">{p.mobile}</div>}
-                </div>
-                {p.bookingBlocked && <span className="badge cancelled">booking blocked</span>}
-              </div>
-              <div className="muted" style={{ marginTop: 8 }}>{p.totalBookings} bookings · {p.completedTrips} completed · {p.ratingAvg ? `⭐ ${p.ratingAvg}` : 'no rating yet'}</div>
-              <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-                <button
-                  className={`btn ${p.bookingBlocked ? '' : 'danger'}`}
-                  onClick={() => toggleBookingBlock(p)}
-                >
-                  {p.bookingBlocked ? 'Unblock booking' : 'Block from booking'}
-                </button>
-                <button className="btn secondary" onClick={() => resetPassword(p._id, p.name, p.mobile)}>Reset password</button>
-                <button className="btn danger" onClick={() => deletePassenger(p)}>Delete</button>
-              </div>
+        <div>
+          <div className="tabs">
+            <button className={passengerView === 'list' ? 'active' : ''} onClick={() => setPassengerView('list')}>All passengers</button>
+            <button className={passengerView === 'add' ? 'active' : ''} onClick={() => { setPassengerView('add'); setPassengerError(''); }}>+ Add passenger</button>
+          </div>
+
+          {passengerView === 'add' && (
+            <div className="card" style={{ maxWidth: 480 }}>
+              <h3>Add a passenger</h3>
+              <p className="muted">For someone who books by phone and won't use the app themselves. Email is optional - without one, their receipt is sent by the driver over WhatsApp when each trip completes, and you can add an email here later.</p>
+              <form onSubmit={addPassenger}>
+                <div><label>Full name</label><input value={passengerForm.name} onChange={(e) => setPassengerForm((f) => ({ ...f, name: e.target.value }))} required /></div>
+                <PhoneField value={passengerForm.mobile} onChange={(v) => setPassengerForm((f) => ({ ...f, mobile: v }))} required hint="Used to reach them on WhatsApp - receipts go here if there's no email." />
+                <div><label>Email (optional)</label><input type="email" value={passengerForm.email} onChange={(e) => setPassengerForm((f) => ({ ...f, email: e.target.value }))} /></div>
+                <div><label>Home address (optional)</label><input value={passengerForm.address} onChange={(e) => setPassengerForm((f) => ({ ...f, address: e.target.value }))} /></div>
+                {passengerError && <p className="error-text">{passengerError}</p>}
+                <button className="btn">Add passenger</button>
+              </form>
             </div>
-          ))}
-          {passengers.length === 0 && <p className="muted">No passengers yet.</p>}
+          )}
+
+          {passengerView === 'list' && (
+          <div className="grid cols-2">
+            {passengers.map((p) => (
+              <div className="card" key={p._id}>
+                {passengerEdit?._id === p._id ? (
+                  <form onSubmit={savePassenger}>
+                    <div><label>Full name</label><input value={passengerEdit.name} onChange={(e) => setPassengerEdit((f) => ({ ...f, name: e.target.value }))} required /></div>
+                    <PhoneField value={passengerEdit.mobile} onChange={(v) => setPassengerEdit((f) => ({ ...f, mobile: v }))} required hint="" />
+                    <div><label>Email (blank = none; receipts go via WhatsApp)</label><input type="email" value={passengerEdit.email} onChange={(e) => setPassengerEdit((f) => ({ ...f, email: e.target.value }))} /></div>
+                    <div><label>Home address</label><input value={passengerEdit.address} onChange={(e) => setPassengerEdit((f) => ({ ...f, address: e.target.value }))} /></div>
+                    {passengerError && <p className="error-text">{passengerError}</p>}
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button className="btn">Save</button>
+                      <button type="button" className="btn secondary" onClick={() => { setPassengerEdit(null); setPassengerError(''); }}>Cancel</button>
+                    </div>
+                  </form>
+                ) : (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                      <div>
+                        <strong>{p.name}</strong>
+                        <div className="muted">{p.hasEmail ? p.email : 'No email - receipts sent on WhatsApp'}</div>
+                        {p.mobile && <div className="muted">{p.mobile}</div>}
+                      </div>
+                      {p.bookingBlocked && <span className="badge cancelled">booking blocked</span>}
+                    </div>
+                    <div className="muted" style={{ marginTop: 8 }}>{p.totalBookings} bookings · {p.completedTrips} completed · {p.ratingAvg ? `⭐ ${p.ratingAvg}` : 'no rating yet'}</div>
+                    <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+                      <button className="btn secondary" onClick={() => { setPassengerError(''); setPassengerEdit({ _id: p._id, name: p.name || '', mobile: p.mobile || '', email: p.email || '', address: p.address || '' }); }}>
+                        {p.hasEmail ? 'Edit' : 'Edit / add email'}
+                      </button>
+                      <button
+                        className={`btn ${p.bookingBlocked ? '' : 'danger'}`}
+                        onClick={() => toggleBookingBlock(p)}
+                      >
+                        {p.bookingBlocked ? 'Unblock booking' : 'Block from booking'}
+                      </button>
+                      <button className="btn secondary" onClick={() => resetPassword(p._id, p.name, p.mobile)}>Reset password</button>
+                      <button className="btn danger" onClick={() => deletePassenger(p)}>Delete</button>
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+            {passengers.length === 0 && <p className="muted">No passengers yet.</p>}
+          </div>
+          )}
         </div>
       )}
 

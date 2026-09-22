@@ -85,6 +85,19 @@ export function passengerToDriverMessage(driverName) {
 // complete()). payLink is the /pay/:bookingId deep link - one tap from
 // WhatsApp straight to the payment screen (logging in first if needed),
 // no need to find the trip in their own booking list.
+// Driver -> passenger, opened automatically on Complete when the passenger
+// has no real email on file (registered by a driver/admin or via the guest
+// QR flow - see GET /api/booking/driver's passengerHasEmail), so the
+// receipt still reaches them: the same receipt page (view / download PDF)
+// an emailed passenger gets, as a link. Folds in the pay link when a card
+// fare is still owing, so it's one message rather than two.
+export function receiptMessage(booking, driverName, receiptLink, payLink) {
+  return `Hi, this is ${driverName || 'your EasyRide driver'} - your trip (${booking.bookingId}) is complete.\n` +
+    `Fare: $${booking.actualFare}\n` +
+    `Your receipt (view or download as PDF): ${receiptLink}` +
+    `${payLink ? `\n\nPlease complete your online payment here: ${payLink}` : ''}`;
+}
+
 export function paymentReminderMessage(booking, driverName, payLink) {
   return `Hi, this is ${driverName || 'your EasyRide driver'} - your trip (${booking.bookingId}) is complete.\n` +
     `Fare: $${booking.actualFare}\n` +

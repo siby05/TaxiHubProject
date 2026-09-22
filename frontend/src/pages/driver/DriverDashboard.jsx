@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import client from '../../api/client';
+import client, { API_URL } from '../../api/client';
 import { useBookingStore } from '../../store/bookingStore';
 import { useSocket } from '../../hooks/useSocket';
 import StarRating from '../../components/StarRating';
 import { notificationPermission, requestNotificationPermission, showBrowserNotification } from '../../utils/browserNotify';
-import { waLink, driverPendingMessage, driverConfirmedMessage, driverArrivedMessage, driverCancelledMessage, paymentReminderMessage, vehicleLabel } from '../../utils/whatsapp';
+import { waLink, driverPendingMessage, driverConfirmedMessage, driverArrivedMessage, driverCancelledMessage, paymentReminderMessage, receiptMessage, vehicleLabel } from '../../utils/whatsapp';
 import { formatNzDateTime, formatNzTime } from '../../utils/nzTime';
 import { directionsLink } from '../../utils/maps';
 import WhatsAppIcon from '../../components/WhatsAppIcon';
@@ -130,17 +130,34 @@ export default function DriverDashboard() {
     load();
   }
 
+  // The receipt page link for a passenger with no real email on file -
+  // the backend emails everyone else their receipt on completion, but
+  // these passengers can only be reached on WhatsApp. null when the
+  // passenger does have an email (nothing to hand over) or no token yet.
+  function receiptLink(b) {
+    if (b.passengerHasEmail || !b.receiptToken) return null;
+    return `${API_URL}/booking/${b._id}/receipt?t=${b.receiptToken}`;
+  }
+
   async function complete(id) {
     const booking = bookings.find((b) => b._id === id);
     const actualFare = Number(fareInputs[id]) || undefined;
-    // Only a card trip that's still unpaid has anything worth messaging
-    // about on completion - a cash trip is auto-marked paid by the
-    // backend, nothing to remind the passenger of.
-    if (booking && booking.paymentMethod === 'card' && booking.paymentStatus !== 'paid') {
+    if (booking) {
       const finalBooking = { ...booking, actualFare: actualFare || booking.estimatedFare };
-      const link = waLink(booking.passengerId?.mobile, paymentReminderMessage(finalBooking, profile?.userId?.name, `${window.location.origin}/pay/${id}`));
+      const owing = booking.paymentMethod === 'card' && booking.paymentStatus !== 'paid';
+      const payLink = owing ? `${window.location.origin}/pay/${id}` : null;
+      const receipt = receiptLink(booking);
+      // Opened before the API call so it counts as part of the tap (popup
+      // blockers reject a window opened after an await). One message: the
+      // receipt link for a no-email passenger (with the pay link folded in
+      // if a card fare is owing), otherwise just the payment reminder for
+      // an unpaid card trip - a paid/cash trip with an emailed receipt has
+      // nothing to say here.
+      const text = receipt ? receiptMessage(finalBooking, profile?.userId?.name, receipt, payLink)
+        : owing ? paymentReminderMessage(finalBooking, profile?.userId?.name, payLink) : null;
+      const link = text && waLink(booking.passengerId?.mobile, text);
       if (link) {
-        try { window.open(link, '_blank'); } catch { /* the payment-reminder link still rendered below covers a blocked popup */ }
+        try { window.open(link, '_blank'); } catch { /* the same links are rendered as buttons below for a blocked popup */ }
       }
     }
 
@@ -266,6 +283,13 @@ export default function DriverDashboard() {
                   value={fareInputs[b._id] || ''} onChange={(e) => setFareInputs((f) => ({ ...f, [b._id]: e.target.value }))} />
                 <button className="btn" onClick={() => complete(b._id)}>Complete</button>
                 <button className="btn danger" onClick={() => cancelTrip(b._id)}>Cancel trip</button>
+              </div>
+            )}
+            {b.status === 'completed' && receiptLink(b) && b.passengerId?.mobile && (
+              <div className="booking-actions">
+                <a className="btn whatsapp" target="_blank" rel="noreferrer"
+                  href={waLink(b.passengerId?.mobile, receiptMessage(b, profile?.userId?.name, receiptLink(b), b.paymentMethod === 'card' && b.paymentStatus !== 'paid' ? `${window.location.origin}/pay/${b._id}` : null))}><WhatsAppIcon /> Send receipt on WhatsApp</a>
+                <span className="muted">No email on file for this passenger</span>
               </div>
             )}
             {b.paymentMethod === 'card' && b.paymentStatus !== 'paid' && ['accepted', 'in-progress', 'completed'].includes(b.status) && (

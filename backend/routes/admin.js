@@ -16,6 +16,7 @@ const { checkDriverCompliance } = require('../utils/compliance');
 const { isValidVehicleType } = require('../config/vehicleTypes');
 const { DRIVER_DOCUMENTS, isValidDocumentKey, documentLabel, allDocumentsVerified, outstandingDocuments } = require('../config/driverDocuments');
 const { getPassengerRatingAvg } = require('../utils/ratings');
+const { placeholderEmail, hasRealEmail } = require('../utils/users');
 const Feedback = require('../models/Feedback');
 const Enquiry = require('../models/Enquiry');
 const { notifyUser } = require('../utils/notify');
@@ -85,12 +86,77 @@ router.get('/passengers', async (req, res) => {
     const own = bookings.filter((b) => String(b.passengerId) === String(u._id));
     return {
       ...publicUser(u),
+      // Placeholder addresses (utils/users.js) aren't shown as if they were
+      // real - the UI says "no email" and offers to add one.
+      email: hasRealEmail(u) ? u.email : null,
+      hasEmail: hasRealEmail(u),
       totalBookings: own.length,
       completedTrips: own.filter((b) => b.status === 'completed').length,
       ratingAvg: await getPassengerRatingAvg(u._id),
     };
   }));
   res.json(result);
+});
+
+// Shared by POST /passengers and PUT /passengers/:id: the mobile is how a
+// no-email passenger is reached (WhatsApp receipts, driver messages) and
+// how returning guests are recognised, so it must be unique too.
+async function passengerConflict({ email, mobile }, excludeId) {
+  const others = (await User.find({ role: 'passenger' })).filter((u) => String(u._id) !== String(excludeId));
+  if (mobile && others.some((u) => u.mobile === mobile)) return 'A passenger with this mobile number already exists';
+  if (email && others.some((u) => u.email === email)) return 'An account with this email already exists';
+  return null;
+}
+
+// POST /api/admin/passengers - admin registers a passenger directly, e.g.
+// a phone booking from someone who'll never use the app themselves. Email
+// is optional: without one they get a placeholder (utils/users.js) and
+// their receipts go out on WhatsApp instead (see routes/booking.js PUT
+// /:id/complete); an admin can add a real address later via PUT below.
+router.post('/passengers', async (req, res) => {
+  const { name, mobile, email, address } = req.body;
+  if (!name?.trim() || !mobile?.trim()) return res.status(400).json({ error: 'name and mobile are required' });
+  const cleanEmail = email?.trim().toLowerCase() || null;
+  if (cleanEmail && !/^\S+@\S+\.\S+$/.test(cleanEmail)) return res.status(400).json({ error: 'email must be a valid address' });
+  const conflict = await passengerConflict({ email: cleanEmail, mobile: mobile.trim() });
+  if (conflict) return res.status(409).json({ error: conflict });
+
+  const passenger = await User.create({
+    name: name.trim(),
+    email: cleanEmail || placeholderEmail('admin'),
+    password: await bcrypt.hash(crypto.randomBytes(16).toString('hex'), 10),
+    mobile: mobile.trim(),
+    address: address?.trim() || null,
+    role: 'passenger',
+    isActive: true,
+    emailVerified: !!cleanEmail,
+    registeredByAdmin: true,
+  });
+  res.status(201).json({ ...publicUser(passenger), email: cleanEmail, hasEmail: !!cleanEmail });
+});
+
+// PUT /api/admin/passengers/:id - update contact details. Setting email
+// to blank reverts to a placeholder (receipts back to WhatsApp).
+router.put('/passengers/:id', async (req, res) => {
+  const user = await User.findById(req.params.id);
+  if (!user || user.role !== 'passenger') return res.status(404).json({ error: 'Passenger not found' });
+  const { name, mobile, email, address } = req.body;
+  const cleanEmail = email === undefined ? undefined : (String(email ?? "").trim().toLowerCase() || null);
+  if (cleanEmail && !/^\S+@\S+\.\S+$/.test(cleanEmail)) return res.status(400).json({ error: 'email must be a valid address' });
+  if (mobile !== undefined && !mobile.trim()) return res.status(400).json({ error: 'mobile is required' });
+  const conflict = await passengerConflict({ email: cleanEmail, mobile: mobile?.trim() }, user._id);
+  if (conflict) return res.status(409).json({ error: conflict });
+
+  const updated = await User.findByIdAndUpdate(user._id, {
+    ...(name !== undefined && { name: name.trim() }),
+    ...(mobile !== undefined && { mobile: mobile.trim() }),
+    ...(address !== undefined && { address: address.trim() || null }),
+    ...(cleanEmail !== undefined && {
+      email: cleanEmail || (hasRealEmail(user) ? placeholderEmail('admin') : user.email),
+      emailVerified: !!cleanEmail,
+    }),
+  });
+  res.json({ ...publicUser(updated), email: hasRealEmail(updated) ? updated.email : null, hasEmail: hasRealEmail(updated) });
 });
 
 // PUT /api/admin/users/:id/block-booking - passenger keeps login/account access but can't request new rides

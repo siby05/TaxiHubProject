@@ -23,6 +23,7 @@ const { haversineKm, calculateTripFare, calculateCardSurcharge, routeDistanceKm,
 const { VEHICLE_TYPES, isValidVehicleType } = require('../config/vehicleTypes');
 const { notifyUser, notifyAdmins } = require('../utils/notify');
 const { getPassengerRatingAvg } = require('../utils/ratings');
+const { placeholderEmail, hasRealEmail } = require('../utils/users');
 const { isWithinSchedule } = require('../utils/schedule');
 const { getSettings } = require('../config/platformSettings');
 const { getDriverReadyTime, isReadyInTime } = require('../utils/driverAvailability');
@@ -255,11 +256,9 @@ router.get('/guest-lookup', async (req, res) => {
   if (!mobile) return res.json({ found: false });
   const existing = await User.findOne({ role: 'passenger', mobile });
   if (!existing) return res.json({ found: false });
-  // A guest who never gave a real email got a generated no-email.easyride.local
-  // placeholder (see POST /guest below) - never surface that as if it were
-  // a saved address.
-  const realEmail = existing.email && !existing.email.endsWith('@no-email.easyride.local') ? existing.email : null;
-  res.json({ found: true, name: existing.name, email: realEmail, address: existing.address || null });
+  // A guest who never gave a real email got a generated placeholder (see
+  // utils/users.js) - never surface that as if it were a saved address.
+  res.json({ found: true, name: existing.name, email: hasRealEmail(existing) ? existing.email : null, address: existing.address || null });
 });
 
 // GET /api/booking/driver-preview/:id - unauthenticated, minimal driver info
@@ -585,7 +584,7 @@ router.post('/guest', async (req, res) => {
       const placeholderPassword = await bcrypt.hash(crypto.randomBytes(16).toString('hex'), 10);
       passenger = await User.create({
         name: passengerName,
-        email: passengerEmail ? passengerEmail.toLowerCase() : `guest-${crypto.randomBytes(4).toString('hex')}@no-email.easyride.local`,
+        email: passengerEmail ? passengerEmail.toLowerCase() : placeholderEmail('guest'),
         password: placeholderPassword,
         mobile: passengerMobile,
         address: passengerAddress || null,
@@ -829,12 +828,12 @@ router.get('/driver', auth, roleMiddleware(['driver']), async (req, res) => {
   }
 
   const assigned = await Booking.find(filter)
-    .populate('passengerId', 'name mobile')
+    .populate('passengerId', 'name mobile email')
     .sort({ createdAt: -1 });
 
   let broadcastPending = [];
   if (driver.isAvailable && driver.status === 'approved' && isWithinSchedule(driver)) {
-    broadcastPending = (await Booking.find({ driverId: null, status: 'pending' }).populate('passengerId', 'name mobile'))
+    broadcastPending = (await Booking.find({ driverId: null, status: 'pending' }).populate('passengerId', 'name mobile email'))
       .filter((b) => (b.paymentMethod !== 'card' || driver.acceptsOnlinePayment !== false)
         && (!b.requestedVehicleType || b.requestedVehicleType === driver.vehicleType)
         && !(b.declinedBy || []).some((id) => String(id) === String(driver._id)));
@@ -847,7 +846,19 @@ router.get('/driver', auth, roleMiddleware(['driver']), async (req, res) => {
     const pid = String(b.passengerId?._id);
     if (!ratingByPassenger.has(pid)) ratingByPassenger.set(pid, await getPassengerRatingAvg(pid));
   }
-  res.json(bookings.map((b) => ({ ...b, passengerRatingAvg: ratingByPassenger.get(String(b.passengerId?._id)) })));
+  // passengerHasEmail + receiptToken let the driver's app hand a passenger
+  // with no real email their receipt link over WhatsApp at completion
+  // (the address itself stays off the driver's payload).
+  res.json(bookings.map((b) => {
+    const { email, ...passengerPublic } = b.passengerId || {};
+    return {
+      ...b,
+      passengerId: b.passengerId ? passengerPublic : b.passengerId,
+      passengerHasEmail: hasRealEmail(b.passengerId),
+      passengerRatingAvg: ratingByPassenger.get(String(b.passengerId?._id)),
+      ...(b.driverId && { receiptToken: receiptToken(b._id) }),
+    };
+  }));
 });
 
 // GET /api/booking/previous-drivers - distinct drivers this passenger has
@@ -1064,9 +1075,11 @@ router.put('/:id/complete', auth, roleMiddleware(['driver']), async (req, res) =
     // The completion email *is* the receipt: same invoice as GET
     // /:id/receipt, PDF attached. Not awaited - the driver's Complete tap
     // shouldn't wait on PDF generation plus a mail API round-trip, and
-    // send() never throws. Guests who booked without an email just get
-    // the in-app receipt.
-    if (passenger?.email) {
+    // send() never throws. A passenger with no real email (registered by
+    // a driver/admin, or via the guest QR flow) gets the receipt link on
+    // WhatsApp from the driver's phone instead - see DriverDashboard.jsx
+    // complete(), fed by receiptToken/passengerHasEmail on GET /driver.
+    if (hasRealEmail(passenger)) {
       const billedTo = { name: passenger.name, address: passenger.address };
       buildInvoicePdf(updated, billedTo, driver, driverUser?.name)
         .catch((err) => { console.error(`[receipt] PDF for ${updated.bookingId} failed: ${err.message}`); return undefined; })

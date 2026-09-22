@@ -9,6 +9,7 @@ const { auth, roleMiddleware } = require('../middleware/auth');
 const { ensureDriverQrCode } = require('../utils/qrcode');
 const { calculateTripFare, calculateCardSurcharge, routeDistanceKm, invalidStopsError, cleanStops } = require('../utils/distance');
 const { emailService } = require('../services/emailService');
+const { placeholderEmail } = require('../utils/users');
 const { notifyUser, notifyAdmins } = require('../utils/notify');
 const { checkDriverCompliance } = require('../utils/compliance');
 const { isWithinSchedule } = require('../utils/schedule');
@@ -281,7 +282,7 @@ router.post('/bookings', auth, roleMiddleware(['driver']), async (req, res) => {
       const placeholderPassword = await bcrypt.hash(crypto.randomBytes(16).toString('hex'), 10);
       passenger = await User.create({
         name: passengerName,
-        email: passengerEmail ? passengerEmail.toLowerCase() : `walkup-${crypto.randomBytes(4).toString('hex')}@no-email.easyride.local`,
+        email: passengerEmail ? passengerEmail.toLowerCase() : placeholderEmail('walkup'),
         password: placeholderPassword,
         mobile: passengerMobile,
         address: passengerAddress,
