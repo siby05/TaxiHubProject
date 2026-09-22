@@ -11,6 +11,7 @@ const { calculateTripFare, calculateCardSurcharge, routeDistanceKm, invalidStops
 const { emailService } = require('../services/emailService');
 const { notifyUser, notifyAdmins } = require('../utils/notify');
 const { checkDriverCompliance } = require('../utils/compliance');
+const { isWithinSchedule } = require('../utils/schedule');
 const { getSettings } = require('../config/platformSettings');
 const { DRIVER_DOCUMENTS, isValidDocumentKey, documentLabel, allDocumentsVerified } = require('../config/driverDocuments');
 const { documentUpload, documentUrl } = require('../utils/documentUpload');
@@ -254,6 +255,15 @@ router.post('/bookings', auth, roleMiddleware(['driver']), async (req, res) => {
     if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
     if (paymentMethod === 'card' && driver.acceptsOnlinePayment === false) {
       return res.status(400).json({ error: 'You have online payment turned off - book this trip as cash, or turn it on from your Fees page.' });
+    }
+    // A driver booking a passenger in directly (see POST / above for the
+    // usual auto-match path) skips the whole eligibility check that keeps
+    // a driver from being offered trips outside their own declared
+    // availabilitySchedule - without this, "book for passenger" would let
+    // them commit themselves to a scheduled trip during hours they've
+    // told the platform they're not working.
+    if (scheduledFor && !isWithinSchedule(driver, new Date(scheduledFor))) {
+      return res.status(400).json({ error: "That time is outside your own availability schedule. Update it under Weekly availability, or pick a different time." });
     }
 
     let passenger;
