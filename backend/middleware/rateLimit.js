@@ -24,6 +24,7 @@ function rateLimit({ windowMs = 60 * 1000, max = 30, message = 'Too many request
     }
     entry.count += 1;
     if (entry.count > max) {
+      if (entry.count === max + 1) console.warn(`[ratelimit] ${key} exceeded ${max} requests/${windowMs / 1000}s on ${req.method} ${req.originalUrl.split('?')[0]}`);
       res.setHeader('Retry-After', Math.ceil((entry.start + windowMs - now) / 1000));
       return res.status(429).json({ error: message });
     }

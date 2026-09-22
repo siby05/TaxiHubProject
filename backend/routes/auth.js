@@ -8,7 +8,7 @@ const { auth } = require('../middleware/auth');
 const { rateLimit } = require('../middleware/rateLimit');
 
 // Credential guessing / reset-token guessing / signup floods.
-const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: 'Too many attempts - please wait 15 minutes and try again' });
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 40, message: 'Too many attempts - please wait 15 minutes and try again' });
 const { emailService } = require('../services/emailService');
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour

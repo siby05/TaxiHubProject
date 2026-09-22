@@ -60,10 +60,13 @@ const io = new Server(server, { cors: { origin: process.env.FRONTEND_URL || '*' 
 app.set('io', io);
 setIo(io);
 
-// Behind Render's (or any PaaS's) TLS-terminating proxy, so req.protocol
-// and req.ip reflect the real request - email links (routes/booking.js
-// apiBase) and rate limiting depend on it.
-app.set('trust proxy', 1);
+// Behind Render's (or any PaaS's) TLS-terminating proxy - often more than
+// one hop (CDN + load balancer) - so req.protocol and req.ip must come from
+// X-Forwarded-*. 'trust proxy' true takes the left-most forwarded address
+// (the real visitor); with a hop count of 1 every visitor resolved to the
+// CDN's own address and shared a single rate-limit bucket, which is how
+// address autocomplete went dark for everyone at once.
+app.set('trust proxy', true);
 app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
 app.use(express.json());
 

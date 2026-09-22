@@ -1,11 +1,5 @@
 const express = require('express');
 const router = express.Router();
-const { rateLimit } = require('../middleware/rateLimit');
-
-// Nominatim's own policy is ~1 req/s; address autocomplete already
-// debounces client-side, so this only bites scripted abuse.
-const geocodeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
-
 const NOMINATIM_HEADERS = { 'User-Agent': 'EasyRide/1.0 (demo project)' };
 
 // Nominatim's display_name is the full administrative chain (e.g. "50,
@@ -45,7 +39,7 @@ function shortLabel(result) {
  * Public (no auth) - needed by the passenger and driver signup pages
  * before a token exists, as well as the logged-in booking flows.
  */
-router.get('/search', geocodeLimiter, async (req, res) => {
+router.get('/search', async (req, res) => {
   const q = (req.query.q || '').trim();
   if (q.length < 3) return res.json([]);
 
@@ -56,6 +50,7 @@ router.get('/search', geocodeLimiter, async (req, res) => {
     const results = await response.json();
     res.json(results.map((r) => ({ label: shortLabel(r), lat: Number(r.lat), lng: Number(r.lon) })));
   } catch (err) {
+    console.error(`[geocode] search failed: ${err.message}`);
     res.status(502).json({ error: 'Address lookup failed, try again' });
   }
 });
@@ -63,7 +58,7 @@ router.get('/search', geocodeLimiter, async (req, res) => {
 // GET /api/geocode/reverse?lat=&lng= - turns "use my current location" GPS
 // coordinates into a human-readable address for the pickup field. Public,
 // same reasoning as /search above.
-router.get('/reverse', geocodeLimiter, async (req, res) => {
+router.get('/reverse', async (req, res) => {
   const { lat, lng } = req.query;
   if (lat == null || lng == null) return res.status(400).json({ error: 'lat and lng are required' });
 
@@ -75,6 +70,7 @@ router.get('/reverse', geocodeLimiter, async (req, res) => {
     if (!result || result.error) return res.status(404).json({ error: 'Could not resolve an address for this location' });
     res.json({ label: shortLabel(result), lat: Number(lat), lng: Number(lng) });
   } catch (err) {
+    console.error(`[geocode] reverse failed: ${err.message}`);
     res.status(502).json({ error: 'Reverse lookup failed, try again' });
   }
 });
