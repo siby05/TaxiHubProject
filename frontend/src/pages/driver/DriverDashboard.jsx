@@ -26,7 +26,6 @@ export default function DriverDashboard() {
   // needed) this one small per-booking map is kept around after a
   // successful cancel so the link can still show inline in that row.
   const [cancelWaLinks, setCancelWaLinks] = useState({});
-  const [invoiceStatus, setInvoiceStatus] = useState({});
 
   function load() {
     fetchDriverBookings(showAllTrips ? { all: true } : undefined);
@@ -95,16 +94,6 @@ export default function DriverDashboard() {
   // PUT /:id/cancel, which works even without the passenger's number) and
   // a WhatsApp link, kept in cancelWaLinks so it can still show inline in
   // this booking's row once cancelled (see comment on that state above).
-  async function emailInvoice(id) {
-    setInvoiceStatus((s) => ({ ...s, [id]: 'sending' }));
-    try {
-      await client.post(`/booking/${id}/invoice`);
-      setInvoiceStatus((s) => ({ ...s, [id]: 'sent' }));
-    } catch (err) {
-      setInvoiceStatus((s) => ({ ...s, [id]: err.response?.data?.error || 'Could not send invoice' }));
-    }
-  }
-
   async function cancelTrip(id) {
     const reason = window.prompt("Why are you cancelling this trip? The passenger will see this reason.");
     if (reason === null) return; // dismissed the prompt - don't cancel
@@ -291,17 +280,6 @@ export default function DriverDashboard() {
             {b.status === 'cancelled' && cancelWaLinks[b._id] && (
               <div className="booking-actions">
                 <a className="btn whatsapp" target="_blank" rel="noreferrer" href={cancelWaLinks[b._id]}><WhatsAppIcon /> Message passenger: trip cancelled</a>
-              </div>
-            )}
-            {b.status === 'completed' && (
-              <div className="booking-actions">
-                <button className="btn secondary" onClick={() => emailInvoice(b._id)} disabled={invoiceStatus[b._id] === 'sending'}>
-                  {invoiceStatus[b._id] === 'sending' ? 'Sending...' : 'Email invoice to passenger'}
-                </button>
-                {invoiceStatus[b._id] === 'sent' && <span className="muted" style={{ color: 'var(--success)' }}>Sent.</span>}
-                {invoiceStatus[b._id] && !['sending', 'sent'].includes(invoiceStatus[b._id]) && (
-                  <span className="error-text">{invoiceStatus[b._id]}</span>
-                )}
               </div>
             )}
           </div>

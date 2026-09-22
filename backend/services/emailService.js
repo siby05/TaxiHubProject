@@ -315,15 +315,15 @@ function buildInvoiceHtml(booking, passenger, driver, driverName, { forPrint = f
 }
 
 // A complete, self-contained page around the same invoice HTML the email
-// uses, for the "Print receipt" button (see routes/booking.js GET
-// /:id/receipt). Opened as its own tab/page rather than printed from
-// inside the app because window.print() is a silent no-op inside an
-// installed (standalone) PWA on iOS - from a real browser tab the user
-// always has the browser's own Print / Save as PDF, plus the button here.
-// print-color-adjust:exact keeps the navy header band: browsers strip
-// background colours when printing unless told not to, which is exactly
-// how the old in-app receipt lost its header.
-function buildReceiptPage(booking, passenger, driver, driverName) {
+// uses, for the "View receipt" button (see routes/booking.js GET
+// /:id/receipt). Its primary action is a generated PDF (services/
+// invoicePdf.js) rather than the browser's print dialog: window.print()
+// is a no-op on most phones - always inside the installed PWA, and even
+// in the in-app browser view it opens links in - and phones are where
+// receipts actually get asked for. The Print button stays as a desktop
+// convenience; print-color-adjust:exact keeps the navy header band there
+// (browsers strip background colours when printing unless told not to).
+function buildReceiptPage(booking, passenger, driver, driverName, pdfUrl) {
   const invoice = buildInvoiceHtml(booking, passenger, driver, driverName, { forPrint: true });
   return `<!doctype html>
 <html lang="en">
@@ -335,7 +335,9 @@ function buildReceiptPage(booking, passenger, driver, driverName) {
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   body { margin: 0; background: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
   .toolbar { display: flex; gap: 10px; justify-content: center; padding: 16px; }
-  .toolbar button { font: inherit; font-weight: 600; padding: 10px 18px; border: none; border-radius: 6px; background: #0EA5E9; color: #fff; cursor: pointer; }
+  .toolbar a, .toolbar button { font: inherit; font-weight: 600; padding: 10px 18px; border: none; border-radius: 6px; background: #0EA5E9; color: #fff; cursor: pointer; text-decoration: none; }
+  .toolbar .secondary { background: #e2e8f0; color: #1e293b; }
+  @media (max-width: 640px) { .toolbar .secondary { display: none; } }
   .sheet { padding: 0 16px 32px; }
   @media print {
     body { background: #fff; }
@@ -346,7 +348,10 @@ function buildReceiptPage(booking, passenger, driver, driverName) {
 </style>
 </head>
 <body>
-  <div class="toolbar"><button type="button" onclick="window.print()">Print / Save as PDF</button></div>
+  <div class="toolbar">
+    <a href="${esc(pdfUrl)}">Download PDF</a>
+    <button type="button" class="secondary" onclick="window.print()">Print</button>
+  </div>
   <div class="sheet">${invoice}</div>
 </body>
 </html>`;
@@ -397,19 +402,17 @@ const emailService = {
   sendBookingConfirmedDirect: (to, booking, driver, driverName) =>
     send(to, `Your ride is confirmed (${booking.bookingId})`, `Your ride from ${booking.pickupAddress} to ${booking.dropAddress} is confirmed - the driver has been notified. Estimated fare: $${booking.estimatedFare}.${driverLine(driver, driverName)}`),
 
-  sendBookingCompleted: (to, booking) =>
-    send(to, `Trip completed (${booking.bookingId})`, `Your trip is complete. Final fare: $${booking.actualFare}.`),
-
-  // Triggered by "Email invoice" on a completed trip - available to the
-  // passenger themselves, and to admin/driver so either can (re)send it on
-  // the passenger's behalf later (see routes/booking.js POST /:id/invoice).
-  // passenger is {name, address} - address is included in "Billed to" when set.
-  sendInvoiceEmail: (to, booking, passenger, driver, driverName) =>
+  // Sent automatically the moment a driver marks a trip complete (see
+  // routes/booking.js PUT /:id/complete) - this is the passenger's
+  // receipt. passenger is {name, address} - address is included in
+  // "Billed to" when set. pdf is the buildInvoicePdf() Buffer, attached
+  // so the passenger has a file to keep/forward, not just the inline HTML.
+  sendInvoiceEmail: (to, booking, passenger, driver, driverName, pdf) =>
     send(
       to,
       `Invoice - trip ${booking.bookingId}`,
       buildInvoiceText(booking, passenger, driver, driverName),
-      undefined,
+      pdf && [{ filename: `EasyRide-invoice-${booking.bookingId}.pdf`, content: pdf, contentType: 'application/pdf' }],
       buildInvoiceHtml(booking, passenger, driver, driverName),
     ),
 

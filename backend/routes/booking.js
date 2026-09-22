@@ -18,6 +18,7 @@ const Driver = require('../models/Driver');
 const User = require('../models/User');
 const { auth, roleMiddleware } = require('../middleware/auth');
 const { emailService, buildReceiptPage } = require('../services/emailService');
+const { buildInvoicePdf } = require('../services/invoicePdf');
 const { haversineKm, calculateTripFare, calculateCardSurcharge, routeDistanceKm, invalidStopsError, cleanStops } = require('../utils/distance');
 const { VEHICLE_TYPES, isValidVehicleType } = require('../config/vehicleTypes');
 const { notifyUser, notifyAdmins } = require('../utils/notify');
@@ -1059,7 +1060,18 @@ router.put('/:id/complete', auth, roleMiddleware(['driver']), async (req, res) =
     });
 
     const passenger = await User.findById(booking.passengerId);
-    await emailService.sendBookingCompleted(passenger.email, updated);
+    const driverUser = await User.findById(driver.userId);
+    // The completion email *is* the receipt: same invoice as GET
+    // /:id/receipt, PDF attached. Not awaited - the driver's Complete tap
+    // shouldn't wait on PDF generation plus a mail API round-trip, and
+    // send() never throws. Guests who booked without an email just get
+    // the in-app receipt.
+    if (passenger?.email) {
+      const billedTo = { name: passenger.name, address: passenger.address };
+      buildInvoicePdf(updated, billedTo, driver, driverUser?.name)
+        .catch((err) => { console.error(`[receipt] PDF for ${updated.bookingId} failed: ${err.message}`); return undefined; })
+        .then((pdf) => emailService.sendInvoiceEmail(passenger.email, updated, billedTo, driver, driverUser?.name, pdf));
+    }
     emitToUser(req, booking.passengerId, 'booking:completed', updated);
     await notifyUser(booking.passengerId, {
       type: 'booking-completed',
@@ -1068,7 +1080,6 @@ router.put('/:id/complete', auth, roleMiddleware(['driver']), async (req, res) =
       link: '/passenger',
     });
 
-    const driverUser = await User.findById(driver.userId);
     await notifyAdmins({
       type: 'driver-action',
       title: 'Driver completed a trip',
@@ -1170,40 +1181,18 @@ router.put('/:id/rate-passenger', auth, roleMiddleware(['driver']), async (req, 
   res.json(updated);
 });
 
-// POST /api/booking/:id/invoice - emails the passenger an invoice for a
-// completed trip. Available to the passenger themselves (their own
-// booking), the driver who did the trip, or any admin - so a passenger who
-// needs it again later can ask either of them to resend it, not just
-// re-trigger it themselves.
-router.post('/:id/invoice', auth, roleMiddleware(['passenger', 'driver', 'admin']), async (req, res) => {
-  const booking = await Booking.findById(req.params.id).populate('driverId');
-  if (!booking) return res.status(404).json({ error: 'Booking not found' });
-
-  if (req.user.role === 'passenger' && String(booking.passengerId) !== String(req.user.id)) {
-    return res.status(403).json({ error: 'Not your booking' });
-  }
-  if (req.user.role === 'driver') {
-    const driver = await Driver.findOne({ userId: req.user.id });
-    if (!driver || String(booking.driverId?._id) !== String(driver._id)) return res.status(403).json({ error: 'Not your trip' });
-  }
-  if (booking.status !== 'completed') return res.status(400).json({ error: 'An invoice is only available once a trip is completed' });
-
-  const passenger = await User.findById(booking.passengerId);
-  if (!passenger) return res.status(404).json({ error: 'Passenger not found' });
-  const driverUser = booking.driverId ? await User.findById(booking.driverId.userId) : null;
-
-  const result = await emailService.sendInvoiceEmail(passenger.email, booking, { name: passenger.name, address: passenger.address }, booking.driverId, driverUser?.name);
-  if (!result.ok) return res.status(502).json({ error: 'Could not send the invoice email - please try again shortly' });
-  res.json({ ok: true, sentTo: passenger.email });
-});
-
-// GET /api/booking/:id/receipt?t=<receiptToken> - the same invoice as the
-// email above, as a standalone printable page. Authenticated by the
-// per-booking token from GET /mine rather than the JWT header, because
-// this is opened as a plain link in a new tab (see the "Print receipt"
+// GET /api/booking/:id/receipt?t=<receiptToken> - the same invoice the
+// passenger was emailed on completion, as a standalone page. Authenticated
+// by the per-booking token from GET /mine rather than the JWT header,
+// because this is opened as a plain link in a new tab (see the "Receipt"
 // button in PassengerDashboard.jsx) - window.print() from inside the app
 // itself is a silent no-op in an installed PWA on iOS.
-router.get('/:id/receipt', async (req, res) => {
+// GET /api/booking/:id/receipt.pdf?t=<receiptToken> - the same invoice as a
+// generated PDF file (the page's "Download PDF" button and the email's
+// attachment). Served inline: iOS shows it with its own share/save/print
+// sheet, Android downloads it - either way the user ends up with a file,
+// which the browser print dialog never reliably gave them on a phone.
+router.get(['/:id/receipt', '/:id/receipt.pdf'], async (req, res) => {
   let payload;
   try {
     payload = jwt.verify(String(req.query.t || ''), process.env.JWT_SECRET);
@@ -1216,8 +1205,15 @@ router.get('/:id/receipt', async (req, res) => {
   if (!booking || booking.status !== 'completed') return res.status(404).type('text').send('Receipt not found');
   const passenger = await User.findById(booking.passengerId);
   const driverUser = booking.driverId ? await User.findById(booking.driverId.userId) : null;
+  const billedTo = { name: passenger?.name, address: passenger?.address };
 
-  res.type('html').send(buildReceiptPage(booking, { name: passenger?.name, address: passenger?.address }, booking.driverId, driverUser?.name));
+  if (req.path.endsWith('.pdf')) {
+    const pdf = await buildInvoicePdf(booking, billedTo, booking.driverId, driverUser?.name);
+    res.setHeader('Content-Disposition', `inline; filename="EasyRide-invoice-${booking.bookingId}.pdf"`);
+    return res.type('application/pdf').send(pdf);
+  }
+  const pdfUrl = `${req.baseUrl}/${booking._id}/receipt.pdf?t=${encodeURIComponent(req.query.t)}`;
+  res.type('html').send(buildReceiptPage(booking, billedTo, booking.driverId, driverUser?.name, pdfUrl));
 });
 
 // PUT /api/booking/:id/payment-method - passenger changes how they're
