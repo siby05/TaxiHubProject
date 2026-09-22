@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import client from '../api/client';
 import './home.css';
 
-const FALLBACK_VEHICLE_TYPES = ['Economy', 'Comfort', 'Comfort Electric', 'Electric', 'Premium', 'Wheelchair Accessible'];
+const FALLBACK_VEHICLE_TYPES = ['Economy', 'Comfort', 'Comfort Electric', 'Electric', 'Premium'];
 
 // The mock status screen in the hero cycles through a real trip's states
 // in step with the CSS route/car animation (9s loop in home.css).
@@ -267,7 +267,7 @@ export default function Home() {
             <div>
               <div className="hm-kicker" style={{ color: 'var(--primary)', fontWeight: 700, textTransform: 'uppercase', fontSize: '0.76rem', letterSpacing: '0.08em' }}>The fleet</div>
               <h2>Pick the car that fits the trip</h2>
-              <p>Every driver's vehicle is classed when they're approved, so you can ask for exactly what you need - from a quiet electric ride to a wheelchair-accessible van - and see the driver's car and plate before it arrives.</p>
+              <p>Every driver's vehicle is classed when they're approved, so you can ask for exactly what you need - from a budget-friendly Economy car to a quiet EV or an executive Premium ride - and see the driver's car and plate before it arrives.</p>
               <div className="hm-types">
                 {vehicleTypes.map((t) => <span key={t}>{t}</span>)}
               </div>

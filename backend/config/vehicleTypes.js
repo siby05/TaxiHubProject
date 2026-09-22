@@ -10,7 +10,6 @@ const VEHICLE_TYPES = [
   { value: 'Comfort Electric', label: 'Comfort Electric', description: 'Roomier EV - quiet ride, zero tailpipe emissions' },
   { value: 'Electric', label: 'Electric', description: 'Standard EV - zero tailpipe emissions' },
   { value: 'Premium', label: 'Premium', description: 'Executive vehicle for business travel' },
-  { value: 'Wheelchair Accessible', label: 'Wheelchair Accessible', description: 'Van with a ramp or hoist and wheelchair restraints' },
 ];
 
 const VEHICLE_TYPE_VALUES = VEHICLE_TYPES.map((t) => t.value);
