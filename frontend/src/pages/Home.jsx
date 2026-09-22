@@ -3,12 +3,11 @@ import { Link } from 'react-router-dom';
 import client from '../api/client';
 
 const HERO_IMAGE = 'https://images.unsplash.com/photo-1449824913935-59a10b8d2000?auto=format&fit=crop&w=1800&q=80';
-// Unsplash photos only from here on - no attribution required, unlike the
-// BYD Atto 3 photo this used to include (Wikimedia Commons, CC BY 4.0,
-// which requires a visible credit - removing the credit text without
-// dropping that photo would have left the image used without the
-// attribution its license requires).
 const SHOWCASE_IMAGES = [
+  // Own asset (public/images/byd-atto3.png), not hotlinked - no attribution
+  // needed, unlike the earlier Wikimedia Commons CC BY 4.0 photo this used
+  // to include, which required a visible credit.
+  { src: '/images/byd-atto3.png', alt: 'BYD Atto 3 electric SUV' },
   { src: 'https://images.unsplash.com/photo-1502877338535-766e1452684a?auto=format&fit=crop&w=900&q=80', alt: 'Driver behind the wheel on a trip' },
   { src: 'https://images.unsplash.com/photo-1519003722824-194d4455a60c?auto=format&fit=crop&w=900&q=80', alt: 'Open road heading toward the coast' },
 ];
