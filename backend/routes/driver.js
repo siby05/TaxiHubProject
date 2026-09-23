@@ -325,7 +325,7 @@ router.post('/bookings', auth, roleMiddleware(['driver']), async (req, res) => {
     const distanceKm = routeDistanceKm({ lat: pickupLat, lng: pickupLng }, { lat: dropLat, lng: dropLng }, stops);
     const driverBookingSettings = getSettings();
     const estimatedFare = calculateTripFare(distanceKm, driver.ratePerKm, driverBookingSettings);
-    const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(estimatedFare, driverBookingSettings.cardSurchargePercent) : 0;
+    const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(estimatedFare) : 0;
 
     const booking = await Booking.create({
       passengerId: passenger._id,

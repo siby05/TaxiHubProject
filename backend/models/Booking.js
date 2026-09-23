@@ -19,9 +19,11 @@ const { createModel } = require('../lib/createModel');
 // itself, see PUT /:id/start - used as the reference point for
 // utils/driverAvailability.js's next-available-time estimate),
 // completedAt, cancelledAt, cancelReason, paymentMethod ('cash' | 'card',
-// chosen at booking time), cardSurchargeAmount (payment-gateway fee
-// disclosed and added on top of the fare for card bookings only, 0 for
-// cash - see utils/distance.js calculateCardSurcharge()), paymentStatus
+// chosen at booking time), cardSurchargeAmount (Stripe's processing fee,
+// added on top of the fare for card bookings only, 0 for cash - an NZ-card
+// estimate until payment, then the exact figure for the card used, see
+// utils/stripeFees.js), stripeFeeActual (what Stripe really took, recorded
+// after payment - see routes/payment.js recordStripeFee()), paymentStatus
 // ('unpaid' | 'paid' - cash trips are auto-marked paid on completion;
 // card trips only once /api/payment confirms), paymentIntentId,
 // rating/review (passenger's rating of the driver - public, feeds the

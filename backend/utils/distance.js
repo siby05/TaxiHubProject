@@ -38,12 +38,9 @@ function calculateTripFare(distanceKm, ratePerKm, settings) {
   return Math.max(byDistance, byMinimum, byRange);
 }
 
-// Card-only surcharge disclosed to the passenger up front (see
-// platformSettings.cardSurchargePercent) - covers the payment gateway's
-// own processing fee. Cash trips never carry this.
-function calculateCardSurcharge(fare, surchargePercent) {
-  return Math.round(fare * (surchargePercent / 100) * 100) / 100;
-}
+// Card-only surcharge = Stripe's own processing fee, passed on to the
+// passenger (see utils/stripeFees.js). Cash trips never carry this.
+const { calculateCardSurcharge } = require('./stripeFees');
 
 // Total distance across an ordered route: pickup -> each intermediate stop
 // in order -> drop. stops is optional (an array of {lat, lng}, extra

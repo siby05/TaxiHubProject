@@ -28,10 +28,6 @@ let settings = {
   // Default outstanding-fee ceiling before a driver is blocked from going
   // online (per-driver override lives on Driver.feeLimitOverride).
   outstandingFeeLimit: 50,
-  // Approx. payment-gateway (Stripe) processing cost, disclosed to the
-  // passenger and added on top of the fare for card payments only - cash
-  // is unaffected. See utils/distance.js calculateCardSurcharge().
-  cardSurchargePercent: 2.6,
   // Fare floor: no trip is ever quoted below this, regardless of distance.
   minimumFare: 8,
   // Optional flat prices for distance bands, e.g. "any trip up to 5km is

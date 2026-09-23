@@ -367,7 +367,7 @@ export default function BookDriver() {
                 <input type="radio" style={{ width: 'auto' }} checked={paymentMethod === 'card'} onChange={() => setPaymentMethod('card')} /> Pay online
               </label>
             </div>
-            {paymentMethod === 'card' && <p className="muted">Online payment includes a small payment-gateway surcharge (≈2.6%), added on top of the fare - shown below before you confirm.</p>}
+            {paymentMethod === 'card' && <p className="muted">Online payment adds Stripe's card processing fee (2.65% + $0.30 for NZ cards, 3.5% + $0.30 for overseas cards) on top of the fare - the exact amount is shown before you pay.</p>}
             {paymentMethod === 'card' && <p className="muted">You'll be taken straight to a secure payment page once you confirm - this ride is booked directly with this driver, no waiting on an accept step.</p>}
           </div>
 
@@ -380,7 +380,7 @@ export default function BookDriver() {
               )}
               <strong>Estimated fare: ${quote.estimatedFare.toFixed(2)}</strong>
               {quote.cardSurchargeAmount > 0 && (
-                <div className="muted">+ ${quote.cardSurchargeAmount.toFixed(2)} online payment surcharge = <strong>${quote.total.toFixed(2)} total</strong></div>
+                <div className="muted">+ ${quote.cardSurchargeAmount.toFixed(2)} card processing fee (Stripe, NZ cards) = <strong>${quote.total.toFixed(2)} total</strong> - overseas cards cost a little more, shown before you pay</div>
               )}
               <div className="muted">{quote.distanceKm} km{stops.length > 0 && ` · via ${stops.length} stop${stops.length > 1 ? 's' : ''}`}{scheduledFor && ` · scheduled for ${formatNzDateTime(scheduledFor)}`}</div>
               {error && <p className="error-text">{error}</p>}

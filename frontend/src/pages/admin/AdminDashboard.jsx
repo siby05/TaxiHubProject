@@ -679,11 +679,6 @@ export default function AdminDashboard() {
               <input type="number" step="1" min="0" value={settings.outstandingFeeLimit} onChange={(e) => setSettings((s) => ({ ...s, outstandingFeeLimit: e.target.value }))} />
               <p className="muted" style={{ marginTop: 4 }}>A driver whose unpaid balance exceeds this is blocked from going online (auto-disabled if it happens mid-session). Override per driver from their report page.</p>
             </div>
-            <div>
-              <label>Card payment surcharge (%)</label>
-              <input type="number" step="0.1" min="0" max="20" value={settings.cardSurchargePercent} onChange={(e) => setSettings((s) => ({ ...s, cardSurchargePercent: e.target.value }))} />
-              <p className="muted" style={{ marginTop: 4 }}>Disclosed to the passenger and added on top of the fare only when they pay online (covers the payment gateway's processing cost). Cash trips are unaffected.</p>
-            </div>
             {settingsMsg && <p className="muted">{settingsMsg}</p>}
             <button className="btn">Save</button>
           </form>

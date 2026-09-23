@@ -13,7 +13,7 @@ if (process.env.STRIPE_SECRET_KEY) {
  * Stripe Connect (Express accounts): each driver gets their own
  * Stripe-hosted onboarding (identity + bank account) so trip payments can
  * go straight to them instead of pooling in the platform's account. See
- * routes/payment.js create-intent - once a driver's account has
+ * routes/payment.js /pay - once a driver's account has
  * charges_enabled, card payments for their trips become destination
  * charges with the platform's commission taken as application_fee_amount,
  * and everything else falls back to today's pooled-account behavior.

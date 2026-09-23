@@ -40,9 +40,9 @@ export default function PayBooking() {
     setError('');
     setPaying(true);
     try {
-      const { data } = await client.post('/payment/create-intent', { bookingId });
+      const { data } = await client.post('/payment/start', { bookingId });
       if (data.mock === false) {
-        setPayModal({ clientSecret: data.clientSecret });
+        setPayModal({ amount: data.amount, currency: data.currency });
       } else {
         load();
       }
@@ -97,7 +97,8 @@ export default function PayBooking() {
       {payModal && (
         <StripePaymentModal
           bookingId={bookingId}
-          clientSecret={payModal.clientSecret}
+          amount={payModal.amount}
+          currency={payModal.currency}
           onClose={() => setPayModal(null)}
           onSuccess={() => { setPayModal(null); load(); }}
         />

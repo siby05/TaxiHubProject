@@ -530,7 +530,7 @@ router.get('/settings', async (req, res) => {
 // PUT /api/admin/settings - update commission/fee policy
 router.put('/settings', async (req, res) => {
   const {
-    commissionType, commissionPercent, weeklyFlatFee, outstandingFeeLimit, cardSurchargePercent, minimumFare, fareRanges,
+    commissionType, commissionPercent, weeklyFlatFee, outstandingFeeLimit, minimumFare, fareRanges,
     driverSignupEnabled, vehicleSelectionEnabled, tempPasswordVisible, adminEmail, adminMobile, backupFrequency, tripRetentionDays,
   } = req.body;
   try {
@@ -542,7 +542,6 @@ router.put('/settings', async (req, res) => {
       ...(commissionPercent != null && { commissionPercent: Number(commissionPercent) }),
       ...(weeklyFlatFee != null && { weeklyFlatFee: Number(weeklyFlatFee) }),
       ...(outstandingFeeLimit != null && { outstandingFeeLimit: Number(outstandingFeeLimit) }),
-      ...(cardSurchargePercent != null && { cardSurchargePercent: Number(cardSurchargePercent) }),
       ...(minimumFare != null && { minimumFare: Number(minimumFare) }),
       ...(fareRanges && { fareRanges: fareRanges.map((r) => ({ maxKm: Number(r.maxKm), price: Number(r.price) })) }),
       ...(driverSignupEnabled != null && { driverSignupEnabled: !!driverSignupEnabled }),

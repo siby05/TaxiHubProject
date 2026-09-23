@@ -320,9 +320,9 @@ router.get('/driver-info/:id', auth, roleMiddleware(['passenger']), async (req, 
 function buildQuote(distanceKm, ratePerKm, paymentMethod) {
   const settings = getSettings();
   const estimatedFare = calculateTripFare(distanceKm, ratePerKm, settings);
-  const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(estimatedFare, settings.cardSurchargePercent) : 0;
+  const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(estimatedFare) : 0;
   return {
-    distanceKm, estimatedFare, cardSurchargePercent: settings.cardSurchargePercent, cardSurchargeAmount,
+    distanceKm, estimatedFare, cardSurchargeAmount,
     total: Math.round((estimatedFare + cardSurchargeAmount) * 100) / 100,
   };
 }
@@ -398,11 +398,10 @@ router.post('/quote', auth, roleMiddleware(['passenger', 'driver']), async (req,
     const distanceKm = routeDistanceKm({ lat: pickupLat, lng: pickupLng }, { lat: dropLat, lng: dropLng }, stops);
     const settings = getSettings();
     const estimatedFare = calculateTripFare(distanceKm, driver.ratePerKm, settings);
-    const cardSurchargePercent = settings.cardSurchargePercent;
-    const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(estimatedFare, cardSurchargePercent) : 0;
+    const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(estimatedFare) : 0;
     res.json({
       distanceKm, estimatedFare, usedFallback, requestedUnavailable, requestedCashOnly, requestedName,
-      cardSurchargePercent, cardSurchargeAmount,
+      cardSurchargeAmount,
       total: Math.round((estimatedFare + cardSurchargeAmount) * 100) / 100,
     });
   } catch (err) {
@@ -485,7 +484,7 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
 
     const bookingSettings = getSettings();
     const estimatedFare = calculateTripFare(distanceKm, ratePerKmForEstimate, bookingSettings);
-    const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(estimatedFare, bookingSettings.cardSurchargePercent) : 0;
+    const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(estimatedFare) : 0;
 
     // A QR-scan direct hail (see frontend/src/pages/passenger/BookDriver.jsx,
     // the only caller that sends viaQr) skips the accept/decline step
@@ -633,7 +632,7 @@ router.post('/guest', guestLimiter, async (req, res) => {
 
     const bookingSettings = getSettings();
     const estimatedFare = calculateTripFare(distanceKm, resolved.driver.ratePerKm, bookingSettings);
-    const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(estimatedFare, bookingSettings.cardSurchargePercent) : 0;
+    const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(estimatedFare) : 0;
 
     const booking = await Booking.create({
       passengerId: passenger._id,
@@ -771,7 +770,7 @@ router.put('/:id/edit', auth, roleMiddleware(['passenger']), async (req, res) =>
     }
 
     const estimatedFare = calculateTripFare(distanceKm, ratePerKmForEstimate, bookingSettings);
-    const cardSurchargeAmount = nextPaymentMethod === 'card' ? calculateCardSurcharge(estimatedFare, bookingSettings.cardSurchargePercent) : 0;
+    const cardSurchargeAmount = nextPaymentMethod === 'card' ? calculateCardSurcharge(estimatedFare) : 0;
 
     const updated = await Booking.findByIdAndUpdate(booking._id, {
       pickupAddress: nextPickupAddress,
@@ -1348,9 +1347,8 @@ router.put('/:id/payment-method', auth, roleMiddleware(['passenger']), async (re
       }
     }
 
-    const settings = getSettings();
     const fare = booking.actualFare || booking.estimatedFare;
-    const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(fare, settings.cardSurchargePercent) : 0;
+    const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(fare) : 0;
     const updated = await Booking.findByIdAndUpdate(booking._id, { paymentMethod, cardSurchargeAmount });
 
     if (booking.driverId) {

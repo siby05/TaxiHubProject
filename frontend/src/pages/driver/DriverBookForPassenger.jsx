@@ -179,7 +179,7 @@ export default function DriverBookForPassenger() {
             <div className="card fare-confirm">
               <strong>Estimated fare: ${quote.estimatedFare.toFixed(2)}</strong>
               {quote.cardSurchargeAmount > 0 && (
-                <div className="muted">+ ${quote.cardSurchargeAmount.toFixed(2)} online payment surcharge = <strong>${quote.total.toFixed(2)} total</strong></div>
+                <div className="muted">+ ${quote.cardSurchargeAmount.toFixed(2)} card processing fee (Stripe, NZ cards) = <strong>${quote.total.toFixed(2)} total</strong> - overseas cards cost a little more</div>
               )}
               <div className="muted">{quote.distanceKm} km{stops.length > 0 && ` · via ${stops.length} stop${stops.length > 1 ? 's' : ''}`}{scheduledFor && ` · scheduled for ${formatNzDateTime(scheduledFor)}`}</div>
               {error && <p className="error-text">{error}</p>}

@@ -234,16 +234,16 @@ export default function PassengerDashboard() {
 
   // Card bookings can only be paid once a driver has accepted - not while
   // still a pending/broadcast request (see the matching guard in
-  // routes/payment.js create-intent). A real Stripe key configured opens
+  // routes/payment.js /start). A real Stripe key configured opens
   // an actual card-entry form (mock:false); without one, the backend
   // auto-marks it paid immediately so the flow still works for testing.
   async function payNow(booking) {
     setPayError('');
     setPayingId(booking._id);
     try {
-      const { data } = await client.post('/payment/create-intent', { bookingId: booking._id });
+      const { data } = await client.post('/payment/start', { bookingId: booking._id });
       if (data.mock === false) {
-        setPayModal({ bookingId: booking._id, clientSecret: data.clientSecret });
+        setPayModal({ bookingId: booking._id, amount: data.amount, currency: data.currency });
       } else {
         refresh();
       }
@@ -326,7 +326,7 @@ export default function PassengerDashboard() {
                 </label>
               </div>
               {paymentMethod === 'card' && (
-                <p className="muted">Online payment includes a small payment-gateway surcharge (≈2.6%), added on top of the fare - shown below before you confirm.</p>
+                <p className="muted">Online payment adds Stripe's card processing fee (2.65% + $0.30 for NZ cards, 3.5% + $0.30 for overseas cards) on top of the fare - the exact amount is shown before you pay.</p>
               )}
               {paymentMethod === 'card' && (
                 <p className="muted">You'll be able to pay once a driver accepts your ride.</p>
@@ -342,7 +342,7 @@ export default function PassengerDashboard() {
                 )}
                 <strong>Estimated fare: ${quote.estimatedFare.toFixed(2)}</strong>
                 {quote.cardSurchargeAmount > 0 && (
-                  <div className="muted">+ ${quote.cardSurchargeAmount.toFixed(2)} online payment surcharge = <strong>${quote.total.toFixed(2)} total</strong></div>
+                  <div className="muted">+ ${quote.cardSurchargeAmount.toFixed(2)} card processing fee (Stripe, NZ cards) = <strong>${quote.total.toFixed(2)} total</strong> - overseas cards cost a little more, shown before you pay</div>
                 )}
                 <div className="muted">{quote.distanceKm} km{stops.length > 0 && ` · via ${stops.length} stop${stops.length > 1 ? 's' : ''}`}{scheduledFor && ` · scheduled for ${formatNzDateTime(scheduledFor)}`}</div>
                 {error && <p className="error-text">{error}</p>}
@@ -431,7 +431,8 @@ export default function PassengerDashboard() {
       {payModal && (
         <StripePaymentModal
           bookingId={payModal.bookingId}
-          clientSecret={payModal.clientSecret}
+          amount={payModal.amount}
+          currency={payModal.currency}
           onClose={() => setPayModal(null)}
           onSuccess={() => { setPayModal(null); refresh(); }}
         />
@@ -485,7 +486,7 @@ export default function PassengerDashboard() {
               <div className="card fare-confirm">
                 <strong>Estimated fare: ${editQuote.estimatedFare.toFixed(2)}</strong>
                 {editQuote.cardSurchargeAmount > 0 && (
-                  <div className="muted">+ ${editQuote.cardSurchargeAmount.toFixed(2)} online payment surcharge = <strong>${editQuote.total.toFixed(2)} total</strong></div>
+                  <div className="muted">+ ${editQuote.cardSurchargeAmount.toFixed(2)} card processing fee (Stripe, NZ cards) = <strong>${editQuote.total.toFixed(2)} total</strong> - overseas cards cost a little more, shown before you pay</div>
                 )}
                 <div className="muted">{editQuote.distanceKm} km{editStops.length > 0 && ` · via ${editStops.length} stop${editStops.length > 1 ? 's' : ''}`}{editScheduledFor && ` · scheduled for ${formatNzDateTime(editScheduledFor)}`}</div>
               </div>
