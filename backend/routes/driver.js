@@ -215,6 +215,35 @@ router.get('/passengers/search', auth, roleMiddleware(['driver']), async (req, r
   res.json(matches);
 });
 
+// POST /api/driver/passengers - driver registers a passenger ahead of
+// time (e.g. a regular who books by phone), same as the admin's POST
+// /api/admin/passengers: name + mobile required, email and address
+// optional. Without an email they get a placeholder (utils/users.js) and
+// receipts go out on WhatsApp. Returns the same shape as /passengers/search
+// so the result can be handed straight to the book-for-passenger page.
+router.post('/passengers', auth, roleMiddleware(['driver']), async (req, res) => {
+  const { name, mobile, email, address } = req.body;
+  if (!name?.trim() || !mobile?.trim()) return res.status(400).json({ error: 'name and mobile are required' });
+  const cleanEmail = email?.trim().toLowerCase() || null;
+  if (cleanEmail && !/^\S+@\S+\.\S+$/.test(cleanEmail)) return res.status(400).json({ error: 'email must be a valid address' });
+  const existing = await User.find({ role: 'passenger' });
+  if (existing.some((u) => u.mobile === mobile.trim())) return res.status(409).json({ error: 'A passenger with this mobile number already exists - search for them under Book for passenger' });
+  if (cleanEmail && existing.some((u) => u.email === cleanEmail)) return res.status(409).json({ error: 'An account with this email already exists' });
+
+  const passenger = await User.create({
+    name: name.trim(),
+    email: cleanEmail || placeholderEmail('walkup'),
+    password: await bcrypt.hash(crypto.randomBytes(16).toString('hex'), 10),
+    mobile: mobile.trim(),
+    address: address?.trim() || null,
+    role: 'passenger',
+    isActive: true,
+    emailVerified: false,
+    registeredByDriver: true,
+  });
+  res.status(201).json({ _id: passenger._id, name: passenger.name, email: cleanEmail, mobile: passenger.mobile });
+});
+
 // POST /api/driver/bookings - driver takes a booking on a passenger's
 // behalf (e.g. phone/walk-up booking) and it's assigned straight to
 // themself, already accepted (no separate accept step, since the driver

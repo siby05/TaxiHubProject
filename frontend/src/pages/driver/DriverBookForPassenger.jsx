@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import client from '../../api/client';
 import AddressAutocomplete from '../../components/AddressAutocomplete';
 import PhoneField from '../../components/PhoneField';
@@ -11,10 +11,12 @@ import { formatNzDateTime } from '../../utils/nzTime';
 
 export default function DriverBookForPassenger() {
   const navigate = useNavigate();
+  // Arriving from Add passenger ("Book a trip for them") preselects them.
+  const preselected = useLocation().state?.passenger || null;
   const [mode, setMode] = useState('search'); // 'search' | 'new'
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(preselected?.name || '');
   const [matches, setMatches] = useState([]);
-  const [selected, setSelected] = useState(null);
+  const [selected, setSelected] = useState(preselected);
   const [newPassenger, setNewPassenger] = useState({ name: '', mobile: '', email: '', address: '' });
   const timer = useRef(null);
 

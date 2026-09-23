@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import client, { fileOrigin } from '../../api/client';
+import AddressAutocomplete from '../../components/AddressAutocomplete';
 import PhoneField from '../../components/PhoneField';
 import { useAuthStore } from '../../store/authStore';
 import { waLink } from '../../utils/whatsapp';
@@ -553,7 +554,7 @@ export default function AdminDashboard() {
                 <div><label>Full name</label><input value={passengerForm.name} onChange={(e) => setPassengerForm((f) => ({ ...f, name: e.target.value }))} required /></div>
                 <PhoneField value={passengerForm.mobile} onChange={(v) => setPassengerForm((f) => ({ ...f, mobile: v }))} required hint="Used to reach them on WhatsApp - receipts go here if there's no email." />
                 <div><label>Email (optional)</label><input type="email" value={passengerForm.email} onChange={(e) => setPassengerForm((f) => ({ ...f, email: e.target.value }))} /></div>
-                <div><label>Home address (optional)</label><input value={passengerForm.address} onChange={(e) => setPassengerForm((f) => ({ ...f, address: e.target.value }))} /></div>
+                <AddressAutocomplete label="Home address (optional)" defaultValue={passengerForm.address} onSelect={(r) => setPassengerForm((f) => ({ ...f, address: r ? r.label : '' }))} />
                 {passengerError && <p className="error-text">{passengerError}</p>}
                 <button className="btn">Add passenger</button>
               </form>
@@ -569,7 +570,7 @@ export default function AdminDashboard() {
                     <div><label>Full name</label><input value={passengerEdit.name} onChange={(e) => setPassengerEdit((f) => ({ ...f, name: e.target.value }))} required /></div>
                     <PhoneField value={passengerEdit.mobile} onChange={(v) => setPassengerEdit((f) => ({ ...f, mobile: v }))} required hint="" />
                     <div><label>Email (blank = none; receipts go via WhatsApp)</label><input type="email" value={passengerEdit.email} onChange={(e) => setPassengerEdit((f) => ({ ...f, email: e.target.value }))} /></div>
-                    <div><label>Home address</label><input value={passengerEdit.address} onChange={(e) => setPassengerEdit((f) => ({ ...f, address: e.target.value }))} /></div>
+                    <AddressAutocomplete label="Home address" defaultValue={passengerEdit.address} onSelect={(r) => setPassengerEdit((f) => ({ ...f, address: r ? r.label : '' }))} />
                     {passengerError && <p className="error-text">{passengerError}</p>}
                     <div style={{ display: 'flex', gap: 6 }}>
                       <button className="btn">Save</button>

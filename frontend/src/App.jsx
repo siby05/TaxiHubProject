@@ -21,6 +21,7 @@ import DriverSchedule from './pages/driver/DriverSchedule';
 import DriverQrCode from './pages/driver/DriverQrCode';
 import DriverSettings from './pages/driver/DriverSettings';
 import DriverBookForPassenger from './pages/driver/DriverBookForPassenger';
+import DriverAddPassenger from './pages/driver/DriverAddPassenger';
 import DriverReports from './pages/driver/DriverReports';
 import DriverDocuments from './pages/driver/DriverDocuments';
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -57,6 +58,7 @@ export default function App() {
         <Route path="/driver/qr-code" element={<ProtectedRoute roles={['driver']}><DriverQrCode /></ProtectedRoute>} />
         <Route path="/driver/settings" element={<ProtectedRoute roles={['driver']}><DriverSettings /></ProtectedRoute>} />
         <Route path="/driver/book" element={<ProtectedRoute roles={['driver']}><DriverBookForPassenger /></ProtectedRoute>} />
+        <Route path="/driver/passengers/new" element={<ProtectedRoute roles={['driver']}><DriverAddPassenger /></ProtectedRoute>} />
         <Route path="/driver/complaints" element={<ProtectedRoute roles={['driver']}><DriverComplaints /></ProtectedRoute>} />
         <Route path="/driver/reports" element={<ProtectedRoute roles={['driver']}><DriverReports /></ProtectedRoute>} />
         <Route path="/driver/documents" element={<ProtectedRoute roles={['driver']}><DriverDocuments /></ProtectedRoute>} />
