@@ -102,7 +102,16 @@ function PayForm({ bookingId, onSuccess, onClose }) {
 }
 
 export default function StripePaymentModal({ bookingId, amount, currency, onClose, onSuccess }) {
-  if (!stripePromise) return null;
+  // The backend has a Stripe key (it said mock:false) but this build has
+  // no publishable key - say so rather than silently doing nothing.
+  if (!stripePromise) {
+    return (
+      <Modal title="Pay for your trip" onClose={onClose}>
+        <p className="error-text">Online payment isn't available right now (payment setup incomplete). Please pay the driver in cash or try again later.</p>
+        <button type="button" className="btn secondary" onClick={onClose}>Close</button>
+      </Modal>
+    );
+  }
   // Deferred-intent mode: the card is collected before any PaymentIntent
   // exists, because the final amount depends on the card itself.
   const options = { mode: 'payment', amount, currency, paymentMethodCreation: 'manual', paymentMethodTypes: ['card'] };

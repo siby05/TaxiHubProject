@@ -146,6 +146,14 @@ export default function BookDriver() {
     return () => { cancelled = true; };
   }, [guestPickup, guestDrop, guestStops, guestPaymentMethod, guestScheduledFor, driverId]);
 
+  // A returning guest's name/address fields are hidden (the server already
+  // has them - see /guest-lookup), so only require what's actually shown.
+  const guestMissing = [
+    !guestMobile && 'mobile',
+    !guestReturning && !guestName && 'full name',
+    !guestReturning?.hasAddress && !guestAddress && 'home address (pick one from the suggestions)',
+  ].filter(Boolean);
+
   async function confirmGuestBooking() {
     setGuestError('');
     setGuestLoading(true);
@@ -262,9 +270,10 @@ export default function BookDriver() {
                   <strong>Estimated fare: ${guestQuote.estimatedFare.toFixed(2)}</strong>
                   <div className="muted">{guestQuote.distanceKm} km{guestStops.length > 0 && ` · via ${guestStops.length} stop${guestStops.length > 1 ? 's' : ''}`}{guestScheduledFor && ` · scheduled for ${formatNzDateTime(guestScheduledFor)}`}</div>
                   {guestError && <p className="error-text">{guestError}</p>}
+                  {guestMissing.length > 0 && <p className="muted">Still needed: {guestMissing.join(', ')}.</p>}
                   <button className="btn" style={{ marginTop: 8 }}
                     onClick={confirmGuestBooking}
-                    disabled={guestLoading || !guestName || !guestMobile || !guestAddress}>
+                    disabled={guestLoading || guestMissing.length > 0}>
                     {guestLoading ? 'Requesting...' : 'Confirm & request ride'}
                   </button>
                 </div>
