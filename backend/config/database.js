@@ -9,6 +9,8 @@
  */
 const mongoose = require('mongoose');
 
+const NOTIFICATION_TTL_SECONDS = 7 * 24 * 60 * 60;
+
 async function connectDatabase() {
   const mode = process.env.DB_MODE || 'memory';
 
@@ -34,6 +36,13 @@ async function connectDatabase() {
       serverSelectionTimeoutMS: 10000,
     });
     console.log(`[db] connected to MongoDB (DB_MODE=mongo, database "${mongoose.connection.name}")`);
+    // MongoDB itself deletes notifications 7 days after createdAt (a TTL
+    // index - runs inside the database, so it works even while this
+    // server is asleep). Re-creating an identical index is a no-op.
+    await mongoose.connection.collection('notifications').createIndex(
+      { createdAt: 1 },
+      { name: 'notifications_ttl_7d', expireAfterSeconds: NOTIFICATION_TTL_SECONDS },
+    );
     return;
   }
 
