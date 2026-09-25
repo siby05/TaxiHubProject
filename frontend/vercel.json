@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/new-plymouth-to-auckland",
+      "destination": "/new-plymouth-to-auckland/index.html"
+    },
+    {
       "source": "/airport-transfers",
       "destination": "/airport-transfers/index.html"
     },

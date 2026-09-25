@@ -47,6 +47,7 @@ export default function Navbar() {
     ? ROLE_LINKS[user.role] || []
     : [
       { to: '/airport-transfers', label: 'Airport transfers' },
+      { to: '/new-plymouth-to-auckland', label: 'To Auckland' },
       { to: '/about', label: 'About' },
       { to: '/login', label: 'Log in' },
       { to: '/register', label: 'Sign up' },
@@ -80,12 +81,7 @@ export default function Navbar() {
 
   return (
     <header className={`navbar${user ? ' signed-in' : ''}`}>
-      <Link className="brand" to={user ? home : '/'}><Logo size={30} dark /></Link>
-
-      {!user && <nav className="navbar-inline" aria-label="Main">{linkList}</nav>}
-
-      <div className="navbar-actions">
-        {user && <NotificationBell />}
+      <div className="navbar-start">
         <button
           type="button"
           className="navbar-burger"
@@ -96,7 +92,12 @@ export default function Navbar() {
         >
           <span /><span /><span />
         </button>
+        <Link className="brand" to={user ? home : '/'}><Logo size={30} dark /></Link>
       </div>
+
+      {!user && <nav className="navbar-inline" aria-label="Main">{linkList}</nav>}
+
+      {user && <div className="navbar-actions"><NotificationBell /></div>}
 
       <div className={`nav-backdrop${open ? ' open' : ''}`} onClick={() => setOpen(false)} aria-hidden="true" />
       <aside id="nav-drawer" className={`nav-drawer${open ? ' open' : ''}`} aria-hidden={!open} inert={open ? undefined : ''}>

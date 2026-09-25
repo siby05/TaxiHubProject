@@ -5,6 +5,7 @@ import RouteMeta from './components/RouteMeta';
 import Home from './pages/Home';
 import About from './pages/About';
 import AirportTransfers from './pages/AirportTransfers';
+import NewPlymouthToAuckland from './pages/NewPlymouthToAuckland';
 import Login from './pages/Login';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
@@ -43,6 +44,7 @@ export default function App() {
         <Route path="/" element={user ? <Navigate to={home} replace /> : <Home />} />
         <Route path="/about" element={<About />} />
         <Route path="/airport-transfers" element={<AirportTransfers />} />
+        <Route path="/new-plymouth-to-auckland" element={<NewPlymouthToAuckland />} />
         <Route path="/login" element={<Login />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password/:token" element={<ResetPassword />} />

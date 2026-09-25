@@ -21,13 +21,48 @@ export const BUSINESS = {
   email: 'easyridenz@gmail.com',
   city: 'New Plymouth',
   region: 'Taranaki',
+  // How people actually type the name into Google - listed as schema.org
+  // alternateName so a search for any of them matches the business.
+  alternateNames: ['Easy Ride', 'Easy Ride New Plymouth', 'EasyRide New Plymouth', 'Easy Ride NZ', 'Easy Ride Taxi'],
 };
 
+// Home page - targets "Easy Ride New Plymouth" (the brand, written the way
+// people search it) and "private taxi in New Plymouth".
 export const DEFAULT_META = {
-  title: 'EasyRide · Taxi & Airport Transfers in New Plymouth, NZ',
-  description: 'Book a local taxi in New Plymouth with upfront fares, vetted drivers and live trip updates. Airport drop-offs and long-distance trips - pre-book 12 hours ahead. Cash or card.',
-  heading: 'EasyRide - Taxi & Airport Transfers in New Plymouth, New Zealand',
+  title: 'Easy Ride New Plymouth · Private Taxi & Airport Transfers',
+  description: 'Easy Ride is a private taxi in New Plymouth - upfront fares, vetted local drivers and live trip updates. Airport transfers and long-distance trips to Auckland, Wellington and across Taranaki. Cash or card.',
+  heading: 'Easy Ride New Plymouth - Private Taxi & Airport Transfers',
+  summary: 'Easy Ride (EasyRide) is a private taxi service in New Plymouth, Taranaki: book a vetted local driver with an upfront fare, pay by cash or card, and follow your trip live. We also do New Plymouth Airport transfers and long-distance trips to Auckland, Wellington and across Taranaki.',
 };
+
+// "New Plymouth to Auckland" landing page. Figures are deliberately
+// approximate - the exact fare is always the upfront quote at booking.
+export const AUCKLAND_FAQ = [
+  {
+    q: 'How far is New Plymouth to Auckland by car?',
+    a: 'About 350-360 km, usually around 4.5 to 5 hours\' driving via State Highway 3, depending on traffic and stops. Your driver takes you door to door, so there are no bus or flight connections to worry about.',
+  },
+  {
+    q: 'How much is a private taxi from New Plymouth to Auckland?',
+    a: 'You get a fixed, upfront fare for the whole trip before you book - worked out from the route distance, with no surge pricing and no meter running. Enter your pickup and Auckland address when booking to see the exact price.',
+  },
+  {
+    q: 'Can you take me to Auckland Airport?',
+    a: 'Yes. Book a New Plymouth to Auckland Airport transfer around your flight time - your driver is confirmed ahead, and the fare is agreed before you travel.',
+  },
+  {
+    q: 'How far in advance do I need to book?',
+    a: 'Long-distance trips like New Plymouth to Auckland need at least 12 hours\' notice, so a driver can commit to your date and time. Booking a day or more ahead is best.',
+  },
+  {
+    q: 'Can I stop on the way?',
+    a: 'Yes - add stops when you book (for example Waitara, Mōkau, Te Kūiti or Hamilton) and they are included in your upfront fare.',
+  },
+  {
+    q: 'Do you also go from Auckland to New Plymouth?',
+    a: 'Yes. Pre-book a pickup in Auckland or at Auckland Airport back to New Plymouth, with the same upfront fare and confirmed driver.',
+  },
+];
 
 // Airport page FAQ - rendered on the page and emitted as FAQPage
 // structured data (eligible for Google's expandable FAQ results).
@@ -71,6 +106,15 @@ export const PAGES = {
     heading: 'New Plymouth Airport Taxi & Transfers',
     summary: 'Pre-book a confirmed local driver to or from New Plymouth Airport (NPL), with an upfront fare and cash or card payment. Airport and long-distance trips need 12 hours\' notice.',
     sitemap: { changefreq: 'monthly', priority: '0.9' },
+    faq: AIRPORT_FAQ,
+  },
+  '/new-plymouth-to-auckland': {
+    title: 'New Plymouth to Auckland Private Taxi & Transfers · Easy Ride',
+    description: 'Private door-to-door transfer from New Plymouth to Auckland or Auckland Airport. Fixed upfront fare, vetted local driver, stops on the way. Pre-book 12 hours ahead.',
+    heading: 'New Plymouth to Auckland - private taxi & airport transfers',
+    summary: 'Easy Ride runs private door-to-door trips from New Plymouth to Auckland and Auckland Airport (about 350-360 km, 4.5-5 hours) with a fixed upfront fare and a confirmed local driver. Pre-book at least 12 hours ahead.',
+    sitemap: { changefreq: 'monthly', priority: '0.9' },
+    faq: AUCKLAND_FAQ,
   },
   '/about': {
     title: 'About EasyRide · Local Taxi Service in New Plymouth, Taranaki',
@@ -105,22 +149,26 @@ export const PAGES = {
 };
 
 // schema.org structured data for a page: the business itself on every
-// page, plus the FAQ on the airport page.
+// page, plus the page's FAQ where it has one.
 export function structuredData(site, pathname) {
   const business = {
     '@context': 'https://schema.org',
     '@type': 'TaxiService',
     name: BUSINESS.name,
+    alternateName: BUSINESS.alternateNames,
     url: `${site}/`,
     image: `${site}/images/byd-atto3.png`,
     description: DEFAULT_META.description,
+    serviceType: ['Private taxi', 'Airport transfer', 'Long-distance transfer'],
     areaServed: [
       { '@type': 'City', name: 'New Plymouth' },
       { '@type': 'AdministrativeArea', name: 'Taranaki' },
+      { '@type': 'City', name: 'Auckland' },
     ],
     provider: {
       '@type': 'LocalBusiness',
       name: BUSINESS.legalName,
+      alternateName: BUSINESS.alternateNames,
       url: `${site}/`,
       email: BUSINESS.email,
       image: `${site}/images/byd-atto3.png`,
@@ -129,11 +177,12 @@ export function structuredData(site, pathname) {
     },
   };
   const blocks = [business];
-  if (pathname === '/airport-transfers') {
+  const faq = PAGES[pathname]?.faq;
+  if (faq) {
     blocks.push({
       '@context': 'https://schema.org',
       '@type': 'FAQPage',
-      mainEntity: AIRPORT_FAQ.map(({ q, a }) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })),
+      mainEntity: faq.map(({ q, a }) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })),
     });
   }
   return blocks;

@@ -55,7 +55,7 @@ export default function AirportTransfers() {
       </div>
 
       <p className="muted" style={{ textAlign: 'center' }}>
-        Need a ride right now instead? <Link to="/register">Book a New Plymouth taxi</Link>. Read more{' '}
+        Heading further? See <Link to="/new-plymouth-to-auckland">New Plymouth to Auckland</Link> transfers. Need a ride right now instead? <Link to="/register">Book a private taxi in New Plymouth</Link>. Read more{' '}
         <Link to="/about">about EasyRide</Link>.
       </p>
     </div>

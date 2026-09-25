@@ -187,8 +187,8 @@ export default function Home() {
         <div className="hm-grid" aria-hidden="true" />
         <div className="hm-hero-inner">
           <div>
-            <span className="hm-eyebrow"><span className="hm-dot" />Now driving in New Plymouth</span>
-            <h1>A New Plymouth taxi you can <span className="hm-grad">actually see coming</span>.</h1>
+            <span className="hm-eyebrow"><span className="hm-dot" />Easy Ride · Now driving in New Plymouth</span>
+            <h1>A private taxi in New Plymouth you can <span className="hm-grad">actually see coming</span>.</h1>
             <p className="hm-tagline">
               Scan the QR code on a driver's car, or book from the app - either way you get an upfront fare, a real
               admin-approved driver, and live updates from request to drop-off. No guessing, no surge pricing.
@@ -264,7 +264,7 @@ export default function Home() {
               <div className="hm-icon"><Icon.road /></div>
               <div>
                 <h4>Long-distance trips</h4>
-                <p>Stratford, Hāwera, Whanganui or further afield - one upfront fare for the whole journey, with stops along the way if you need them.</p>
+                <p>Stratford, Hāwera, Whanganui, Wellington or <Link to="/new-plymouth-to-auckland">New Plymouth to Auckland</Link> - one upfront fare for the whole journey, with stops along the way if you need them.</p>
               </div>
             </div>
             <div className="hm-feature hm-reveal" data-delay="2">
@@ -387,7 +387,7 @@ export default function Home() {
             )}
           </div>
           <p className="muted" style={{ textAlign: 'center', marginTop: 28 }}>
-            Want the full story? Read <Link to="/about">About EasyRide</Link>, see <Link to="/airport-transfers">New Plymouth Airport transfers</Link>, or check our <Link to="/terms">Terms &amp; Conditions</Link>.
+            Want the full story? Read <Link to="/about">About EasyRide</Link>, see <Link to="/airport-transfers">New Plymouth Airport transfers</Link> and <Link to="/new-plymouth-to-auckland">New Plymouth to Auckland trips</Link>, or check our <Link to="/terms">Terms &amp; Conditions</Link>.
           </p>
         </div>
       </section>

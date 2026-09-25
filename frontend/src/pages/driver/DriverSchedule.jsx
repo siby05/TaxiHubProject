@@ -11,6 +11,8 @@ const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'Ju
 // on PUT /driver/schedule/dates/:date.
 const MONTHS_AHEAD = 12;
 const AUTOSAVE_DELAY_MS = 700;
+// "Repeat" in the date dialog copies a day's shifts this many weeks ahead.
+const REPEAT_WEEKS = 4;
 
 // Calendar colours per date state (see dateState()).
 const STATE_STYLES = {
@@ -47,6 +49,12 @@ function utcDate(dateStr) {
 
 function weekdayOf(dateStr) {
   return utcDate(dateStr).getUTCDay();
+}
+
+function addDays(dateStr, n) {
+  const d = utcDate(dateStr);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
 }
 
 function addMonths(monthStr, n) {
@@ -134,18 +142,14 @@ function SlotRow({ slot, onChange, onRemove }) {
 }
 
 // The dialog opened by tapping a calendar date. Edits auto-save (debounced)
-// as a date-specific entry that overrides the weekly hours for that day.
+// as that date's own shifts. A date with nothing set starts blank - it's
+// "Not scheduled" until the driver enters a shift, never pre-filled with
+// default or weekly times.
 function DateShiftsDialog({ date, entry, weeklySlots, onSaved, onClose }) {
-  // A date with no entry of its own starts from the weekly hours (if any)
-  // - or one blank shift ready to type into - without saving anything
-  // until the driver actually changes something.
-  const [draft, setDraft] = useState(() => {
-    if (entry) return entry.slots;
-    if (weeklySlots.length) return weeklySlots;
-    return [{ startTime: '', endTime: '' }];
-  });
+  const [draft, setDraft] = useState(() => (entry ? entry.slots : [{ startTime: '', endTime: '' }]));
   const [status, setStatus] = useState('idle');
   const [error, setError] = useState('');
+  const [repeatNote, setRepeatNote] = useState('');
 
   const save = useCallback(async (slots) => {
     setStatus('saving');
@@ -165,6 +169,7 @@ function DateShiftsDialog({ date, entry, weeklySlots, onSaved, onClose }) {
 
   function edit(next) {
     setDraft(next);
+    setRepeatNote('');
     const checked = checkSlots(next);
     setError(checked.error || '');
     if (!checked.error) scheduleSave(checked.slots);
@@ -178,28 +183,61 @@ function DateShiftsDialog({ date, entry, weeklySlots, onSaved, onClose }) {
   function markDayOff() {
     setDraft([]);
     setError('');
+    setRepeatNote('');
     scheduleSave([]);
     flush();
   }
 
-  function resetToWeekly() {
-    setDraft(weeklySlots.length ? weeklySlots : [{ startTime: '', endTime: '' }]);
+  function clearDate() {
+    setDraft([{ startTime: '', endTime: '' }]);
     setError('');
+    setRepeatNote('');
     scheduleSave(null);
     flush();
   }
 
+  // Copies this date's shifts (or day off) to the same weekday for the next
+  // REPEAT_WEEKS weeks - the quick way to set a regular pattern. Overwrites
+  // only those specific dates; dates past the one-year limit are skipped.
+  async function repeatWeekly() {
+    const checked = checkSlots(draft);
+    if (checked.error) { setError(checked.error); return; }
+    flush();
+    setStatus('saving');
+    let saved = 0;
+    let latest = null;
+    for (let week = 1; week <= REPEAT_WEEKS; week += 1) {
+      try {
+        const r = await client.put(`/driver/schedule/dates/${addDays(date, 7 * week)}`, { slots: checked.slots });
+        latest = r.data.dateSchedule;
+        saved += 1;
+      } catch {
+        // Past the one-year window, or a network blip - keep going with the rest.
+      }
+    }
+    if (latest) onSaved(latest);
+    setStatus(saved ? 'saved' : 'idle');
+    setRepeatNote(saved
+      ? `Copied to the next ${saved} ${DAY_NAMES[weekdayOf(date)]}${saved > 1 ? 's' : ''}.`
+      : 'Could not copy - check your connection and try again.');
+  }
+
   const isDayOff = entry && entry.slots.length === 0 && draft.length === 0;
+  const hasShifts = draft.some((s) => s.startTime && s.endTime);
 
   return (
     <Modal title={longDate(date)} onClose={close}>
       <p className="muted" style={{ marginTop: 0 }}>
         {entry
-          ? 'Shifts for this date only - they replace your weekly hours for the day.'
-          : weeklySlots.length
-            ? 'This date follows your weekly hours. Change anything below to set different shifts for just this date.'
-            : 'Enter your shift for this date. It saves automatically.'}
+          ? 'Your shifts for this date. Changes save automatically.'
+          : 'Not scheduled. Enter a shift below - it saves automatically.'}
       </p>
+      {!entry && weeklySlots.length > 0 && (
+        <p className="muted" style={{ marginTop: 0, fontSize: '0.85rem' }}>
+          Your repeating weekly hours ({weeklySlots.map((s) => `${shortTime(s.startTime)}–${shortTime(s.endTime)}`).join(', ')}) still
+          apply on this date until you set shifts here.
+        </p>
+      )}
 
       {isDayOff && (
         <div style={{
@@ -221,37 +259,42 @@ function DateShiftsDialog({ date, entry, weeklySlots, onSaved, onClose }) {
         {!isDayOff && (
           <button type="button" className="btn danger" onClick={markDayOff}>Not available (whole day)</button>
         )}
-        {entry && (
-          <button type="button" className="btn secondary" onClick={resetToWeekly}>
-            {weeklySlots.length ? 'Use weekly hours' : 'Clear this date'}
+        {(hasShifts || isDayOff) && (
+          <button type="button" className="btn secondary" onClick={repeatWeekly}>
+            Repeat for the next {REPEAT_WEEKS} {DAY_NAMES[weekdayOf(date)]}s
           </button>
         )}
+        {entry && <button type="button" className="btn secondary" onClick={clearDate}>Clear this date</button>}
       </div>
 
-      <p style={{ marginBottom: 0, minHeight: '1.2em' }}><SaveStatus status={status} error={error} /></p>
+      <p style={{ marginBottom: 0, minHeight: '1.2em' }}>
+        <SaveStatus status={status} error={error} />
+        {repeatNote && <span className="muted"> {repeatNote}</span>}
+      </p>
     </Modal>
   );
 }
 
-// A date is one of: scheduled (has shifts - its own, or from the weekly
-// hours), off (explicitly marked not available for the whole day), or
-// unscheduled (nothing set). Each gets its own colour so a month reads at a
-// glance; past dates are greyed out whatever they held.
-function dateState(entry, weeklySlots) {
-  if (entry) return entry.slots.length ? 'scheduled' : 'off';
-  return weeklySlots.length ? 'scheduled' : 'unscheduled';
+// A date is one of: scheduled (has its own shifts), off (explicitly marked
+// not available for the whole day), or unscheduled (nothing entered for it
+// - shown as "Not scheduled", never filled in from default/weekly hours).
+// Past dates are greyed out whatever they held.
+function dateState(entry) {
+  if (!entry) return 'unscheduled';
+  return entry.slots.length ? 'scheduled' : 'off';
 }
 
-function CalendarCell({ date, today, entry, weeklySlots, onOpen }) {
+function CalendarCell({ date, today, entry, onOpen }) {
   if (!date) return <div />;
   const isPast = date < today;
-  const slots = entry ? entry.slots : weeklySlots;
+  const slots = entry ? entry.slots : [];
   const dayNum = Number(date.slice(8));
-  const state = dateState(entry, weeklySlots);
+  const state = dateState(entry);
   const colours = isPast ? STATE_STYLES.past : STATE_STYLES[state];
 
   let body = null;
   if (state === 'off') body = <div style={{ fontWeight: 600 }}>Not available</div>;
+  else if (state === 'unscheduled' && !isPast) body = <div style={{ color: 'var(--muted)', fontSize: '0.62rem', wordBreak: 'normal' }}>Not<br />scheduled</div>;
   else if (slots.length) {
     body = slots.map((s) => (
       <div key={`${s.startTime}-${s.endTime}`}>{shortTime(s.startTime)}–{shortTime(s.endTime)}</div>
@@ -314,8 +357,8 @@ function WeeklyHours({ schedule, setSchedule }) {
     <div className="card">
       <h2 style={{ marginTop: 0 }}>Repeating weekly hours</h2>
       <p className="muted" style={{ marginTop: 0 }}>
-        Optional - hours that repeat every week, so you don't have to enter each date. Any date you set on the
-        calendar above overrides these for that day.
+        Optional - hours that repeat every week. They apply on any date you haven't set on the calendar (the
+        calendar only shows shifts you've entered for a date), and a date you set on the calendar overrides them.
       </p>
       {schedule.map((day) => (
         <div key={day.dayOfWeek} style={{ padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
@@ -388,7 +431,7 @@ export default function DriverSchedule() {
           ))}
           {monthCells(month).map((date, i) => (
             <CalendarCell key={date || `blank-${i}`} date={date} today={today}
-              entry={date && entryFor(date)} weeklySlots={date ? weeklyFor(date) : []} onOpen={setOpenDate} />
+              entry={date && entryFor(date)} onOpen={setOpenDate} />
           ))}
         </div>
 
