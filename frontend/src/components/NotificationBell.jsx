@@ -61,7 +61,7 @@ export default function NotificationBell() {
         <div className="autocomplete-list notification-panel">
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 12px' }}>
             <strong style={{ color: 'var(--text)' }}>Notifications</strong>
-            {unread > 0 && <button className="btn secondary" style={{ padding: '2px 8px', fontSize: '0.75rem' }} onClick={markAllRead}>Mark all read</button>}
+            {unread > 0 && <button className="btn secondary sm" onClick={markAllRead}>Mark all read</button>}
           </div>
           {items.length === 0 && <div className="autocomplete-item muted">Nothing yet</div>}
           {items.map((n) => (

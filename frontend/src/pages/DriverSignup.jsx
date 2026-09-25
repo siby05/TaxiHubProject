@@ -131,7 +131,7 @@ export default function DriverSignup() {
 
           <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <input type="checkbox" style={{ width: 'auto' }} checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)} />
-            I have read and accept the <button type="button" className="btn secondary" style={{ padding: '2px 8px' }} onClick={() => setTermsOpen(true)}>Terms &amp; Conditions</button>
+            I have read and accept the <button type="button" className="btn secondary sm" onClick={() => setTermsOpen(true)}>Terms &amp; Conditions</button>
           </label>
 
           {error && <p className="error-text">{error}</p>}

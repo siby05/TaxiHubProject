@@ -17,7 +17,7 @@ export function siteUrlFrom(value) {
 
 export const BUSINESS = {
   name: 'EasyRide',
-  legalName: 'Easy Ride NZ',
+  legalName: 'EasyRide NZ',
   email: 'easyridenz@gmail.com',
   city: 'New Plymouth',
   region: 'Taranaki',

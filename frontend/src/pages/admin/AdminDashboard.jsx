@@ -363,8 +363,8 @@ export default function AdminDashboard() {
                         <div className="muted">
                           → ${d.pendingRatePerKm} requested
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
-                            <button className="btn" style={{ padding: '4px 8px', fontSize: '0.8rem' }} onClick={() => approveRate(d._id)}>Approve</button>
-                            <button className="btn danger" style={{ padding: '4px 8px', fontSize: '0.8rem' }} onClick={() => rejectRate(d._id)}>Reject</button>
+                            <button className="btn sm" onClick={() => approveRate(d._id)}>Approve</button>
+                            <button className="btn danger sm" onClick={() => rejectRate(d._id)}>Reject</button>
                           </div>
                         </div>
                       )}
@@ -716,7 +716,7 @@ export default function AdminDashboard() {
                   <input type="number" step="0.5" min="0" placeholder="price" style={{ maxWidth: 110 }}
                     value={r.price}
                     onChange={(e) => setSettings((s) => ({ ...s, fareRanges: s.fareRanges.map((row, j) => (j === i ? { ...row, price: e.target.value } : row)) }))} />
-                  <button type="button" className="btn danger" style={{ padding: '4px 10px' }}
+                  <button type="button" className="btn danger sm"
                     onClick={() => setSettings((s) => ({ ...s, fareRanges: s.fareRanges.filter((_, j) => j !== i) }))}>Remove</button>
                 </div>
               ))}

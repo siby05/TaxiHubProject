@@ -46,7 +46,6 @@ export default function Navbar() {
   const links = user
     ? ROLE_LINKS[user.role] || []
     : [
-      { to: '/airport-transfers', label: 'Airport transfers' },
       { to: '/new-plymouth-to-auckland', label: 'To Auckland' },
       { to: '/about', label: 'About' },
       { to: '/login', label: 'Log in' },

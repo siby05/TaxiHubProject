@@ -406,7 +406,7 @@ export default function Home() {
       </section>
 
       <footer className="hm-footer">
-        <p>© 2026 Easy Ride NZ</p>
+        <p>© 2026 EasyRide NZ</p>
         <p><a href="mailto:easyridenz@gmail.com">easyridenz@gmail.com</a> · New Plymouth, New Zealand</p>
       </footer>
     </div>
