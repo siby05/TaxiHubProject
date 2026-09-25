@@ -124,6 +124,7 @@ export function structuredData(site, pathname) {
       url: `${site}/`,
       email: BUSINESS.email,
       image: `${site}/images/byd-atto3.png`,
+      logo: `${site}/icon-512x512.png`,
       address: { '@type': 'PostalAddress', addressLocality: BUSINESS.city, addressRegion: BUSINESS.region, addressCountry: 'NZ' },
     },
   };
