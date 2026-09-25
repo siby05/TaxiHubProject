@@ -26,6 +26,7 @@ export default function DriverDashboard() {
   // needed) this one small per-booking map is kept around after a
   // successful cancel so the link can still show inline in that row.
   const [cancelWaLinks, setCancelWaLinks] = useState({});
+  const [receiptSent, setReceiptSent] = useState({});
 
   function load() {
     fetchDriverBookings(showAllTrips ? { all: true } : undefined);
@@ -130,13 +131,28 @@ export default function DriverDashboard() {
     load();
   }
 
-  // The receipt page link for a passenger with no real email on file -
-  // the backend emails everyone else their receipt on completion, but
-  // these passengers can only be reached on WhatsApp. null when the
-  // passenger does have an email (nothing to hand over) or no token yet.
+  // The receipt page (view / download PDF) for a completed trip, or null
+  // before there's a token. Drivers can open it for any trip, and send it
+  // on WhatsApp or re-email it - see the completed-trip actions below.
+  function receiptUrl(b) {
+    return b.receiptToken ? `${API_URL}/booking/${b._id}/receipt?t=${b.receiptToken}` : null;
+  }
+
+  // Only a passenger with no real email needs the link handed over at
+  // completion - the backend emails everyone else their receipt then.
   function receiptLink(b) {
-    if (b.passengerHasEmail || !b.receiptToken) return null;
-    return `${API_URL}/booking/${b._id}/receipt?t=${b.receiptToken}`;
+    return b.passengerHasEmail ? null : receiptUrl(b);
+  }
+
+  async function emailReceipt(id) {
+    setReceiptSent((s) => ({ ...s, [id]: 'sending' }));
+    try {
+      await client.post(`/booking/${id}/email-receipt`);
+      setReceiptSent((s) => ({ ...s, [id]: 'sent' }));
+    } catch (err) {
+      setReceiptSent((s) => ({ ...s, [id]: undefined }));
+      setAlert(err.response?.data?.error || 'Could not email the receipt');
+    }
   }
 
   async function complete(id) {
@@ -285,11 +301,19 @@ export default function DriverDashboard() {
                 <button className="btn danger" onClick={() => cancelTrip(b._id)}>Cancel trip</button>
               </div>
             )}
-            {b.status === 'completed' && receiptLink(b) && b.passengerId?.mobile && (
+            {b.status === 'completed' && receiptUrl(b) && (
               <div className="booking-actions">
-                <a className="btn whatsapp" target="_blank" rel="noreferrer"
-                  href={waLink(b.passengerId?.mobile, receiptMessage(b, profile?.userId?.name, receiptLink(b), b.paymentMethod === 'card' && b.paymentStatus !== 'paid' ? `${window.location.origin}/pay/${b._id}` : null))}><WhatsAppIcon /> Send receipt on WhatsApp</a>
-                <span className="muted">No email on file for this passenger</span>
+                <a className="btn secondary" target="_blank" rel="noreferrer" href={receiptUrl(b)}>View receipt</a>
+                {b.passengerHasEmail && (
+                  <button className="btn secondary" disabled={!!receiptSent[b._id]} onClick={() => emailReceipt(b._id)}>
+                    {receiptSent[b._id] === 'sent' ? 'Receipt emailed' : receiptSent[b._id] === 'sending' ? 'Sending...' : 'Email receipt'}
+                  </button>
+                )}
+                {waLink(b.passengerId?.mobile) && (
+                  <a className="btn whatsapp" target="_blank" rel="noreferrer"
+                    href={waLink(b.passengerId?.mobile, receiptMessage(b, profile?.userId?.name, receiptUrl(b), b.paymentMethod === 'card' && b.paymentStatus !== 'paid' ? `${window.location.origin}/pay/${b._id}` : null))}><WhatsAppIcon /> Send receipt on WhatsApp</a>
+                )}
+                {!b.passengerHasEmail && <span className="muted">No email on file for this passenger</span>}
               </div>
             )}
             {b.paymentMethod === 'card' && b.paymentStatus !== 'paid' && ['accepted', 'in-progress', 'completed'].includes(b.status) && (

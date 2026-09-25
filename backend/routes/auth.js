@@ -4,11 +4,17 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const router = express.Router();
 const User = require('../models/User');
+const Booking = require('../models/Booking');
+const { hasRealEmail } = require('../utils/users');
 const { auth } = require('../middleware/auth');
 const { rateLimit } = require('../middleware/rateLimit');
 
 // Credential guessing / reset-token guessing / signup floods.
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 40, message: 'Too many attempts - please wait 15 minutes and try again' });
+// Claiming an account set up on someone's behalf is proven by a trip
+// reference, which is far easier to guess than a password - so it gets a
+// much tighter budget than login.
+const claimLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, message: 'Too many attempts - please wait 15 minutes and try again' });
 const { emailService } = require('../services/emailService');
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -26,6 +32,88 @@ function publicUser(user) {
   return rest;
 }
 
+// A passenger account someone else set up for them - a driver at the kerb,
+// the guest QR flow, or an admin - that they haven't taken over yet with a
+// password of their own (see POST /claim). Found by mobile, since that's
+// the one detail every one of those flows records.
+async function findClaimable(mobile) {
+  const clean = String(mobile || '').trim();
+  if (!clean) return null;
+  const users = await User.find({ role: 'passenger', mobile: clean });
+  return users.find((u) => (u.registeredByDriver || u.registeredViaQr || u.registeredByAdmin) && !u.claimedAt) || null;
+}
+
+// GET /api/auth/claim-lookup?mobile= - public. As someone types their phone
+// number on the sign-up page, tells them we already have an account for
+// them from an earlier trip, so they set a password on it instead of
+// creating a duplicate. Like GET /booking/guest-lookup, only the first
+// name and whether an email is on file come back - the rest of their
+// details only become visible once they've proven it's them (POST /claim).
+router.get('/claim-lookup', claimLimiter, async (req, res) => {
+  const user = await findClaimable(req.query.mobile);
+  if (!user) return res.json({ claimable: false });
+  res.json({ claimable: true, firstName: String(user.name || '').split(' ')[0], hasEmail: hasRealEmail(user) });
+});
+
+// POST /api/auth/claim - set a password on an account someone else set up
+// for this passenger. There's no SMS verification, so knowing the phone
+// number isn't enough: they must also give the reference of one of their
+// own trips (TRIP-YYYYMMDD-NNNNN, which the driver's WhatsApp messages and
+// receipts carry). Their saved name/address are kept; an email can be
+// added here if there wasn't a real one on file. Logs them straight in.
+router.post('/claim', claimLimiter, async (req, res) => {
+  try {
+    const { mobile, tripRef, password, email } = req.body;
+    if (!mobile || !tripRef || !password) return res.status(400).json({ error: 'mobile, trip reference and password are required' });
+    if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+
+    const user = await findClaimable(mobile);
+    const ref = String(tripRef).trim().toUpperCase();
+    const trip = user && await Booking.findOne({ bookingId: ref });
+    if (!trip || String(trip.passengerId) !== String(user._id)) {
+      return res.status(400).json({ error: "That trip reference doesn't match this phone number - check it on your receipt or your driver's WhatsApp message" });
+    }
+
+    const patch = { password: await bcrypt.hash(password, 10), claimedAt: new Date(), emailVerified: true, resetToken: null, resetTokenExpiry: null };
+    const cleanEmail = String(email || '').trim().toLowerCase();
+    if (cleanEmail && !hasRealEmail(user)) {
+      const taken = await User.findOne({ email: cleanEmail });
+      if (taken) return res.status(409).json({ error: 'An account with this email already exists - log in with it instead' });
+      patch.email = cleanEmail;
+    }
+    const updated = await User.findByIdAndUpdate(user._id, patch, { new: true });
+    res.json({ token: signToken(updated), user: publicUser(updated) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/auth/claim-link - the no-trip-reference alternative for a
+// claimable account that does have a real email on file: emails a
+// set-password link there (the forgot-password link), which proves
+// ownership of that inbox. Always the same response, so it can't be used
+// to probe which numbers have accounts.
+router.post('/claim-link', claimLimiter, async (req, res) => {
+  try {
+    const user = await findClaimable(req.body.mobile);
+    const generic = { message: "If there's an email on file for this number, we've sent it a link to set your password." };
+    if (!user || !hasRealEmail(user)) return res.json(generic);
+
+    const token = crypto.randomBytes(32).toString('hex');
+    await User.findByIdAndUpdate(user._id, {
+      resetToken: token,
+      resetTokenExpiry: new Date(Date.now() + RESET_TOKEN_TTL_MS).toISOString(),
+    });
+    const link = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password/${token}`;
+    emailService.sendPasswordResetEmail(user.email, user.name, link).then((result) => {
+      if (!result.ok) console.error(`[claim-link] email to ${user.email} failed: ${result.error}`);
+    });
+    res.json(generic);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/auth/register - passengers self-register; drivers/admins are created by admin (see routes/admin.js)
 router.post('/register', authLimiter, async (req, res) => {
   try {
@@ -34,6 +122,11 @@ router.post('/register', authLimiter, async (req, res) => {
 
     const existing = await User.findOne({ email: email.toLowerCase() });
     if (existing) return res.status(409).json({ error: 'An account with this email already exists' });
+    // A driver/admin already set this person up - claim that account
+    // rather than creating a second one with the same phone number.
+    if (await findClaimable(mobile)) {
+      return res.status(409).json({ error: 'You already have an account from an earlier trip - set a password on it below', claimable: true });
+    }
 
     const hashed = await bcrypt.hash(password, 10);
     const user = await User.create({
@@ -175,6 +268,9 @@ router.post('/reset-password', authLimiter, async (req, res) => {
 
     await User.findByIdAndUpdate(user._id, {
       password: await bcrypt.hash(newPassword, 10),
+      // A set-password link from POST /claim-link is this same token, so
+      // setting a password here also counts as claiming the account.
+      claimedAt: user.claimedAt || new Date(),
       resetToken: null,
       resetTokenExpiry: null,
     });

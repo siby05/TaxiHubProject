@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import { useAuthStore } from '../store/authStore';
 import Modal from '../components/Modal';
@@ -71,17 +71,10 @@ export default function DriverSignup() {
     }
   }
 
-  if (checkedEnabled && !signupEnabled) {
-    return (
-      <div className="container">
-        <div className="card" style={{ maxWidth: 480, margin: '0 auto' }}>
-          <h2>Driver sign-up is closed</h2>
-          <p className="muted">We're not accepting new driver applications right now. Please check back later.</p>
-          <Link className="btn secondary" to="/">Back home</Link>
-        </div>
-      </div>
-    );
-  }
+  // Sign-up switched off by the admin: every link to this page is hidden
+  // (see hooks/useDriverSignupEnabled), so anyone still landing here from
+  // an old bookmark just goes home rather than seeing a "closed" notice.
+  if (checkedEnabled && !signupEnabled) return <Navigate to="/" replace />;
 
   if (submitted) {
     return (

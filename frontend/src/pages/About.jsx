@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../api/client';
+import { useDriverSignupEnabled } from '../hooks/useDriverSignupEnabled';
 
 export default function About() {
+  const driverSignupEnabled = useDriverSignupEnabled();
   const [form, setForm] = useState({ name: '', email: '', message: '', rating: 0 });
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
@@ -55,7 +57,7 @@ export default function About() {
           <h3>For drivers</h3>
           <p className="muted">
             Every driver holds their own NZTA licensing (passenger endorsement, Transport Service Licence, vehicle
-            CoF) and is reviewed by an admin before going live. See our <Link to="/terms">Terms &amp; Conditions</Link> or <Link to="/driver-signup">apply to drive</Link>.
+            CoF) and is reviewed by an admin before going live. See our <Link to="/terms">Terms &amp; Conditions</Link>{driverSignupEnabled && <> or <Link to="/driver-signup">apply to drive</Link></>}.
           </p>
         </div>
       </div>

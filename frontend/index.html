@@ -1,18 +1,41 @@
 <!doctype html>
-<html lang="en">
+<html lang="en-NZ">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>EasyRide · Taxi &amp; Airport Transfers in New Plymouth, NZ</title>
+    <meta name="description" content="Book a local taxi in New Plymouth with upfront fares, vetted drivers and live trip updates. Airport drop-offs and long-distance trips - pre-book 24 hours ahead. Cash or card." />
+    <meta name="robots" content="index, follow" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#0EA5E9" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="EasyRide" />
+    <meta name="geo.region" content="NZ-TKI" />
+    <meta name="geo.placename" content="New Plymouth" />
+
+    <!-- Social previews (WhatsApp, Facebook, iMessage don't run JS, so
+         these stay static). Absolute URLs - og:url, og:image, canonical
+         and the JSON-LD url - are added at build time from VITE_SITE_URL;
+         see the seo plugin in vite.config.js. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="EasyRide" />
+    <meta property="og:locale" content="en_NZ" />
+    <meta property="og:title" content="EasyRide · Taxi &amp; Airport Transfers in New Plymouth" />
+    <meta property="og:description" content="Upfront fares, vetted local drivers and live trip updates. Airport drops and long-distance trips - pre-book 24 hours ahead." />
+    <meta name="twitter:card" content="summary_large_image" />
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&display=swap" rel="stylesheet" />
-    <title>EasyRide · Premium Transport, New Zealand</title>
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <h1>EasyRide - Taxi &amp; Airport Transfers in New Plymouth, New Zealand</h1>
+      <p>Book a local taxi with upfront fares and admin-approved drivers. Airport drop-offs and long-distance trips can be pre-booked 24 hours ahead. Please enable JavaScript to book.</p>
+    </noscript>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

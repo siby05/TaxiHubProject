@@ -1285,6 +1285,28 @@ router.put('/:id/rate-passenger', auth, roleMiddleware(['driver']), async (req, 
   res.json(updated);
 });
 
+// POST /api/booking/:id/email-receipt - the driver re-sends a completed
+// trip's receipt (same email + PDF as on completion) to the passenger's
+// email on file, e.g. when the passenger asks for it again at the kerb.
+// A passenger with no real email is sent it on WhatsApp from the driver's
+// phone instead (DriverDashboard.jsx), so this 400s for them.
+router.post('/:id/email-receipt', auth, roleMiddleware(['driver']), async (req, res) => {
+  const driver = await Driver.findOne({ userId: req.user.id });
+  const booking = await Booking.findById(req.params.id);
+  if (!driver || !booking || String(booking.driverId) !== String(driver._id)) return res.status(404).json({ error: 'Booking not found' });
+  if (booking.status !== 'completed') return res.status(400).json({ error: 'A receipt is only available once the trip is completed' });
+  const passenger = await User.findById(booking.passengerId);
+  if (!hasRealEmail(passenger)) return res.status(400).json({ error: 'This passenger has no email on file - send the receipt on WhatsApp instead' });
+
+  const driverUser = await User.findById(driver.userId);
+  const billedTo = { name: passenger.name, address: passenger.address };
+  const pdf = await buildInvoicePdf(booking, billedTo, driver, driverUser?.name)
+    .catch((err) => { console.error(`[receipt] PDF for ${booking.bookingId} failed: ${err.message}`); return undefined; });
+  const result = await emailService.sendInvoiceEmail(passenger.email, booking, billedTo, driver, driverUser?.name, pdf);
+  if (result && result.ok === false) return res.status(502).json({ error: 'Could not send the receipt email - try again, or send it on WhatsApp' });
+  res.json({ sent: true });
+});
+
 // GET /api/booking/:id/receipt?t=<receiptToken> - the same invoice the
 // passenger was emailed on completion, as a standalone page. Authenticated
 // by the per-booking token from GET /mine rather than the JWT header,

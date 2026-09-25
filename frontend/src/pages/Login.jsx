@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import { useDriverSignupEnabled } from '../hooks/useDriverSignupEnabled';
 
 export default function Login() {
+  const driverSignupEnabled = useDriverSignupEnabled();
   const { login } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
@@ -42,7 +44,7 @@ export default function Login() {
         <button className="btn" disabled={loading}>{loading ? 'Logging in...' : 'Log in'}</button>
       </form>
       <p className="muted"><Link to="/forgot-password">Forgot password?</Link></p>
-      <p className="muted">No account? <Link to="/register" state={location.state}>Sign up as a passenger</Link> or <Link to="/driver-signup">apply to drive</Link></p>
+      <p className="muted">No account? <Link to="/register" state={location.state}>Sign up as a passenger</Link>{driverSignupEnabled && <> or <Link to="/driver-signup">apply to drive</Link></>}</p>
     </div>
   );
 }

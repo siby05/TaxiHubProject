@@ -11,7 +11,9 @@ const { createModel } = require('../lib/createModel');
 // POST /guest), registeredByAdmin (true for a passenger an admin created
 // from the dashboard - see routes/admin.js POST /passengers; like the two
 // above, email is optional and a placeholder from utils/users.js stands in
-// when there is none), resetToken/resetTokenExpiry (forgot-password flow, see
+// when there is none), claimedAt (when a passenger set up by one of those
+// three flows took the account over with their own password - see
+// routes/auth.js POST /claim), resetToken/resetTokenExpiry (forgot-password flow, see
 // routes/auth.js POST /forgot-password and /reset-password - null/unset
 // once used or expired), createdAt.
 const User = createModel('User');

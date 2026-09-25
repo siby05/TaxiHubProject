@@ -11,7 +11,20 @@ export async function requestNotificationPermission() {
   return Notification.requestPermission();
 }
 
+// iOS (home-screen web app, 16.4+) exposes Notification but throws
+// "Illegal constructor" on `new Notification()` - it only allows them
+// through the service worker. Try that first, and never let a failure
+// here break the caller (the driver dashboard reloads its trips right
+// after calling this).
 export function showBrowserNotification(title, body) {
-  if (!('Notification' in window) || Notification.permission !== 'granted') return;
-  new Notification(title, { body });
+  try {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    if (navigator.serviceWorker?.getRegistration) {
+      navigator.serviceWorker.getRegistration()
+        .then((reg) => (reg ? reg.showNotification(title, { body }) : new Notification(title, { body })))
+        .catch(() => {});
+      return;
+    }
+    new Notification(title, { body });
+  } catch { /* in-app banner and bell still show it */ }
 }

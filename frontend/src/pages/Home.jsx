@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../api/client';
+import { useDriverSignupEnabled } from '../hooks/useDriverSignupEnabled';
 import './home.css';
 
 const FALLBACK_VEHICLE_TYPES = ['Economy', 'Comfort', 'Comfort Electric', 'Electric', 'Premium'];
@@ -24,6 +25,9 @@ const Icon = {
   pin: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s7-6.5 7-12a7 7 0 0 0-14 0c0 5.5 7 12 7 12z" /><circle cx="12" cy="10" r="2.5" /></svg>,
   star: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3 2.8 5.8 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.3l1.1-6.2L3 9.7l6.2-.9z" /></svg>,
   user: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7" /></svg>,
+  plane: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" /></svg>,
+  road: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 21 9 3M20 21 15 3M12 5v2M12 11v2M12 17v2" /></svg>,
+  clock: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>,
   car: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 11l1.6-4.2A2 2 0 0 1 8.5 5.5h7a2 2 0 0 1 1.9 1.3L19 11" /><rect x="3" y="11" width="18" height="7" rx="2" /><circle cx="7.5" cy="18" r="1.8" /><circle cx="16.5" cy="18" r="1.8" /></svg>,
 };
 
@@ -168,12 +172,11 @@ function useReveal() {
 }
 
 export default function Home() {
-  const [driverSignupEnabled, setDriverSignupEnabled] = useState(true);
+  const driverSignupEnabled = useDriverSignupEnabled();
   const [vehicleTypes, setVehicleTypes] = useState(FALLBACK_VEHICLE_TYPES);
   useReveal();
 
   useEffect(() => {
-    client.get('/driver-signup/enabled').then((r) => setDriverSignupEnabled(r.data.enabled)).catch(() => {});
     client.get('/booking/vehicle-types').then((r) => { if (r.data?.length) setVehicleTypes(r.data.map((t) => t.label)); }).catch(() => {});
   }, []);
 
@@ -242,7 +245,43 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="hm-section alt">
+      <section className="hm-section alt" id="airport-transfers">
+        <div className="container">
+          <div className="hm-head hm-reveal">
+            <div className="hm-kicker">Airport &amp; long-distance</div>
+            <h2>Airport drops and out-of-town trips, booked ahead</h2>
+            <p>Catching a flight or heading out of town? Pre-book at least 24 hours ahead and we'll have a confirmed driver lined up for you - no waiting to see who's free on the day.</p>
+          </div>
+          <div className="hm-features">
+            <div className="hm-feature hm-reveal">
+              <div className="hm-icon"><Icon.plane /></div>
+              <div>
+                <h4>Airport drop-offs and pick-ups</h4>
+                <p>To and from New Plymouth Airport (NPL). Book it around your flight time and your driver is confirmed well before you need to leave.</p>
+              </div>
+            </div>
+            <div className="hm-feature hm-reveal" data-delay="1">
+              <div className="hm-icon"><Icon.road /></div>
+              <div>
+                <h4>Long-distance trips</h4>
+                <p>Stratford, Hāwera, Whanganui or further afield - one upfront fare for the whole journey, with stops along the way if you need them.</p>
+              </div>
+            </div>
+            <div className="hm-feature hm-reveal" data-delay="2">
+              <div className="hm-icon"><Icon.clock /></div>
+              <div>
+                <h4>Book 24 hours ahead</h4>
+                <p>Airport and long trips need at least 24 hours' notice so a driver can commit to your time. Just pick a date and time instead of "now" when you book.</p>
+              </div>
+            </div>
+          </div>
+          <div className="hm-reveal" style={{ textAlign: 'center', marginTop: 26 }}>
+            <Link className="btn" to="/register">Pre-book your trip</Link>
+          </div>
+        </div>
+      </section>
+
+      <section className="hm-section">
         <div className="container">
           <div className="hm-head hm-reveal">
             <div className="hm-kicker">Why EasyRide</div>
@@ -281,7 +320,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="hm-section">
+      <section className="hm-section alt">
         <div className="container">
           <div className="hm-fleet hm-reveal">
             <div className="hm-fleet-img">
@@ -299,7 +338,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="hm-section alt">
+      <section className="hm-section">
         <div className="container">
           <div className="hm-pricing hm-reveal">
             <div>
@@ -316,13 +355,13 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="hm-section">
+      <section className="hm-section alt">
         <div className="container">
           <div className="hm-head hm-reveal">
             <div className="hm-kicker">Get started</div>
-            <h2>Ride, or drive - pick a side</h2>
+            <h2>{driverSignupEnabled ? 'Ride, or drive - pick a side' : 'Ready when you are'}</h2>
           </div>
-          <div className="hm-roles">
+          <div className="hm-roles" style={driverSignupEnabled ? undefined : { maxWidth: 560, margin: '0 auto' }}>
             <div className="hm-role hm-reveal" data-delay="1">
               <div className="hm-icon"><Icon.user /></div>
               <h3>For passengers</h3>
@@ -333,7 +372,8 @@ export default function Home() {
               </p>
               <Link className="btn" to="/register">Sign up as a passenger</Link>
             </div>
-            <div className="hm-role hm-reveal" data-delay="2">
+            {driverSignupEnabled && (
+            <div className="hm-role hm-reveal is-in" data-delay="2">
               <div className="hm-icon"><Icon.car /></div>
               <h3>For drivers</h3>
               <p>
@@ -341,10 +381,9 @@ export default function Home() {
                 approves your account before you go live. Set your own rate, your own weekly schedule, and get notified
                 the moment a trip comes in.
               </p>
-              {driverSignupEnabled
-                ? <Link className="btn secondary" to="/driver-signup">Apply to drive</Link>
-                : <p className="muted">We're not accepting new driver applications right now.</p>}
+              <Link className="btn secondary" to="/driver-signup">Apply to drive</Link>
             </div>
+            )}
           </div>
           <p className="muted" style={{ textAlign: 'center', marginTop: 28 }}>
             Want the full story? Read <Link to="/about">About EasyRide</Link>, or check our <Link to="/terms">Terms &amp; Conditions</Link>.
@@ -352,7 +391,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="hm-section alt">
+      <section className="hm-section">
         <div className="container">
           <div className="hm-head hm-reveal">
             <div className="hm-kicker">Get in touch</div>

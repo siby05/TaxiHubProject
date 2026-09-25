@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
+import RouteMeta from './components/RouteMeta';
 import Home from './pages/Home';
 import About from './pages/About';
 import Login from './pages/Login';
@@ -35,6 +36,7 @@ export default function App() {
 
   return (
     <>
+      <RouteMeta />
       <Navbar />
       <Routes>
         <Route path="/" element={user ? <Navigate to={home} replace /> : <Home />} />
