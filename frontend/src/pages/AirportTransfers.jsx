@@ -11,7 +11,7 @@ export default function AirportTransfers() {
     <div className="container" style={{ maxWidth: 860, margin: '0 auto' }}>
       <div className="hero" style={{ maxWidth: '100%' }}>
         <div className="eyebrow">Airport &amp; long-distance</div>
-        <h1>New Plymouth Airport taxi &amp; transfers</h1>
+        <h1>New Plymouth Airport transfers</h1>
         <p className="tagline">
           Pre-book a local driver to or from New Plymouth Airport (NPL). You see the fare upfront, your driver is
           confirmed before the day, and you can pay by card or cash.
@@ -45,7 +45,7 @@ export default function AirportTransfers() {
       </div>
 
       <div className="card">
-        <h2 style={{ marginTop: 0, fontSize: '1.15rem' }}>Airport taxi questions</h2>
+        <h2 style={{ marginTop: 0, fontSize: '1.15rem' }}>Airport transfer questions</h2>
         {AIRPORT_FAQ.map(({ q, a }) => (
           <details key={q} style={{ borderTop: '1px solid var(--border)', padding: '12px 0' }}>
             <summary style={{ cursor: 'pointer', fontWeight: 600 }}>{q}</summary>
@@ -55,7 +55,7 @@ export default function AirportTransfers() {
       </div>
 
       <p className="muted" style={{ textAlign: 'center' }}>
-        Heading further? See <Link to="/new-plymouth-to-auckland">New Plymouth to Auckland</Link> transfers. Need a ride right now instead? <Link to="/register">Book a private taxi in New Plymouth</Link>. Read more{' '}
+        Heading further? See <Link to="/new-plymouth-to-auckland">New Plymouth to Auckland</Link> transfers. Need a ride right now instead? <Link to="/register">Book a private ride in New Plymouth</Link>. Read more{' '}
         <Link to="/about">about EasyRide</Link>.
       </p>
     </div>

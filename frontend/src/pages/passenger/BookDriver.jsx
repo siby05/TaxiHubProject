@@ -305,8 +305,7 @@ export default function BookDriver() {
           <div className="card">
             <h3 style={{ marginTop: 0 }}>About EasyRide</h3>
             <p className="muted">
-              EasyRide connects you directly with a driver by scanning the QR code in their vehicle - like flagging
-              a cab, but with an upfront price and a booking record. Every driver on the platform is added and
+              EasyRide connects you directly with a driver by scanning the QR code in their vehicle - like hailing a ride inperson, but with an upfront price and a booking record. Every driver on the platform is added and
               approved by an admin, holds a registered license and vehicle, and has a rating built from real
               completed trips.
             </p>

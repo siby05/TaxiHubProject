@@ -11,7 +11,7 @@ export default function NewPlymouthToAuckland() {
     <div className="container" style={{ maxWidth: 860, margin: '0 auto' }}>
       <div className="hero" style={{ maxWidth: '100%' }}>
         <div className="eyebrow">Long-distance private transfer</div>
-        <h1>New Plymouth to Auckland by private taxi</h1>
+        <h1>New Plymouth to Auckland by private transfer</h1>
         <p className="tagline">
           Door-to-door from your New Plymouth address to anywhere in Auckland, or straight to Auckland Airport. You get
           one fixed fare upfront, a vetted local driver confirmed ahead of time, and no bus or connecting flight to catch.
@@ -47,7 +47,7 @@ export default function NewPlymouthToAuckland() {
       <div className="card">
         <h2 style={{ marginTop: 0, fontSize: '1.15rem' }}>Why travel with Easy Ride</h2>
         <p className="muted" style={{ marginTop: 0 }}>
-          Easy Ride is a private taxi service based in New Plymouth. Every driver holds NZTA passenger licensing and is
+          Easy Ride is a private passenger service based in New Plymouth. Every driver holds NZTA passenger licensing and is
           checked by us before they can take a trip. For a long run like New Plymouth to Auckland, that means one
           driver, one car and one agreed price, from your door to theirs. It suits early flights out of Auckland
           Airport, hospital appointments, family visits, or moving between cities with luggage.
@@ -66,7 +66,7 @@ export default function NewPlymouthToAuckland() {
 
       <p className="muted" style={{ textAlign: 'center' }}>
         Flying from New Plymouth instead? See <Link to="/airport-transfers">New Plymouth Airport transfers</Link>. Just
-        need a ride around town? <Link to="/">Book a private taxi in New Plymouth</Link>.
+        need a ride around town? <Link to="/">Book a private ride in New Plymouth</Link>.
       </p>
     </div>
   );

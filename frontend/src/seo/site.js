@@ -23,16 +23,16 @@ export const BUSINESS = {
   region: 'Taranaki',
   // How people actually type the name into Google - listed as schema.org
   // alternateName so a search for any of them matches the business.
-  alternateNames: ['Easy Ride', 'Easy Ride New Plymouth', 'EasyRide New Plymouth', 'Easy Ride NZ', 'Easy Ride Taxi'],
+  alternateNames: ['Easy Ride', 'Easy Ride New Plymouth', 'EasyRide New Plymouth', 'Easy Ride NZ', 'Easy Ride Private Passenger Service'],
 };
 
 // Home page - targets "Easy Ride New Plymouth" (the brand, written the way
 // people search it) and "private taxi in New Plymouth".
 export const DEFAULT_META = {
-  title: 'Easy Ride New Plymouth · Private Taxi & Airport Transfers',
-  description: 'Easy Ride is a private taxi in New Plymouth - upfront fares, vetted local drivers and live trip updates. Airport transfers and long-distance trips to Auckland, Wellington and across Taranaki. Cash or card.',
-  heading: 'Easy Ride New Plymouth - Private Taxi & Airport Transfers',
-  summary: 'Easy Ride (EasyRide) is a private taxi service in New Plymouth, Taranaki: book a vetted local driver with an upfront fare, pay by cash or card, and follow your trip live. We also do New Plymouth Airport transfers and long-distance trips to Auckland, Wellington and across Taranaki.',
+  title: 'Easy Ride New Plymouth · Private Passenger Service & Airport Transfers',
+  description: 'Easy Ride is a private passenger service in New Plymouth - upfront fares, vetted local drivers and live trip updates. Airport transfers and long-distance trips to Auckland, Wellington and across Taranaki. Cash or card.',
+  heading: 'Easy Ride New Plymouth - Private Passenger Service & Airport Transfers',
+  summary: 'Easy Ride (EasyRide) is a private passenger service in New Plymouth, Taranaki: book a vetted local driver with an upfront fare, pay by cash or card, and follow your trip live. We also do New Plymouth Airport transfers and long-distance trips to Auckland, Wellington and across Taranaki.',
 };
 
 // "New Plymouth to Auckland" landing page. Figures are deliberately
@@ -43,7 +43,7 @@ export const AUCKLAND_FAQ = [
     a: 'About 350-360 km, usually around 4.5 to 5 hours\' driving via State Highway 3, depending on traffic and stops. Your driver takes you door to door, so there are no bus or flight connections to worry about.',
   },
   {
-    q: 'How much is a private taxi from New Plymouth to Auckland?',
+    q: 'How much is a private transfer from New Plymouth to Auckland?',
     a: 'You get a fixed, upfront fare for the whole trip before you book - worked out from the route distance, with no surge pricing and no meter running. Enter your pickup and Auckland address when booking to see the exact price.',
   },
   {
@@ -68,7 +68,7 @@ export const AUCKLAND_FAQ = [
 // structured data (eligible for Google's expandable FAQ results).
 export const AIRPORT_FAQ = [
   {
-    q: 'How do I book a taxi to New Plymouth Airport?',
+    q: 'How do I book a ride to New Plymouth Airport?',
     a: 'Create a free EasyRide account, enter your pickup address and "New Plymouth Airport" as the drop-off, then choose "Schedule for later" and pick a time that gets you there comfortably before your flight. You see the fare before you confirm.',
   },
   {
@@ -76,7 +76,7 @@ export const AIRPORT_FAQ = [
     a: 'Airport and long-distance trips need at least 12 hours\' notice, so a driver can commit to your time. Booking the day before your flight is ideal.',
   },
   {
-    q: 'How much is a taxi from New Plymouth to the airport?',
+    q: 'How much is a ride from New Plymouth to the airport?',
     a: 'Fares are a base fare plus a per-kilometre rate for the actual route - no surge pricing. The exact price is shown upfront when you enter your pickup and drop-off, before you book.',
   },
   {
@@ -101,37 +101,37 @@ export const AIRPORT_FAQ = [
 export const PAGES = {
   '/': { ...DEFAULT_META, sitemap: { changefreq: 'weekly', priority: '1.0' } },
   '/airport-transfers': {
-    title: 'New Plymouth Airport Taxi & Transfers · EasyRide',
-    description: 'Pre-book a taxi to or from New Plymouth Airport (NPL). Upfront fares, confirmed local driver, cash or card. Book 12 hours ahead for airport and long-distance trips across Taranaki.',
-    heading: 'New Plymouth Airport Taxi & Transfers',
+    title: 'New Plymouth Airport Transfers · Easy Ride Private Passenger Service',
+    description: 'Pre-book a private ride to or from New Plymouth Airport (NPL). Upfront fares, confirmed local driver, cash or card. Book 12 hours ahead for airport and long-distance trips across Taranaki.',
+    heading: 'New Plymouth Airport Transfers',
     summary: 'Pre-book a confirmed local driver to or from New Plymouth Airport (NPL), with an upfront fare and cash or card payment. Airport and long-distance trips need 12 hours\' notice.',
     sitemap: { changefreq: 'monthly', priority: '0.9' },
     faq: AIRPORT_FAQ,
   },
   '/new-plymouth-to-auckland': {
-    title: 'New Plymouth to Auckland Private Taxi & Transfers · Easy Ride',
+    title: 'New Plymouth to Auckland Private Transfers · Easy Ride',
     description: 'Private door-to-door transfer from New Plymouth to Auckland or Auckland Airport. Fixed upfront fare, vetted local driver, stops on the way. Pre-book 12 hours ahead.',
-    heading: 'New Plymouth to Auckland - private taxi & airport transfers',
+    heading: 'New Plymouth to Auckland - private passenger transfers',
     summary: 'Easy Ride runs private door-to-door trips from New Plymouth to Auckland and Auckland Airport (about 350-360 km, 4.5-5 hours) with a fixed upfront fare and a confirmed local driver. Pre-book at least 12 hours ahead.',
     sitemap: { changefreq: 'monthly', priority: '0.9' },
     faq: AUCKLAND_FAQ,
   },
   '/about': {
-    title: 'About EasyRide · Local Taxi Service in New Plymouth, Taranaki',
-    description: 'EasyRide is a New Plymouth taxi service with admin-approved, NZTA-licensed drivers, upfront fares and no surge pricing. Learn how it works.',
-    heading: 'About EasyRide - local taxi service in New Plymouth, Taranaki',
+    title: 'About Easy Ride · Private Passenger Service in New Plymouth, Taranaki',
+    description: 'Easy Ride is a New Plymouth private passenger service with admin-approved, NZTA-licensed drivers, upfront fares and no surge pricing. Learn how it works.',
+    heading: 'About Easy Ride - private passenger service in New Plymouth, Taranaki',
     sitemap: { changefreq: 'monthly', priority: '0.7' },
   },
   '/driver-signup': {
-    title: 'Drive with EasyRide · Taxi Driver Jobs in New Plymouth',
+    title: 'Drive with Easy Ride · Private Passenger Service Driver Jobs in New Plymouth',
     description: 'Apply to drive with EasyRide in New Plymouth. Set your own rate and schedule - bring your licence, TSL, CoF and registration.',
     heading: 'Drive with EasyRide in New Plymouth',
     sitemap: { changefreq: 'monthly', priority: '0.6' },
   },
   '/register': {
-    title: 'Sign Up to Book a Taxi · EasyRide New Plymouth',
-    description: 'Create a free EasyRide account to book taxis, airport transfers and long-distance trips in New Plymouth. Already had a ride booked for you? Set a password on it here.',
-    heading: 'Sign up to book a taxi in New Plymouth',
+    title: 'Sign Up to Book a Ride · Easy Ride New Plymouth',
+    description: 'Create a free Easy Ride account to book private rides, airport transfers and long-distance trips in New Plymouth. Already had a ride booked for you? Set a password on it here.',
+    heading: 'Sign up to book a private ride in New Plymouth',
     sitemap: { changefreq: 'monthly', priority: '0.6' },
   },
   '/login': {
@@ -153,13 +153,13 @@ export const PAGES = {
 export function structuredData(site, pathname) {
   const business = {
     '@context': 'https://schema.org',
-    '@type': 'TaxiService',
+    '@type': 'Service',
     name: BUSINESS.name,
     alternateName: BUSINESS.alternateNames,
     url: `${site}/`,
     image: `${site}/images/byd-atto3.png`,
     description: DEFAULT_META.description,
-    serviceType: ['Private taxi', 'Airport transfer', 'Long-distance transfer'],
+    serviceType: ['Private passenger service', 'Airport transfer', 'Long-distance transfer'],
     areaServed: [
       { '@type': 'City', name: 'New Plymouth' },
       { '@type': 'AdministrativeArea', name: 'Taranaki' },

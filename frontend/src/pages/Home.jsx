@@ -188,7 +188,7 @@ export default function Home() {
         <div className="hm-hero-inner">
           <div>
             <span className="hm-eyebrow"><span className="hm-dot" />Easy Ride · Now driving in New Plymouth</span>
-            <h1>A private taxi in New Plymouth you can <span className="hm-grad">actually see coming</span>.</h1>
+            <h1>A private passenger service in New Plymouth you can <span className="hm-grad">actually see coming</span>.</h1>
             <p className="hm-tagline">
               Scan the QR code on a driver's car, or book from the app - either way you get an upfront fare, a real
               admin-approved driver, and live updates from request to drop-off. No guessing, no surge pricing.
@@ -227,7 +227,7 @@ export default function Home() {
               <span className="hm-num">01</span>
               <div className="hm-icon"><Icon.qr /></div>
               <h3>Scan &amp; ride</h3>
-              <p>See a driver's car with an EasyRide QR code on it? Scan it, confirm the fare, and that driver gets your request directly - like flagging a cab, with a paper trail.</p>
+              <p>See a driver's car with an EasyRide QR code on it? Scan it, confirm the fare, and that driver gets your request directly - like hailing a ride in person, with a paper trail.</p>
             </div>
             <div className="hm-step hm-reveal" data-delay="2">
               <span className="hm-num">02</span>
