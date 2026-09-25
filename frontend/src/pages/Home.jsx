@@ -188,7 +188,7 @@ export default function Home() {
         <div className="hm-hero-inner">
           <div>
             <span className="hm-eyebrow"><span className="hm-dot" />Now driving in New Plymouth</span>
-            <h1>A private taxi you can <span className="hm-grad">actually see coming</span>.</h1>
+            <h1>A New Plymouth taxi you can <span className="hm-grad">actually see coming</span>.</h1>
             <p className="hm-tagline">
               Scan the QR code on a driver's car, or book from the app - either way you get an upfront fare, a real
               admin-approved driver, and live updates from request to drop-off. No guessing, no surge pricing.
@@ -276,7 +276,8 @@ export default function Home() {
             </div>
           </div>
           <div className="hm-reveal" style={{ textAlign: 'center', marginTop: 26 }}>
-            <Link className="btn" to="/register">Pre-book your trip</Link>
+            <Link className="btn" to="/register">Pre-book your trip</Link>{' '}
+            <Link className="btn secondary" to="/airport-transfers">Airport transfer details</Link>
           </div>
         </div>
       </section>
@@ -386,7 +387,7 @@ export default function Home() {
             )}
           </div>
           <p className="muted" style={{ textAlign: 'center', marginTop: 28 }}>
-            Want the full story? Read <Link to="/about">About EasyRide</Link>, or check our <Link to="/terms">Terms &amp; Conditions</Link>.
+            Want the full story? Read <Link to="/about">About EasyRide</Link>, see <Link to="/airport-transfers">New Plymouth Airport transfers</Link>, or check our <Link to="/terms">Terms &amp; Conditions</Link>.
           </p>
         </div>
       </section>

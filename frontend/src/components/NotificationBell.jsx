@@ -58,7 +58,7 @@ export default function NotificationBell() {
         )}
       </button>
       {open && (
-        <div className="autocomplete-list" style={{ width: 320, right: 0, left: 'auto' }}>
+        <div className="autocomplete-list notification-panel">
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 12px' }}>
             <strong style={{ color: 'var(--text)' }}>Notifications</strong>
             {unread > 0 && <button className="btn secondary" style={{ padding: '2px 8px', fontSize: '0.75rem' }} onClick={markAllRead}>Mark all read</button>}

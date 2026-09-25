@@ -58,7 +58,7 @@ export default function InstallPrompt() {
   return (
     <div className="card" style={{ background: '#e0f2fe', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
       <span>Install EasyRide on your phone for quicker access - no browser bar, just tap and book.</span>
-      <div style={{ display: 'flex', gap: 8 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         <button className="btn" onClick={install}>Install</button>
         <button className="btn secondary" onClick={dismiss}>Not now</button>
       </div>

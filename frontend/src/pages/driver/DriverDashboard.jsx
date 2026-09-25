@@ -220,7 +220,7 @@ export default function DriverDashboard() {
                 <div className="muted">Rate change to ${profile.pendingRatePerKm}/km pending admin approval</div>
               )}
             </div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
               {notifPermission !== 'granted' && notifPermission !== 'unsupported' && (
                 <button className="btn secondary" onClick={enableNotifications}>🔔 Enable trip notifications</button>
               )}
@@ -243,7 +243,7 @@ export default function DriverDashboard() {
       )}
 
       <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 style={{ margin: 0 }}>Bookings {!showAllTrips && <span className="muted" style={{ fontWeight: 400 }}>(last 30 days)</span>}</h3>
           <button className="btn secondary" onClick={() => setShowAllTrips((v) => !v)}>{showAllTrips ? 'Show last 30 days' : 'Show all history'}</button>
         </div>

@@ -30,7 +30,7 @@ export default function MyComplaints() {
 
   return (
     <div className="container">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1>My complaints</h1>
         <Link className="btn" to="/passenger/complaints/new">+ New complaint</Link>
       </div>
@@ -38,7 +38,7 @@ export default function MyComplaints() {
       <div className="grid cols-2">
         {complaints.map((c) => (
           <div className="card" key={c._id}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between' }}>
               <strong>{c.complaintId}{c.bookingRef ? <span className="muted" style={{ fontWeight: 400 }}> · trip {c.bookingRef}</span> : null}</strong>
               <span className={`badge ${c.status}`}>{c.status}</span>
             </div>
@@ -59,7 +59,7 @@ export default function MyComplaints() {
                   <div>
                     <textarea placeholder="Why are you reopening this?" value={reason} onChange={(e) => setReason(e.target.value)} />
                     {error && <p className="error-text">{error}</p>}
-                    <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
                       <button className="btn" onClick={() => submitReopen(c._id)}>Submit</button>
                       <button className="btn secondary" onClick={() => { setReopenFor(null); setError(''); }}>Cancel</button>
                     </div>

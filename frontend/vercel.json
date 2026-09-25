@@ -1,6 +1,30 @@
 {
   "rewrites": [
     {
+      "source": "/airport-transfers",
+      "destination": "/airport-transfers/index.html"
+    },
+    {
+      "source": "/about",
+      "destination": "/about/index.html"
+    },
+    {
+      "source": "/driver-signup",
+      "destination": "/driver-signup/index.html"
+    },
+    {
+      "source": "/register",
+      "destination": "/register/index.html"
+    },
+    {
+      "source": "/login",
+      "destination": "/login/index.html"
+    },
+    {
+      "source": "/terms",
+      "destination": "/terms/index.html"
+    },
+    {
       "source": "/((?!assets/).*)",
       "destination": "/index.html"
     }

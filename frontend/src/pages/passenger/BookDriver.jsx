@@ -250,7 +250,7 @@ export default function BookDriver() {
 
               <div>
                 <label>Payment</label>
-                <div style={{ display: 'flex', gap: 16 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <input type="radio" style={{ width: 'auto' }} checked={guestPaymentMethod === 'cash'} onChange={() => setGuestPaymentMethod('cash')} /> Cash to driver
                   </label>
@@ -266,6 +266,9 @@ export default function BookDriver() {
                 <div className="card fare-confirm">
                   {guestQuote.requestedCashOnly && (
                     <p className="muted" style={{ color: '#b45309' }}>⚠️ {guestQuote.requestedName || 'This driver'} is cash-only.</p>
+                  )}
+                  {guestQuote.requestedOffSchedule && (
+                    <p className="muted" style={{ color: '#b45309' }}>⚠️ {guestQuote.requestedName || 'This driver'} isn't scheduled to work at that time - matching you with another driver who is.</p>
                   )}
                   <strong>Estimated fare: ${guestQuote.estimatedFare.toFixed(2)}</strong>
                   <div className="muted">{guestQuote.distanceKm} km{guestStops.length > 0 && ` · via ${guestStops.length} stop${guestStops.length > 1 ? 's' : ''}`}{guestScheduledFor && ` · scheduled for ${formatNzDateTime(guestScheduledFor)}`}</div>
@@ -368,7 +371,7 @@ export default function BookDriver() {
 
           <div>
             <label>Payment</label>
-            <div style={{ display: 'flex', gap: 16 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <input type="radio" style={{ width: 'auto' }} checked={paymentMethod === 'cash'} onChange={() => setPaymentMethod('cash')} /> Cash to driver
               </label>
@@ -386,6 +389,9 @@ export default function BookDriver() {
             <div className="card fare-confirm">
               {quote.requestedCashOnly && (
                 <p className="muted" style={{ color: '#b45309' }}>⚠️ {quote.requestedName || 'This driver'} is cash-only - matching you with another driver for online payment.</p>
+              )}
+              {quote.requestedOffSchedule && (
+                <p className="muted" style={{ color: '#b45309' }}>⚠️ {quote.requestedName || 'This driver'} isn't scheduled to work at that time - matching you with another driver who is.</p>
               )}
               <strong>Estimated fare: ${quote.estimatedFare.toFixed(2)}</strong>
               {quote.cardSurchargeAmount > 0 && (

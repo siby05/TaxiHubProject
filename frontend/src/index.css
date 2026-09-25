@@ -33,24 +33,129 @@ a { color: var(--primary); text-decoration: none; }
 
 .container { max-width: 1080px; margin: 0 auto; padding: 24px 16px; }
 
+/* Top bar: logo, (signed-out, wide screens only) inline links, then the
+   notification bell + hamburger. Signed-in users always use the drawer -
+   see Navbar.jsx. Sticky so the menu is reachable from anywhere on a
+   long page. */
 .navbar {
+  position: sticky;
+  top: 0;
+  z-index: 90;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 24px;
+  gap: 12px;
+  padding: 12px 24px;
+  padding-top: max(12px, env(safe-area-inset-top));
   background: var(--bg);
   color: white;
 }
-.navbar .brand { font-weight: 700; font-size: 1.15rem; color: white; }
-.navbar nav { display: flex; gap: 16px; align-items: center; }
-.navbar nav a, .navbar nav button {
+.navbar .brand { font-weight: 700; font-size: 1.15rem; color: white; flex-shrink: 0; }
+.navbar-inline { display: flex; gap: 20px; align-items: center; margin-left: auto; }
+.navbar-inline a, .navbar-actions > div > button {
   color: #e2e8f0;
   background: none;
   border: none;
   cursor: pointer;
   font: inherit;
 }
-.navbar nav a.active, .navbar nav a:hover, .navbar nav button:hover { color: var(--primary); }
+.navbar-inline a.active, .navbar-inline a:hover { color: var(--primary); }
+.navbar-actions { display: flex; align-items: center; gap: 10px; }
+.navbar-actions > div > button { font-size: 1.2rem; padding: 6px; }
+
+.navbar-burger {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  width: 44px;
+  height: 44px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.navbar-burger span { display: block; height: 2px; width: 100%; background: #e2e8f0; border-radius: 2px; }
+.navbar-burger:hover { background: rgba(255, 255, 255, 0.16); }
+/* Signed-out on a wide screen: inline links are enough, no burger. */
+.navbar:not(.signed-in) .navbar-burger { display: none; }
+
+.nav-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  z-index: 95;
+}
+.nav-backdrop.open { opacity: 1; pointer-events: auto; }
+
+.nav-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(300px, 85vw);
+  background: var(--bg);
+  color: white;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  padding-top: max(16px, env(safe-area-inset-top));
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+  transform: translateX(100%);
+  visibility: hidden;
+  transition: transform 0.22s ease, visibility 0.22s;
+  overflow-y: auto;
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.25);
+}
+.nav-drawer.open { transform: translateX(0); visibility: visible; }
+.nav-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 14px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+.nav-drawer-name { font-weight: 700; overflow-wrap: anywhere; }
+.nav-drawer-role { color: #94a3b8; font-size: 0.8rem; text-transform: capitalize; }
+.nav-drawer-close {
+  background: none;
+  border: none;
+  color: #e2e8f0;
+  font-size: 1.8rem;
+  line-height: 1;
+  width: 44px;
+  height: 44px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.nav-drawer nav { display: flex; flex-direction: column; gap: 2px; }
+.nav-drawer nav a {
+  display: block;
+  padding: 12px 12px;
+  border-radius: 8px;
+  color: #e2e8f0;
+}
+.nav-drawer nav a:hover { background: rgba(255, 255, 255, 0.08); color: white; }
+.nav-drawer nav a.active { background: rgba(14, 165, 233, 0.18); color: var(--accent); font-weight: 600; }
+.nav-drawer-logout {
+  margin-top: auto;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: none;
+  color: #fecaca;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.nav-drawer-logout:hover { background: rgba(220, 38, 38, 0.15); }
 
 .card {
   background: var(--surface);
@@ -163,10 +268,24 @@ th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--bor
 .tabs button { padding: 8px 14px; border-radius: 6px; border: 1px solid var(--border); background: white; cursor: pointer; }
 .tabs button.active { background: var(--primary); color: white; border-color: var(--primary); }
 
+img, video { max-width: 100%; height: auto; }
+
+/* Tablets and small laptops: wide data tables (admin/driver reports)
+   scroll sideways inside their card rather than pushing the page wider. */
+@media (max-width: 1024px) {
+  table { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .container { padding: 20px 16px; }
+}
+
+/* Signed-out inline links collapse into the hamburger below small-laptop width. */
+@media (max-width: 860px) {
+  .navbar-inline { display: none; }
+  .navbar:not(.signed-in) .navbar-burger { display: inline-flex; }
+}
+
 /* Responsive: phones and small tablets */
 @media (max-width: 640px) {
-  .navbar { flex-wrap: wrap; gap: 8px; padding: 10px 14px; }
-  .navbar nav { flex-wrap: wrap; gap: 10px; font-size: 0.85rem; }
+  .navbar { padding: 8px 14px; padding-top: max(8px, env(safe-area-inset-top)); }
   .container { padding: 16px 12px; }
   .grid.cols-4 { grid-template-columns: repeat(2, 1fr); }
   .auth-shell { margin: 24px auto; max-width: 100%; }
@@ -267,4 +386,22 @@ th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--bor
     page: qr-card;
   }
   @page qr-card { size: A6; margin: 8mm; }
+}
+
+/* Notification bell dropdown. Anchored under the bell on wider screens; on
+   phones it's pinned full-width below the top bar instead - the bell sits
+   left of the hamburger, so a panel hanging off the bell's right edge ran
+   off the left of the screen and got clipped. Long messages/links wrap
+   rather than being cut off. */
+.notification-panel { width: 340px; left: auto; right: 0; max-height: 70vh; color: var(--text); }
+.notification-panel .autocomplete-item { overflow-wrap: anywhere; white-space: normal; }
+@media (max-width: 640px) {
+  .notification-panel {
+    position: fixed;
+    top: calc(64px + env(safe-area-inset-top));
+    left: 8px;
+    right: 8px;
+    width: auto;
+    max-height: calc(100vh - 80px);
+  }
 }

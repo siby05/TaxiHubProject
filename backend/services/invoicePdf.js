@@ -2,6 +2,7 @@ const path = require('path');
 const PDFDocument = require('pdfkit');
 const { getSettings } = require('../config/platformSettings');
 const { formatNzDate } = require('../utils/nzTime');
+const { siteUrl, siteLabel } = require('../utils/siteUrl');
 
 // DejaVu rather than PDFKit's built-in Helvetica: the standard PDF fonts
 // only cover WinAnsi, so Māori macrons in Taranaki place names (Ōakura,
@@ -117,6 +118,8 @@ function buildInvoicePdf(booking, passenger, driver, driverName) {
     doc.font('Regular').fontSize(9.5).fillColor(MUTED);
     if (settings.adminEmail) { doc.text(`Email: ${settings.adminEmail}`, left, y); y += 14; }
     if (settings.adminMobile) { doc.text(`Phone: ${settings.adminMobile}`, left, y); y += 14; }
+    const site = siteUrl();
+    if (site) { doc.text(`Website: ${siteLabel(site)}`, left, y, { link: site }); y += 14; }
     y += 6;
     doc.text('Thanks for riding with EasyRide.', left, y);
 

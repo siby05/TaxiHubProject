@@ -317,7 +317,7 @@ export default function PassengerDashboard() {
 
             <div>
               <label>Payment</label>
-              <div style={{ display: 'flex', gap: 16 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <input type="radio" style={{ width: 'auto' }} checked={paymentMethod === 'cash'} onChange={() => setPaymentMethod('cash')} /> Cash to driver
                 </label>
@@ -471,7 +471,7 @@ export default function PassengerDashboard() {
 
             <div>
               <label>Payment</label>
-              <div style={{ display: 'flex', gap: 16 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <input type="radio" style={{ width: 'auto' }} checked={editPaymentMethod === 'cash'} onChange={() => setEditPaymentMethod('cash')} /> Cash to driver
                 </label>
@@ -501,7 +501,7 @@ export default function PassengerDashboard() {
               </div>
             )}
 
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               <button className="btn" onClick={saveEdit} disabled={editSaving || editQuoteLoading || !editQuote}>
                 {editSaving ? 'Saving...' : 'Save changes'}
               </button>

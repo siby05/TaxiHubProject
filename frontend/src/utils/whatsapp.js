@@ -16,11 +16,20 @@ export function vehicleLabel(driver) {
 // free alternative to the paid WhatsApp Business API - there's no way to
 // have the server push the message automatically without that, so every
 // "message on WhatsApp" button in the app uses this instead.
+// Every pre-filled WhatsApp message ends with the website address, added
+// here once rather than in each message builder.
+export const SITE_LABEL = 'easyridenz.com';
+
+function withSite(text) {
+  if (!text || text.includes(SITE_LABEL)) return text;
+  return `${text}\n\nEasyRide - ${SITE_LABEL}`;
+}
+
 export function waLink(mobile, text) {
   if (!mobile) return null;
   const digits = String(mobile).replace(/[^\d]/g, ''); // wa.me wants digits only, no leading +
   if (!digits) return null;
-  return `https://wa.me/${digits}${text ? `?text=${encodeURIComponent(text)}` : ''}`;
+  return `https://wa.me/${digits}${text ? `?text=${encodeURIComponent(withSite(text))}` : ''}`;
 }
 
 // No fixed recipient - opens WhatsApp's own contact picker with the text
@@ -30,7 +39,7 @@ export function waLink(mobile, text) {
 // - see pages/ForgotPassword.jsx and pages/admin/AdminDashboard.jsx's
 // reset-password action, which does have a number and uses waLink instead).
 export function waShareLink(text) {
-  return `https://wa.me/?text=${encodeURIComponent(text)}`;
+  return `https://wa.me/?text=${encodeURIComponent(withSite(text))}`;
 }
 
 // Each message below is pre-filled text for the SENDER to send - so it must

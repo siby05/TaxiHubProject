@@ -27,7 +27,7 @@ export default function DriverComplaints() {
       <div className="grid cols-2">
         {complaints.map((c) => (
           <div className="card" key={c._id}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between' }}>
               <strong>{c.complaintId}{c.bookingRef ? <span className="muted" style={{ fontWeight: 400 }}> · trip {c.bookingRef}</span> : null}</strong>
               <span className={`badge ${c.status}`}>{c.status}</span>
             </div>
@@ -39,7 +39,7 @@ export default function DriverComplaints() {
             ))}
 
             {!['resolved', 'closed'].includes(c.status) && (
-              <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
                 <input placeholder="Respond to this complaint..." value={drafts[c._id] || ''}
                   onChange={(e) => setDrafts((d) => ({ ...d, [c._id]: e.target.value }))} />
                 <button className="btn" onClick={() => respond(c._id)}>Send</button>

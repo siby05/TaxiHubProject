@@ -10,7 +10,9 @@ const { createModel } = require('../lib/createModel');
 // (see utils/schedule.js - an array of 7 {dayOfWeek, slots: [{startTime,
 // endTime}]} entries, Sunday-Saturday; a day can hold more than one slot for
 // separate shifts, e.g. a morning run and an evening run with a gap between),
-// rating, totalTrips, totalEarnings, qrCodeUrl, qrCodeImage, feeOverride
+// dateSchedule (shifts for specific calendar dates, [{date: 'YYYY-MM-DD',
+// slots}] - overrides the weekly pattern for that date; see
+// routes/driver.js PUT /schedule/dates/:date), rating, totalTrips, totalEarnings, qrCodeUrl, qrCodeImage, feeOverride
 // (null = use the platform-wide commission policy; otherwise a partial
 // {commissionType, commissionPercent, weeklyFlatFee} just for this driver -
 // see utils/billing.js). feeLimitOverride (null = use the platform-wide

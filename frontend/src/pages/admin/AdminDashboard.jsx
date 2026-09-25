@@ -287,7 +287,7 @@ export default function AdminDashboard() {
             ? <>Temporary password: <code>{resetPasswordInfo.temporaryPassword}</code></>
             : 'Temporary password generated (hidden - see admin settings to show it here).'}
           <p className="muted">{resetPasswordInfo.note}</p>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {settings?.tempPasswordVisible !== false && waLink(resetPasswordInfo.mobile, `Hi ${resetPasswordInfo.name}, your EasyRide password was reset. Temporary password: ${resetPasswordInfo.temporaryPassword} - please log in and change it.`) && (
               <a className="btn whatsapp" target="_blank" rel="noreferrer"
                 href={waLink(resetPasswordInfo.mobile, `Hi ${resetPasswordInfo.name}, your EasyRide password was reset. Temporary password: ${resetPasswordInfo.temporaryPassword} - please log in and change it.`)}>
@@ -362,7 +362,7 @@ export default function AdminDashboard() {
                       {d.pendingRatePerKm != null && (
                         <div className="muted">
                           → ${d.pendingRatePerKm} requested
-                          <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
                             <button className="btn" style={{ padding: '4px 8px', fontSize: '0.8rem' }} onClick={() => approveRate(d._id)}>Approve</button>
                             <button className="btn danger" style={{ padding: '4px 8px', fontSize: '0.8rem' }} onClick={() => rejectRate(d._id)}>Reject</button>
                           </div>
@@ -572,14 +572,14 @@ export default function AdminDashboard() {
                     <div><label>Email (blank = none; receipts go via WhatsApp)</label><input type="email" value={passengerEdit.email} onChange={(e) => setPassengerEdit((f) => ({ ...f, email: e.target.value }))} /></div>
                     <AddressAutocomplete label="Home address" defaultValue={passengerEdit.address} onSelect={(r) => setPassengerEdit((f) => ({ ...f, address: r ? r.label : '' }))} />
                     {passengerError && <p className="error-text">{passengerError}</p>}
-                    <div style={{ display: 'flex', gap: 6 }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                       <button className="btn">Save</button>
                       <button type="button" className="btn secondary" onClick={() => { setPassengerEdit(null); setPassengerError(''); }}>Cancel</button>
                     </div>
                   </form>
                 ) : (
                   <>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
                       <div>
                         <strong>{p.name}</strong>
                         <div className="muted">{p.hasEmail ? p.email : 'No email - receipts sent on WhatsApp'}</div>
@@ -708,7 +708,7 @@ export default function AdminDashboard() {
                 Leave empty to rely on the minimum fare and per-km rate alone.
               </p>
               {settings.fareRanges.map((r, i) => (
-                <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                <div key={i} style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 6 }}>
                   <input type="number" step="0.5" min="0.1" placeholder="up to km" style={{ maxWidth: 110 }}
                     value={r.maxKm}
                     onChange={(e) => setSettings((s) => ({ ...s, fareRanges: s.fareRanges.map((row, j) => (j === i ? { ...row, maxKm: e.target.value } : row)) }))} />

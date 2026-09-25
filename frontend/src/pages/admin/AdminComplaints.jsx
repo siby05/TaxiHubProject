@@ -74,7 +74,7 @@ export default function AdminComplaints() {
       <div className="grid cols-2">
         {visibleComplaints.map((c) => (
           <div className="card" key={c._id}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between' }}>
               <strong>{c.complaintId}{c.bookingRef ? <span className="muted" style={{ fontWeight: 400 }}> · trip {c.bookingRef}</span> : null}</strong>
               <div>
                 {c.isSerious && <span className="badge critical" style={{ marginRight: 6 }}>serious</span>}
@@ -95,7 +95,7 @@ export default function AdminComplaints() {
               </select>
               {!c.isSerious && <button className="btn danger" onClick={() => escalate(c._id)}>Escalate</button>}
             </div>
-            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
               <input placeholder="Internal note..." value={notes[c._id] || ''} onChange={(e) => setNotes((n) => ({ ...n, [c._id]: e.target.value }))} />
               <button className="btn secondary" onClick={() => addNote(c._id)}>Add note</button>
             </div>

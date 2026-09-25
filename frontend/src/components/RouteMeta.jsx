@@ -1,39 +1,14 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
+import { PAGES, DEFAULT_META, siteUrlFrom, structuredData } from '../seo/site';
 
-// Per-page <title>, meta description, canonical link and robots rule for
-// search engines (Google runs the JS, so setting these on navigation is
-// enough; the static defaults and social-preview tags live in index.html).
-// Signed-in areas and one-off links (QR landing, pay, reset) are kept out
-// of the index - they're either behind a login or specific to one person.
-const DEFAULT = {
-  title: 'EasyRide · Taxi & Airport Transfers in New Plymouth, NZ',
-  description: 'Book a local taxi in New Plymouth with upfront fares, vetted drivers and live trip updates. Airport drop-offs and long-distance trips - pre-book 12 hours ahead. Cash or card.',
-};
-
-const PAGES = {
-  '/': DEFAULT,
-  '/about': {
-    title: 'About EasyRide · Local Taxi Service in New Plymouth, Taranaki',
-    description: 'EasyRide is a New Plymouth taxi service with admin-approved, NZTA-licensed drivers, upfront fares and no surge pricing. Learn how it works.',
-  },
-  '/terms': {
-    title: 'Terms & Conditions · EasyRide',
-    description: 'The terms that apply to booking and riding with EasyRide, and to driving on the platform.',
-  },
-  '/register': {
-    title: 'Sign Up to Book a Taxi · EasyRide New Plymouth',
-    description: 'Create a free EasyRide account to book taxis, airport transfers and long-distance trips in New Plymouth. Already had a ride booked for you? Set a password on it here.',
-  },
-  '/login': {
-    title: 'Log In · EasyRide',
-    description: 'Log in to EasyRide to book a ride, track your driver and see your trip receipts.',
-  },
-  '/driver-signup': {
-    title: 'Drive with EasyRide · Taxi Driver Jobs in New Plymouth',
-    description: 'Apply to drive with EasyRide in New Plymouth. Set your own rate and weekly schedule - bring your licence, TSL, CoF and registration.',
-  },
-};
+// Per-page <title>, meta description, canonical link, social tags and
+// robots rule on client-side navigation. The page list lives in
+// seo/site.js, which the build also uses to write each public page's own
+// static HTML (see vite.config.js). Signed-in areas and one-off links (QR
+// landing, pay, reset) are kept out of the index - they're either behind a
+// login or specific to one person.
+const SITE = siteUrlFrom(import.meta.env.VITE_SITE_URL);
 
 function setHeadTag(tag, keyAttr, key, valueAttr, value) {
   let el = document.head.querySelector(`${tag}[${keyAttr}="${key}"]`);
@@ -50,10 +25,26 @@ export default function RouteMeta() {
 
   useEffect(() => {
     const page = PAGES[pathname];
-    document.title = (page || DEFAULT).title;
-    setHeadTag('meta', 'name', 'description', 'content', (page || DEFAULT).description);
+    const meta = page || DEFAULT_META;
+    const url = `${SITE}${pathname}`;
+    document.title = meta.title;
+    setHeadTag('meta', 'name', 'description', 'content', meta.description);
     setHeadTag('meta', 'name', 'robots', 'content', page ? 'index, follow' : 'noindex, nofollow');
-    setHeadTag('link', 'rel', 'canonical', 'href', `${window.location.origin}${pathname}`);
+    setHeadTag('link', 'rel', 'canonical', 'href', url);
+    setHeadTag('meta', 'property', 'og:url', 'content', url);
+    setHeadTag('meta', 'property', 'og:title', 'content', meta.title);
+    setHeadTag('meta', 'property', 'og:description', 'content', meta.description);
+
+    // Swap in this page's structured data (e.g. the airport FAQ).
+    document.head.querySelectorAll('script[type="application/ld+json"]').forEach((el) => el.remove());
+    if (page) {
+      structuredData(SITE, pathname).forEach((block) => {
+        const el = document.createElement('script');
+        el.type = 'application/ld+json';
+        el.textContent = JSON.stringify(block);
+        document.head.appendChild(el);
+      });
+    }
   }, [pathname]);
 
   return null;

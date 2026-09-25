@@ -10,6 +10,7 @@ const { promisify } = require('util');
 const { getSettings } = require('../config/platformSettings');
 const { formatNzDateTime, formatNzDate } = require('../utils/nzTime');
 const { hasRealEmail } = require('../utils/users');
+const { siteUrl, siteLabel } = require('../utils/siteUrl');
 
 const resolve4 = promisify(dns.resolve4);
 // Trim whitespace and strip wrapping quotes: a key pasted into a hosting
@@ -186,6 +187,15 @@ async function send(to, subject, text, attachments, html) {
   if (!hasRealEmail({ email: to })) {
     console.log(`[email] skipped "${subject}" - ${to || '(no address)'} is not a real mailbox`);
     return { ok: false, error: 'Recipient has no email address' };
+  }
+
+  // Every email ends with the website address - added here once rather
+  // than in each template. Skipped where a template already shows it
+  // (the invoice's own footer).
+  const site = siteLabel();
+  if (text) text = `${text}\n\n--\nEasyRide · ${site}`;
+  if (html && !html.includes(`>${esc(site)}</a>`)) {
+    html = `${html}\n<p style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#64748b;font-size:12px;text-align:center;margin-top:24px;">EasyRide · <a href="${esc(siteUrl())}" style="color:#0EA5E9;text-decoration:none;">${esc(site)}</a></p>`;
   }
 
   // EMAIL_FROM is optional - defaults to the admin's own configured inbox.
@@ -387,6 +397,7 @@ function buildInvoiceHtml(booking, passenger, driver, driverName, { forPrint = f
       <div style="font-weight:700;color:#0f172a;margin-bottom:4px;">EasyRide</div>
       ${settings.adminEmail ? `<div>Email: <a href="mailto:${esc(settings.adminEmail)}" style="color:#0EA5E9;text-decoration:none;">${esc(settings.adminEmail)}</a></div>` : ''}
       ${settings.adminMobile ? `<div>Phone: ${esc(settings.adminMobile)}</div>` : ''}
+      ${siteUrl() ? `<div>Website: <a href="${esc(siteUrl())}" style="color:#0EA5E9;text-decoration:none;">${esc(siteLabel())}</a></div>` : ''}
       <div style="margin-top:8px;">Thanks for riding with EasyRide.${forPrint ? '' : ' Questions about this invoice? Just reply to this email.'}</div>
     </div>
   </div>

@@ -34,7 +34,7 @@ export default function DriverAddPassenger() {
         <div className="card" style={{ maxWidth: 480, background: '#dcfce7' }}>
           <h3>Passenger added</h3>
           <p>{added.name} ({added.mobile}) can now be booked from Book for passenger.</p>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             <button className="btn" onClick={() => navigate('/driver/book', { state: { passenger: added } })}>Book a trip for them</button>
             <button className="btn secondary" onClick={() => setAdded(null)}>Add another</button>
           </div>

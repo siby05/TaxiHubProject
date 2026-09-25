@@ -12,7 +12,7 @@ const { emailService } = require('../services/emailService');
 const { placeholderEmail } = require('../utils/users');
 const { notifyUser, notifyAdmins } = require('../utils/notify');
 const { checkDriverCompliance } = require('../utils/compliance');
-const { isWithinSchedule } = require('../utils/schedule');
+const { isWithinSchedule, nzDayAndTime } = require('../utils/schedule');
 const { getSettings } = require('../config/platformSettings');
 const { DRIVER_DOCUMENTS, isValidDocumentKey, documentLabel, allDocumentsVerified } = require('../config/driverDocuments');
 const { documentUpload, documentUrl } = require('../utils/documentUpload');
@@ -173,6 +173,69 @@ router.put('/schedule', auth, roleMiddleware(['driver']), async (req, res) => {
   res.json(updated);
 });
 
+// PUT /api/driver/schedule/dates/:date - shifts for one specific calendar
+// date (NZ, "YYYY-MM-DD"), entered from the Schedule page's month calendar
+// and auto-saved one date at a time, so quick edits on different dates
+// can't overwrite each other. body: {slots: [{startTime, endTime}]} - an
+// empty slots array marks the date as a day off, overriding the weekly
+// pattern. Dates can be set up to a year ahead; entries before today are
+// pruned on every save so the list doesn't grow forever. DELETE the same
+// path to clear a date back to the weekly pattern. See utils/schedule.js
+// for how dated shifts combine with the weekly pattern.
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+function isValidDateKey(date) {
+  if (!DATE_PATTERN.test(date)) return false;
+  const d = new Date(`${date}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === date;
+}
+
+function oneYearAfter(date) {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCFullYear(d.getUTCFullYear() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+// slots === null clears the date instead of setting it.
+async function saveDateShifts(req, res, slots) {
+  const { date } = req.params;
+  if (!isValidDateKey(date)) return res.status(400).json({ error: 'date must be YYYY-MM-DD' });
+  const today = nzDayAndTime(new Date()).date;
+  if (date < today) return res.status(400).json({ error: "You can't change shifts for a past date" });
+  if (date > oneYearAfter(today)) return res.status(400).json({ error: 'Shifts can be set up to a year ahead' });
+
+  const driver = await Driver.findOne({ userId: req.user.id });
+  if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
+
+  const dateSchedule = (Array.isArray(driver.dateSchedule) ? driver.dateSchedule : [])
+    .filter((d) => d.date >= today && d.date !== date);
+  if (slots) dateSchedule.push({ date, slots });
+  dateSchedule.sort((a, b) => a.date.localeCompare(b.date));
+
+  const updated = await Driver.findByIdAndUpdate(driver._id, { dateSchedule });
+  res.json({ dateSchedule: updated.dateSchedule });
+}
+
+router.put('/schedule/dates/:date', auth, roleMiddleware(['driver']), async (req, res) => {
+  const { slots } = req.body;
+  if (!Array.isArray(slots)) return res.status(400).json({ error: 'slots must be an array' });
+  for (const slot of slots) {
+    if (!TIME_PATTERN.test(slot?.startTime) || !TIME_PATTERN.test(slot?.endTime)) {
+      return res.status(400).json({ error: 'Shift times must be HH:MM' });
+    }
+    if (slot.startTime >= slot.endTime) {
+      return res.status(400).json({ error: 'Each shift must end after it starts' });
+    }
+  }
+  const clean = slots
+    .map((s) => ({ startTime: s.startTime, endTime: s.endTime }))
+    .sort((a, b) => a.startTime.localeCompare(b.startTime));
+  return saveDateShifts(req, res, clean);
+});
+
+router.delete('/schedule/dates/:date', auth, roleMiddleware(['driver']), (req, res) => saveDateShifts(req, res, null));
+
 // GET /api/driver/qr-code - QR that deep-links passengers to book this driver directly
 router.get('/qr-code', auth, roleMiddleware(['driver']), async (req, res) => {
   const driver = await Driver.findOne({ userId: req.user.id });
@@ -293,7 +356,7 @@ router.post('/bookings', auth, roleMiddleware(['driver']), async (req, res) => {
     // them commit themselves to a scheduled trip during hours they've
     // told the platform they're not working.
     if (scheduledFor && !isWithinSchedule(driver, new Date(scheduledFor))) {
-      return res.status(400).json({ error: "That time is outside your own availability schedule. Update it under Weekly availability, or pick a different time." });
+      return res.status(400).json({ error: "That time is outside your schedule. Add a shift for it on your Schedule page, or pick a different time." });
     }
 
     let passenger;
