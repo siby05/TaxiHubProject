@@ -1,4 +1,5 @@
 const { createModel } = require('../lib/createModel');
+const { nzDateStamp } = require('../utils/nzTime');
 
 /**
  * Carried over from the previous session's Complaint.js (Mongoose schema),
@@ -27,8 +28,7 @@ const SERIOUS_TYPES = ['assault-violence', 'sexual-offence', 'dui-drugs'];
 Complaint.pre(async (doc, collection) => {
   if (!doc.complaintId) {
     const count = collection.docs.length;
-    const date = new Date();
-    const dateStr = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`;
+    const dateStr = nzDateStamp();
     doc.complaintId = `COMP-${dateStr}-${String(count + 1).padStart(5, '0')}`;
   }
   if (!doc.status) doc.status = 'open';

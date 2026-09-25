@@ -19,4 +19,15 @@ function formatNzDate(value) {
   return new Date(value).toLocaleDateString('en-NZ', { timeZone: NZ_TZ, year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-module.exports = { formatNzDateTime, formatNzDate };
+// Today's NZ calendar date as "YYYYMMDD", for human-readable IDs like
+// TRIP-20260925-00001. Plain getFullYear()/getDate() would use the
+// server's own timezone - UTC on Render - which is still "yesterday" for
+// the first 12-13 hours of every NZ day.
+function nzDateStamp(value = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-NZ', {
+    timeZone: NZ_TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date(value)).map((p) => [p.type, p.value]));
+  return `${parts.year}${parts.month}${parts.day}`;
+}
+
+module.exports = { formatNzDateTime, formatNzDate, nzDateStamp };

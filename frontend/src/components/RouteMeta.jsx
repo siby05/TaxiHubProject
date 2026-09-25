@@ -8,7 +8,7 @@ import { useLocation } from 'react-router-dom';
 // of the index - they're either behind a login or specific to one person.
 const DEFAULT = {
   title: 'EasyRide · Taxi & Airport Transfers in New Plymouth, NZ',
-  description: 'Book a local taxi in New Plymouth with upfront fares, vetted drivers and live trip updates. Airport drop-offs and long-distance trips - pre-book 24 hours ahead. Cash or card.',
+  description: 'Book a local taxi in New Plymouth with upfront fares, vetted drivers and live trip updates. Airport drop-offs and long-distance trips - pre-book 12 hours ahead. Cash or card.',
 };
 
 const PAGES = {

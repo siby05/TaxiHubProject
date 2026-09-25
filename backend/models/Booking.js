@@ -1,4 +1,5 @@
 const { createModel } = require('../lib/createModel');
+const { nzDateStamp } = require('../utils/nzTime');
 
 // Fields: bookingId (human-readable "TRIP-YYYYMMDD-NNNNN", like Complaint's
 // complaintId), passengerId (-> User), driverId (-> Driver, null while a
@@ -41,8 +42,7 @@ const Booking = createModel('Booking', {
 Booking.pre(async (doc, collection) => {
   if (!doc.bookingId) {
     const count = collection.docs.length;
-    const date = new Date();
-    const dateStr = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`;
+    const dateStr = nzDateStamp();
     doc.bookingId = `TRIP-${dateStr}-${String(count + 1).padStart(5, '0')}`;
   }
 });

@@ -250,7 +250,7 @@ export default function Home() {
           <div className="hm-head hm-reveal">
             <div className="hm-kicker">Airport &amp; long-distance</div>
             <h2>Airport drops and out-of-town trips, booked ahead</h2>
-            <p>Catching a flight or heading out of town? Pre-book at least 24 hours ahead and we'll have a confirmed driver lined up for you - no waiting to see who's free on the day.</p>
+            <p>Catching a flight or heading out of town? Pre-book at least 12 hours ahead and we'll have a confirmed driver lined up for you - no waiting to see who's free on the day.</p>
           </div>
           <div className="hm-features">
             <div className="hm-feature hm-reveal">
@@ -270,8 +270,8 @@ export default function Home() {
             <div className="hm-feature hm-reveal" data-delay="2">
               <div className="hm-icon"><Icon.clock /></div>
               <div>
-                <h4>Book 24 hours ahead</h4>
-                <p>Airport and long trips need at least 24 hours' notice so a driver can commit to your time. Just pick a date and time instead of "now" when you book.</p>
+                <h4>Book 12 hours ahead</h4>
+                <p>Airport and long trips need at least 12 hours' notice so a driver can commit to your time. Just pick a date and time instead of "now" when you book.</p>
               </div>
             </div>
           </div>

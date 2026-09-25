@@ -15,7 +15,7 @@ function seo(siteUrl) {
     '@context': 'https://schema.org',
     '@type': 'TaxiService',
     name: 'EasyRide',
-    description: 'Local taxi service in New Plymouth with upfront fares, vetted drivers, airport transfers and long-distance trips (pre-book 24 hours ahead).',
+    description: 'Local taxi service in New Plymouth with upfront fares, vetted drivers, airport transfers and long-distance trips (pre-book 12 hours ahead).',
     areaServed: [
       { '@type': 'City', name: 'New Plymouth' },
       { '@type': 'AdministrativeArea', name: 'Taranaki' },
