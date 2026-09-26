@@ -531,7 +531,7 @@ router.get('/settings', async (req, res) => {
 router.put('/settings', async (req, res) => {
   const {
     commissionType, commissionPercent, weeklyFlatFee, outstandingFeeLimit, minimumFare, fareRanges,
-    driverSignupEnabled, vehicleSelectionEnabled, tempPasswordVisible, adminEmail, adminMobile, backupFrequency, tripRetentionDays,
+    longDistanceThresholdKm, longDistanceRatePerKm, driverSignupEnabled, vehicleSelectionEnabled, tempPasswordVisible, adminEmail, adminMobile, backupFrequency, tripRetentionDays,
   } = req.body;
   try {
     if (adminEmail != null && adminEmail && !/^\S+@\S+\.\S+$/.test(adminEmail)) {
@@ -543,6 +543,10 @@ router.put('/settings', async (req, res) => {
       ...(weeklyFlatFee != null && { weeklyFlatFee: Number(weeklyFlatFee) }),
       ...(outstandingFeeLimit != null && { outstandingFeeLimit: Number(outstandingFeeLimit) }),
       ...(minimumFare != null && { minimumFare: Number(minimumFare) }),
+      ...(longDistanceThresholdKm != null && longDistanceThresholdKm !== '' && { longDistanceThresholdKm: Number(longDistanceThresholdKm) }),
+      ...(longDistanceRatePerKm !== undefined && {
+        longDistanceRatePerKm: longDistanceRatePerKm === '' || longDistanceRatePerKm == null || Number(longDistanceRatePerKm) === 0 ? null : Number(longDistanceRatePerKm),
+      }),
       ...(fareRanges && { fareRanges: fareRanges.map((r) => ({ maxKm: Number(r.maxKm), price: Number(r.price) })) }),
       ...(driverSignupEnabled != null && { driverSignupEnabled: !!driverSignupEnabled }),
       ...(vehicleSelectionEnabled != null && { vehicleSelectionEnabled: !!vehicleSelectionEnabled }),

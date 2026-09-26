@@ -27,12 +27,25 @@ function rangeBasedPrice(distanceKm, fareRanges) {
   return band ? band.price : 0;
 }
 
-// The actual quoted fare: the highest of (a) the per-km calculation, (b)
-// the admin's flat minimum fare, and (c) the admin's range-based price for
-// this distance band - so neither a cheap per-km rate nor a driver's own
-// rate can undercut the platform's configured floors.
+// The per-km rate a trip is charged at. Normally the driver's own rate;
+// for a trip longer than the admin's long-distance threshold (see
+// config/platformSettings.js longDistanceThresholdKm/RatePerKm) the whole
+// trip uses the admin's long-distance rate instead - unless the driver's
+// own rate is already higher, which is kept.
+function effectiveRatePerKm(distanceKm, ratePerKm, settings) {
+  const rate = ratePerKm || Number(process.env.DEFAULT_RATE_PER_KM) || 1.8;
+  const longRate = Number(settings?.longDistanceRatePerKm) || 0;
+  const threshold = Number(settings?.longDistanceThresholdKm) || 100;
+  return longRate > 0 && distanceKm > threshold ? Math.max(rate, longRate) : rate;
+}
+
+// The actual quoted fare: the highest of (a) the per-km calculation (at
+// the long-distance rate for long trips), (b) the admin's flat minimum
+// fare, and (c) the admin's range-based price for this distance band - so
+// neither a cheap per-km rate nor a driver's own rate can undercut the
+// platform's configured floors.
 function calculateTripFare(distanceKm, ratePerKm, settings) {
-  const byDistance = calculateFare(distanceKm, ratePerKm);
+  const byDistance = calculateFare(distanceKm, effectiveRatePerKm(distanceKm, ratePerKm, settings));
   const byMinimum = settings?.minimumFare || 0;
   const byRange = rangeBasedPrice(distanceKm, settings?.fareRanges);
   return Math.max(byDistance, byMinimum, byRange);

@@ -330,10 +330,18 @@ router.post('/bookings', auth, roleMiddleware(['driver']), async (req, res) => {
     const {
       passengerId, passengerName, passengerMobile, passengerEmail, passengerAddress,
       pickupAddress, pickupLat, pickupLng, dropAddress, dropLat, dropLng, scheduledFor, paymentMethod, stops,
+      customFare,
     } = req.body;
 
     if (!pickupAddress || !dropAddress || pickupLat == null || dropLat == null) {
       return res.status(400).json({ error: 'pickupAddress, dropAddress and lat/lng for both are required' });
+    }
+    // Optional price the driver agreed with the passenger (e.g. over the
+    // phone). Blank = the normal calculated fare.
+    const hasCustomFare = customFare !== undefined && customFare !== null && customFare !== '';
+    const customFareValue = hasCustomFare ? Math.round(Number(customFare) * 100) / 100 : null;
+    if (hasCustomFare && !(customFareValue > 0 && customFareValue <= 10000)) {
+      return res.status(400).json({ error: 'Trip price must be an amount between $0.01 and $10,000, or left empty to use the calculated fare' });
     }
     if (scheduledFor && new Date(scheduledFor) <= new Date()) {
       return res.status(400).json({ error: 'scheduledFor must be a time in the future' });
@@ -387,7 +395,9 @@ router.post('/bookings', auth, roleMiddleware(['driver']), async (req, res) => {
 
     const distanceKm = routeDistanceKm({ lat: pickupLat, lng: pickupLng }, { lat: dropLat, lng: dropLng }, stops);
     const driverBookingSettings = getSettings();
-    const estimatedFare = calculateTripFare(distanceKm, driver.ratePerKm, driverBookingSettings);
+    const estimatedFare = hasCustomFare
+      ? customFareValue
+      : calculateTripFare(distanceKm, driver.ratePerKm, driverBookingSettings);
     const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(estimatedFare) : 0;
 
     const booking = await Booking.create({
@@ -410,6 +420,8 @@ router.post('/bookings', auth, roleMiddleware(['driver']), async (req, res) => {
       acceptedAt: new Date(),
       scheduledFor: scheduledFor ? new Date(scheduledFor) : null,
       bookedByDriver: true,
+      // Kept so an admin can tell a driver-set price from a calculated one.
+      fareSetByDriver: hasCustomFare,
     });
 
     if (passenger.emailVerified) {

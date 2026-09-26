@@ -26,6 +26,9 @@ export default function DriverBookForPassenger() {
   const stopHandlers = makeStopHandlers(setStops);
   const [scheduledFor, setScheduledFor] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState('cash');
+  // Optional price the driver agreed with the passenger - blank uses the
+  // calculated fare from the quote below.
+  const [customFare, setCustomFare] = useState('');
   const [quote, setQuote] = useState(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [error, setError] = useState('');
@@ -50,12 +53,15 @@ export default function DriverBookForPassenger() {
     if (stops.some((s) => !s.selection)) return;
     let cancelled = false;
     setQuoteLoading(true);
-    client.post('/booking/quote', { pickupLat: pickup.lat, pickupLng: pickup.lng, dropLat: drop.lat, dropLng: drop.lng, stops: stopsPayload(stops), paymentMethod })
+    client.post('/booking/quote', { pickupLat: pickup.lat, pickupLng: pickup.lng, dropLat: drop.lat, dropLng: drop.lng, stops: stopsPayload(stops), paymentMethod, scheduledFor })
       .then((r) => { if (!cancelled) setQuote(r.data); })
       .catch((err) => { if (!cancelled) setError(err.response?.data?.error || 'Could not calculate fare'); })
       .finally(() => { if (!cancelled) setQuoteLoading(false); });
     return () => { cancelled = true; };
-  }, [pickup, drop, stops, paymentMethod]);
+  }, [pickup, drop, stops, paymentMethod, scheduledFor]);
+
+  const customFareNumber = customFare.trim() === '' ? null : Number(customFare);
+  const customFareInvalid = customFareNumber !== null && !(customFareNumber > 0 && customFareNumber <= 10000);
 
   const passengerReady = mode === 'search' ? !!selected : !!(newPassenger.name && newPassenger.mobile && newPassenger.address);
 
@@ -77,6 +83,7 @@ export default function DriverBookForPassenger() {
         stops: stopsPayload(stops),
         scheduledFor,
         paymentMethod,
+        ...(customFareNumber !== null && { customFare: customFareNumber }),
       });
       setSuccess(data);
     } catch (err) {
@@ -177,13 +184,34 @@ export default function DriverBookForPassenger() {
 
           {quote && !quoteLoading && (
             <div className="card fare-confirm">
-              <strong>Estimated fare: ${quote.estimatedFare.toFixed(2)}</strong>
-              {quote.cardSurchargeAmount > 0 && (
+              <strong>
+                {customFareNumber !== null && !customFareInvalid
+                  ? <>Trip price: ${customFareNumber.toFixed(2)} <span className="muted" style={{ fontWeight: 400 }}>(set by you - calculated fare ${quote.estimatedFare.toFixed(2)})</span></>
+                  : <>Estimated fare: ${quote.estimatedFare.toFixed(2)}</>}
+              </strong>
+              {customFareNumber === null && quote.cardSurchargeAmount > 0 && (
                 <div className="muted">+ ${quote.cardSurchargeAmount.toFixed(2)} card processing fee (Stripe, NZ cards) = <strong>${quote.total.toFixed(2)} total</strong> - overseas cards cost a little more</div>
               )}
               <div className="muted">{quote.distanceKm} km{stops.length > 0 && ` · via ${stops.length} stop${stops.length > 1 ? 's' : ''}`}{scheduledFor && ` · scheduled for ${formatNzDateTime(scheduledFor)}`}</div>
+              {customFareNumber !== null && paymentMethod === 'card' && (
+                <div className="muted">The card processing fee is added on top of your price when the passenger pays.</div>
+              )}
+
+              <div style={{ marginTop: 12 }}>
+                <label htmlFor="custom-fare">Trip price (optional)</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, maxWidth: 220 }}>
+                  <span className="muted">$</span>
+                  <input id="custom-fare" type="number" inputMode="decimal" step="0.5" min="0" placeholder={quote.estimatedFare.toFixed(2)}
+                    value={customFare} onChange={(e) => setCustomFare(e.target.value)} />
+                </div>
+                <p className="muted" style={{ marginTop: 4, fontSize: '0.8rem' }}>
+                  Leave empty to use the calculated fare. Enter an amount if you've agreed a different price with the passenger.
+                </p>
+                {customFareInvalid && <p className="error-text">Enter an amount between $0.01 and $10,000, or leave it empty.</p>}
+              </div>
+
               {error && <p className="error-text">{error}</p>}
-              <button className="btn" style={{ marginTop: 8 }} onClick={confirmBooking} disabled={loading || !passengerReady}>
+              <button className="btn" style={{ marginTop: 8 }} onClick={confirmBooking} disabled={loading || !passengerReady || customFareInvalid}>
                 {loading ? 'Booking...' : 'Confirm booking'}
               </button>
               {!passengerReady && <p className="muted">Select or register a passenger first.</p>}

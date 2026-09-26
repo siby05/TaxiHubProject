@@ -40,6 +40,12 @@ let settings = {
   // whichever of (distance x rate + base fare), minimumFare, and the
   // matching range price is highest.
   fareRanges: [],
+  // Long-distance pricing: a trip longer than longDistanceThresholdKm is
+  // charged at longDistanceRatePerKm for its whole distance (or the
+  // driver's own rate, if that's higher). null/0 rate = off, every trip
+  // uses the driver's rate. See utils/distance.js effectiveRatePerKm().
+  longDistanceThresholdKm: 100,
+  longDistanceRatePerKm: null,
   // Whether "Drive with us" / driver self-signup is open right now - an
   // admin can close it (e.g. the driver roster is full, or applications
   // need to pause) without touching code. Hidden from the public nav and
@@ -121,6 +127,12 @@ function updateSettings(patch) {
   }
   if (patch.tripRetentionDays != null && (!Number.isInteger(patch.tripRetentionDays) || patch.tripRetentionDays < 0)) {
     throw new Error('tripRetentionDays must be a positive whole number of days, or 0/null to disable');
+  }
+  if (patch.longDistanceThresholdKm !== undefined && !(patch.longDistanceThresholdKm > 0)) {
+    throw new Error('longDistanceThresholdKm must be a distance above 0 km');
+  }
+  if (patch.longDistanceRatePerKm != null && !(patch.longDistanceRatePerKm >= 0)) {
+    throw new Error('longDistanceRatePerKm must be 0 or more (0 or blank turns it off)');
   }
   if (patch.fareRanges) {
     if (!Array.isArray(patch.fareRanges) || patch.fareRanges.some((r) => typeof r.maxKm !== 'number' || typeof r.price !== 'number' || r.maxKm <= 0 || r.price < 0)) {

@@ -702,6 +702,25 @@ export default function AdminDashboard() {
             </div>
 
             <div>
+              <label>Long-distance rate</label>
+              <p className="muted" style={{ marginTop: 0 }}>
+                Trips longer than the distance below are charged at this per-km rate for the whole trip (or the
+                driver's own rate, if that's higher). Leave the rate empty to turn it off.
+              </p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                <span className="muted">Trips over</span>
+                <input type="number" step="1" min="1" style={{ maxWidth: 100 }} aria-label="Long-distance threshold (km)"
+                  value={settings.longDistanceThresholdKm ?? 100}
+                  onChange={(e) => setSettings((s) => ({ ...s, longDistanceThresholdKm: e.target.value }))} />
+                <span className="muted">km → $</span>
+                <input type="number" step="0.05" min="0" style={{ maxWidth: 100 }} placeholder="off" aria-label="Long-distance rate ($ per km)"
+                  value={settings.longDistanceRatePerKm ?? ''}
+                  onChange={(e) => setSettings((s) => ({ ...s, longDistanceRatePerKm: e.target.value }))} />
+                <span className="muted">per km</span>
+              </div>
+            </div>
+
+            <div>
               <label>Range-based prices</label>
               <p className="muted" style={{ marginTop: 0 }}>
                 E.g. "up to 5 km = $12" - a flat price for any trip whose distance falls at or under that km figure.
