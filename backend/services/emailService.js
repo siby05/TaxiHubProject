@@ -628,7 +628,7 @@ You'll get another email as soon as a driver accepts. Track it here: ${appUrl('/
     send(
       to,
       `EasyRide data backup - ${formatNzDate(new Date())}`,
-      `Attached: ${counts.passengers} passengers, ${counts.bookings} trips, ${counts.complaints} complaints (CSV files).`,
+      `Attached: ${counts.passengers} passengers, ${counts.drivers ?? 0} drivers, ${counts.bookings} trips, ${counts.complaints} complaints (CSV files).`,
       attachments,
     ),
 

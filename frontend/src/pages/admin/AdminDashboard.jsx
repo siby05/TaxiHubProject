@@ -9,6 +9,15 @@ import { formatNzDate, formatNzDateTime } from '../../utils/nzTime';
 
 const DOC_STATUS_CLASS = { verified: 'approved', rejected: 'rejected', pending: 'pending' };
 
+// When the scheduler (backend utils/backup.js) will next send a backup:
+// the frequency after the last one sent, or after the schedule started.
+function nextBackupDue(settings) {
+  const since = settings.lastBackupAt || settings.backupScheduleStartedAt;
+  if (!since) return null;
+  const days = settings.backupFrequency === 'monthly' ? 30 : 7;
+  return new Date(new Date(since).getTime() + days * 24 * 60 * 60 * 1000);
+}
+
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const { user, token, setSession } = useAuthStore();
@@ -245,7 +254,8 @@ export default function AdminDashboard() {
     setBackupMsg('Sending...');
     try {
       const { data } = await client.post('/admin/backup/run');
-      setBackupMsg(`Sent: ${data.counts.passengers} passengers, ${data.counts.bookings} trips, ${data.counts.complaints} complaints.`);
+      setBackupMsg(`Sent: ${data.counts.passengers} passengers, ${data.counts.drivers ?? 0} drivers, ${data.counts.bookings} trips, ${data.counts.complaints} complaints.`);
+      client.get('/admin/settings').then((r) => setSettings(r.data)).catch(() => {});
       client.get('/admin/settings').then((r) => setSettings(r.data));
     } catch (err) {
       setBackupMsg(err.response?.data?.error || 'Could not send backup');
@@ -820,8 +830,8 @@ export default function AdminDashboard() {
         <div className="card" style={{ maxWidth: 480 }}>
           <h3>Admin contact &amp; data backups</h3>
           <p className="muted">
-            Serious-complaint alerts and scheduled backups go to this address. A CSV export of passengers, trips and
-            complaints is emailed here automatically on the schedule below. Both fields also power the "Contact
+            Serious-complaint alerts and scheduled backups go to this address. A CSV export of passengers, drivers,
+            trips and complaints is emailed here automatically on the schedule below. Both fields also power the "Contact
             admin" links shown to a passenger when no driver is available.
           </p>
           <form onSubmit={saveSettings}>
@@ -842,8 +852,14 @@ export default function AdminDashboard() {
           </form>
           <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
             <p className="muted" style={{ marginTop: 0 }}>
-              {settings.lastBackupAt ? `Last backup: ${formatNzDateTime(settings.lastBackupAt)}` : 'No backup has been sent yet.'}
+              {settings.lastBackupAt ? `Last backup sent: ${formatNzDateTime(settings.lastBackupAt)}` : 'No backup has been sent yet.'}
+              {nextBackupDue(settings) && <><br />Next automatic backup: around {formatNzDateTime(nextBackupDue(settings))}</>}
             </p>
+            {settings.lastBackupError && (
+              <p className="error-text" style={{ marginTop: 0 }}>
+                Last automatic backup failed ({formatNzDateTime(settings.lastBackupError.at)}): {settings.lastBackupError.message}. It retries automatically.
+              </p>
+            )}
             <button type="button" className="btn secondary" onClick={runBackupNow}>Run backup now</button>
             {backupMsg && <p className="muted" style={{ marginTop: 8 }}>{backupMsg}</p>}
           </div>

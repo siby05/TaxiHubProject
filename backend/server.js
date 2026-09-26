@@ -33,6 +33,7 @@ const notificationRoutes = require('./routes/notifications');
 const driverSignupRoutes = require('./routes/driverSignup');
 const feedbackRoutes = require('./routes/feedback');
 const enquiryRoutes = require('./routes/enquiry');
+const cronRoutes = require('./routes/cron');
 const stripeConnectRoutes = require('./routes/stripeConnect');
 const { setIo } = require('./utils/notify');
 const { startReminderScheduler } = require('./utils/reminders');
@@ -100,6 +101,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/driver-signup', driverSignupRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/enquiry', enquiryRoutes);
+app.use('/api/cron', cronRoutes);
 app.use('/api/driver/stripe', stripeConnectRoutes);
 
 app.use(notFound);

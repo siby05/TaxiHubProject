@@ -84,6 +84,11 @@ let settings = {
   // a much coarser grain.
   backupFrequency: 'weekly',
   lastBackupAt: null,
+  // When the backup schedule started counting (set on the first scheduler
+  // check, before any backup has been sent) and the latest scheduled
+  // failure ({at, message}, cleared on the next success) - see utils/backup.js.
+  backupScheduleStartedAt: null,
+  lastBackupError: null,
   // Optional trip-record housekeeping for when database space needs
   // managing - null/0 keeps every trip forever (the default). A positive
   // number auto-deletes completed/cancelled trips older than that many
