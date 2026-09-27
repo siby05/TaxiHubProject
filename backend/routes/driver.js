@@ -13,6 +13,7 @@ const { placeholderEmail } = require('../utils/users');
 const { notifyUser, notifyAdmins } = require('../utils/notify');
 const { checkDriverCompliance } = require('../utils/compliance');
 const { isWithinSchedule, nzDayAndTime } = require('../utils/schedule');
+const { checkWeeklyPattern, checkSchedule } = require('../utils/workTime');
 const { getSettings } = require('../config/platformSettings');
 const { DRIVER_DOCUMENTS, isValidDocumentKey, documentLabel, allDocumentsVerified } = require('../config/driverDocuments');
 const { documentUpload, documentUrl } = require('../utils/documentUpload');
@@ -165,11 +166,26 @@ router.put('/schedule', auth, roleMiddleware(['driver']), async (req, res) => {
     }
   }
 
+  const availabilitySchedule = schedule.map((day) => ({
+    dayOfWeek: day.dayOfWeek,
+    slots: day.slots.map((s) => ({ startTime: s.startTime, endTime: s.endTime })),
+  }));
+  // NZTA work time rules (utils/workTime.js) - the pattern on its own...
+  const patternError = checkWeeklyPattern(availabilitySchedule);
+  if (patternError) return res.status(400).json({ error: patternError });
+
   const driver = await Driver.findOne({ userId: req.user.id });
   if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
-  const updated = await Driver.findByIdAndUpdate(driver._id, {
-    availabilitySchedule: schedule.map((day) => ({ dayOfWeek: day.dayOfWeek, slots: day.slots })),
+  // ...and around dated shifts already entered. Only dates still following
+  // the weekly pattern are held against this save.
+  const dated = Array.isArray(driver.dateSchedule) ? driver.dateSchedule : [];
+  const combinedError = checkSchedule({
+    weekly: availabilitySchedule, dated, today: nzDayAndTime(new Date()).date,
+    involves: (date) => !dated.some((d) => d.date === date),
   });
+  if (combinedError) return res.status(400).json({ error: combinedError });
+
+  const updated = await Driver.findByIdAndUpdate(driver._id, { availabilitySchedule });
   res.json(updated);
 });
 
@@ -208,9 +224,17 @@ async function saveDateShifts(req, res, slots) {
   const driver = await Driver.findOne({ userId: req.user.id });
   if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
 
-  const dateSchedule = (Array.isArray(driver.dateSchedule) ? driver.dateSchedule : [])
-    .filter((d) => d.date >= today && d.date !== date);
-  if (slots) dateSchedule.push({ date, slots });
+  const next = (Array.isArray(driver.dateSchedule) ? driver.dateSchedule : []).filter((d) => d.date !== date);
+  if (slots) next.push({ date, slots });
+  // NZTA work time rules (utils/workTime.js), checked before pruning so
+  // yesterday's shifts still count against today's first shift.
+  const workTimeError = checkSchedule({
+    weekly: Array.isArray(driver.availabilitySchedule) ? driver.availabilitySchedule : [],
+    dated: next, today, involves: (d) => d === date,
+  });
+  if (workTimeError) return res.status(400).json({ error: workTimeError });
+
+  const dateSchedule = next.filter((d) => d.date >= today);
   dateSchedule.sort((a, b) => a.date.localeCompare(b.date));
 
   const updated = await Driver.findByIdAndUpdate(driver._id, { dateSchedule });

@@ -77,4 +77,4 @@ function hasDeclaredSchedule(driver, now = new Date()) {
   return dated.some((d) => d.date >= today && (d.slots || []).length > 0);
 }
 
-module.exports = { isWithinSchedule, hasDeclaredSchedule, nzDayAndTime };
+module.exports = { isWithinSchedule, hasDeclaredSchedule, nzDayAndTime, daySlots };

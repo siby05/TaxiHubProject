@@ -206,16 +206,20 @@ function DateShiftsDialog({ date, entry, weeklySlots, onSaved, onClose }) {
     setStatus('saving');
     let saved = 0;
     let latest = null;
+    let firstError = '';
     for (let week = 1; week <= REPEAT_WEEKS; week += 1) {
       try {
         const r = await client.put(`/driver/schedule/dates/${addDays(date, 7 * week)}`, { slots: checked.slots });
         latest = r.data.dateSchedule;
         saved += 1;
-      } catch {
-        // Past the one-year window, or a network blip - keep going with the rest.
+      } catch (err) {
+        // Past the one-year window, an NZTA work-time clash on that date, or
+        // a network blip - keep going with the rest.
+        if (!firstError) firstError = err.response?.data?.error || '';
       }
     }
     if (latest) onSaved(latest);
+    setError(saved < REPEAT_WEEKS ? firstError : '');
     setStatus(saved ? 'saved' : 'idle');
     setRepeatNote(saved
       ? `Copied to the next ${saved} ${DAY_NAMES[weekdayOf(date)]}${saved > 1 ? 's' : ''}.`
@@ -365,7 +369,7 @@ function WeeklyHours({ schedule, setSchedule }) {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
             <strong>{DAY_NAMES[day.dayOfWeek]}</strong>
             <button type="button" className="btn secondary"
-              onClick={() => editDay(day.dayOfWeek, [...day.slots, { startTime: '09:00', endTime: '17:00' }])}>+ Add shift</button>
+              onClick={() => editDay(day.dayOfWeek, [...day.slots, { startTime: '09:00', endTime: '16:00' }])}>+ Add shift</button>
           </div>
           {day.slots.length === 0 && <p className="muted" style={{ margin: '6px 0 0' }}>Not available</p>}
           {day.slots.map((slot, i) => (
@@ -411,6 +415,11 @@ export default function DriverSchedule() {
         Tap a date to enter your shifts for that day - you can plan up to a year ahead, and everything saves
         automatically. This is separate from the "Go online/offline" switch on your dashboard, which controls whether
         you can receive ride requests right now.
+      </p>
+      <p className="muted" style={{ fontSize: '0.85rem' }}>
+        Shifts follow NZTA work time rules: at least 10 hours' rest between one day's last shift and the next
+        day's first, no more than 13 hours' work in a day, a 30-minute break after at most 7 hours' continuous
+        work, and a 24-hour break after at most 70 hours' work.
       </p>
       {loadError && <p className="error-text">{loadError}</p>}
 
