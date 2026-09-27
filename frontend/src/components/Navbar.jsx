@@ -29,11 +29,9 @@ const ROLE_LINKS = {
   ],
 };
 
-// Signed-in users (passenger/driver/admin) always get a hamburger menu that
-// opens a side drawer - the driver alone has ten links, which never fit a
-// top bar on anything smaller than a wide laptop. Signed-out visitors keep
-// inline links on wide screens (good for the public site and its SEO) and
-// get the same drawer on phones.
+// Everyone gets a hamburger menu that opens a side drawer - the driver alone
+// has ten links, which never fit a top bar. Signed-out visitors keep only
+// "Log in" in the top bar; everything else lives in the drawer.
 export default function Navbar() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
@@ -48,7 +46,6 @@ export default function Navbar() {
     : [
       { to: '/new-plymouth-to-auckland', label: 'To Auckland' },
       { to: '/about', label: 'About' },
-      { to: '/login', label: 'Log in' },
       { to: '/register', label: 'Sign up' },
       ...(driverSignupEnabled ? [{ to: '/driver-signup', label: 'Drive with us' }] : []),
     ];
@@ -94,7 +91,11 @@ export default function Navbar() {
         <Link className="brand" to={user ? home : '/'}><Logo size={30} dark /></Link>
       </div>
 
-      {!user && <nav className="navbar-inline" aria-label="Main">{linkList}</nav>}
+      {!user && (
+        <nav className="navbar-inline" aria-label="Main">
+          <NavLink to="/login" end>Log in</NavLink>
+        </nav>
+      )}
 
       {user && <div className="navbar-actions"><NotificationBell /></div>}
 

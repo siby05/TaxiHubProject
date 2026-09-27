@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import client from '../../api/client';
 import AddressAutocomplete from '../../components/AddressAutocomplete';
+import TimeSelect from '../../components/TimeSelect';
 
 const COMPLAINT_TYPES = [
   'driver-behaviour', 'vehicle-condition', 'safety-concern', 'route-issue', 'payment-issue',
@@ -72,7 +73,7 @@ export default function LodgeComplaint() {
           <div><label>Description</label><textarea value={form.description} onChange={(e) => update('description', e.target.value)} required minLength={10} maxLength={2000} /></div>
           <div className="grid cols-2">
             <div><label>Incident date</label><input type="date" value={form.incidentDate} onChange={(e) => update('incidentDate', e.target.value)} required /></div>
-            <div><label>Incident time</label><input type="time" value={form.incidentTime} onChange={(e) => update('incidentTime', e.target.value)} required /></div>
+            <div><label>Incident time</label><TimeSelect value={form.incidentTime} ariaLabel="Incident time" onChange={(t) => update('incidentTime', t)} required /></div>
           </div>
           <AddressAutocomplete label="Incident location" placeholder="Start typing an address..." onSelect={(r) => update('incidentLocation', r ? r.label : '')} required allowLocate />
           {error && <p className="error-text">{error}</p>}

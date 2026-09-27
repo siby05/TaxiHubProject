@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import client from '../../api/client';
 import Modal from '../../components/Modal';
+import TimeSelect from '../../components/TimeSelect';
 import { todayNz } from '../../utils/nzTime';
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -131,11 +132,11 @@ function SaveStatus({ status, error }) {
 function SlotRow({ slot, onChange, onRemove }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
-      <input type="time" value={slot.startTime} style={{ width: 130 }} aria-label="Shift start"
-        onChange={(e) => onChange({ ...slot, startTime: e.target.value })} />
+      <TimeSelect value={slot.startTime} style={{ width: 220 }} ariaLabel="Shift start"
+        onChange={(t) => onChange({ ...slot, startTime: t })} />
       <span className="muted">to</span>
-      <input type="time" value={slot.endTime} style={{ width: 130 }} aria-label="Shift end"
-        onChange={(e) => onChange({ ...slot, endTime: e.target.value })} />
+      <TimeSelect value={slot.endTime} style={{ width: 220 }} ariaLabel="Shift end"
+        onChange={(t) => onChange({ ...slot, endTime: t })} />
       <button type="button" className="btn danger" onClick={onRemove}>Remove</button>
     </div>
   );

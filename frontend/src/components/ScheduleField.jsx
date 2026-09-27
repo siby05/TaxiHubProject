@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import TimeSelect from './TimeSelect';
 import { nzWallTimeToISO, isoToNzDateTimeInputs, todayNz } from '../utils/nzTime';
 
 // Optional "book for later" toggle. Reports the combined date+time as an
@@ -53,8 +54,7 @@ export default function ScheduleField({ onChange, defaultValue }) {
           </div>
           <div style={{ minWidth: 0 }}>
             <label>Time</label>
-            <input type="time" value={time} required onChange={(e) => update(date, e.target.value)}
-              style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }} />
+            <TimeSelect value={time} required ariaLabel="Time" onChange={(t) => update(date, t)} />
           </div>
         </div>
       )}
