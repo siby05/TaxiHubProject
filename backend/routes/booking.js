@@ -18,6 +18,7 @@ const Driver = require('../models/Driver');
 const User = require('../models/User');
 const { auth, roleMiddleware } = require('../middleware/auth');
 const { emailService, buildReceiptPage, buildRespondPage, buildRespondResultPage } = require('../services/emailService');
+const { runInBackground } = require('../utils/background');
 const { buildInvoicePdf } = require('../services/invoicePdf');
 const { haversineKm, calculateTripFare, calculateCardSurcharge, routeDistanceKm, invalidStopsError, cleanStops } = require('../utils/distance');
 const { VEHICLE_TYPES, isValidVehicleType } = require('../config/vehicleTypes');
@@ -256,10 +257,10 @@ async function alertDriverOfBooking(req, driverUserId, booking, passengerName, p
   if (driver) {
     const t = respondToken(booking._id, driver._id);
     const base = `${apiBase(req)}/booking/${booking._id}/respond?t=${encodeURIComponent(t)}&action=`;
-    await emailService.sendDriverBookingAlert(driverUser.email, booking, { acceptUrl: `${base}accept`, declineUrl: `${base}decline` });
+    runInBackground('email sendDriverBookingAlert', () => emailService.sendDriverBookingAlert(driverUser.email, booking, { acceptUrl: `${base}accept`, declineUrl: `${base}decline` }));
   }
   emitToUser(req, driverUserId, 'booking:new', { ...booking, passengerName, passengerRatingAvg });
-  await notifyUser(driverUserId, {
+  notifyUser(driverUserId, {
     type: 'booking-new',
     title: 'New ride request',
     message: `${passengerName} (${passengerRatingAvg ? `⭐${passengerRatingAvg}` : 'no ratings yet'}) · ${booking.pickupAddress} → ${booking.dropAddress} - $${booking.estimatedFare}`,
@@ -275,9 +276,9 @@ async function alertDriverOfBooking(req, driverUserId, booking, passengerName, p
 async function notifyDriverOfAutoAcceptedTrip(req, driverUserId, booking, passengerName, passengerRatingAvg) {
   const driverUser = await User.findById(driverUserId);
   if (!driverUser) return;
-  await emailService.sendDriverTripAssigned(driverUser.email, booking);
+  runInBackground('email sendDriverTripAssigned', () => emailService.sendDriverTripAssigned(driverUser.email, booking));
   emitToUser(req, driverUserId, 'booking:new', { ...booking, passengerName, passengerRatingAvg });
-  await notifyUser(driverUserId, {
+  notifyUser(driverUserId, {
     type: 'booking-new',
     title: 'New confirmed trip',
     message: `${passengerName} scanned your QR code - ${booking.pickupAddress} → ${booking.dropAddress} - $${booking.estimatedFare}`,
@@ -565,22 +566,21 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
 
     if (autoAccept) {
       const assignedDriver = await Driver.findById(targetDriverId).populate('userId', 'name');
-      await emailService.sendBookingConfirmedDirect(passenger.email, booking, assignedDriver, assignedDriver?.userId?.name);
+      runInBackground('email sendBookingConfirmedDirect', () => emailService.sendBookingConfirmedDirect(passenger.email, booking, assignedDriver, assignedDriver?.userId?.name));
     } else {
-      await emailService.sendBookingConfirmation(passenger.email, booking);
+      runInBackground('email sendBookingConfirmation', () => emailService.sendBookingConfirmation(passenger.email, booking));
     }
 
     const notifyDriverIds = targetDriverId
       ? [(await Driver.findById(targetDriverId)).userId]
       : broadcastCandidates.map((d) => d.userId);
 
-    for (const driverUserId of notifyDriverIds) {
-      if (autoAccept) {
-        await notifyDriverOfAutoAcceptedTrip(req, driverUserId, booking, passenger.name, passengerRatingAvg);
-      } else {
-        await alertDriverOfBooking(req, driverUserId, booking, passenger.name, passengerRatingAvg);
-      }
-    }
+    // In parallel rather than one driver after another - each alert is only
+    // a couple of lookups plus the live socket push now (its email and
+    // in-app notification are queued in the background), so a broadcast to
+    // many drivers doesn't hold up the passenger's booking response.
+    const alert = autoAccept ? notifyDriverOfAutoAcceptedTrip : alertDriverOfBooking;
+    await Promise.all(notifyDriverIds.map((driverUserId) => alert(req, driverUserId, booking, passenger.name, passengerRatingAvg)));
 
     res.status(201).json({ ...booking, usedFallback, requestedUnavailable, requestedCashOnly, requestedName, broadcast: !targetDriverId });
   } catch (err) {
@@ -705,7 +705,7 @@ router.post('/guest', guestLimiter, async (req, res) => {
     });
 
     const assignedDriver = await Driver.findById(resolved.driver._id).populate('userId', 'name');
-    await emailService.sendBookingConfirmedDirect(passenger.email, booking, assignedDriver, assignedDriver?.userId?.name);
+    runInBackground('email sendBookingConfirmedDirect', () => emailService.sendBookingConfirmedDirect(passenger.email, booking, assignedDriver, assignedDriver?.userId?.name));
     await notifyDriverOfAutoAcceptedTrip(req, resolved.driver.userId, booking, passenger.name, passengerRatingAvg);
 
     // A guest who chose to pay online has no other way back into the app
@@ -844,7 +844,7 @@ router.put('/:id/edit', auth, roleMiddleware(['passenger']), async (req, res) =>
       const driverUser = await User.findById((await Driver.findById(booking.driverId)).userId);
       if (driverUser) {
         emitToUser(req, driverUser._id, 'booking:updated', { bookingId: booking._id });
-        await notifyUser(driverUser._id, {
+        notifyUser(driverUser._id, {
           type: 'booking-updated',
           title: 'A trip you accepted was updated',
           message: `${updated.pickupAddress} → ${updated.dropAddress}`,
@@ -1015,9 +1015,9 @@ async function acceptBooking(req, booking, driver, driverName) {
   }
 
   const passenger = await User.findById(booking.passengerId);
-  await emailService.sendBookingAccepted(passenger.email, updated, driver, driverName);
+  runInBackground('email sendBookingAccepted', () => emailService.sendBookingAccepted(passenger.email, updated, driver, driverName));
   emitToUser(req, booking.passengerId, 'booking:accepted', updated);
-  await notifyUser(booking.passengerId, {
+  notifyUser(booking.passengerId, {
     type: 'booking-accepted',
     title: 'A driver accepted your ride',
     message: `${updated.pickupAddress} → ${updated.dropAddress}`,
@@ -1029,7 +1029,7 @@ async function acceptBooking(req, booking, driver, driverName) {
     for (const d of others) emitToUser(req, d.userId, 'booking:claimed', { bookingId: booking._id });
   }
 
-  await notifyAdmins({
+  notifyAdmins({
     type: 'driver-action',
     title: 'Driver accepted a trip',
     message: `${driverName || 'A driver'} accepted booking ${updated._id}`,
@@ -1079,7 +1079,7 @@ async function declineBooking(req, booking, driver) {
       await alertDriverOfBooking(req, d.userId, updated, passenger.name, passengerRatingAvg);
     }
 
-    await notifyUser(booking.passengerId, {
+    notifyUser(booking.passengerId, {
       type: 'booking-declined',
       title: others.length ? 'Finding you another driver' : 'No driver available yet',
       message: others.length
@@ -1177,7 +1177,7 @@ router.put('/:id/arrived', auth, roleMiddleware(['driver']), async (req, res) =>
   const vehicleLabel = `${vehicleMake ? `${vehicleMake} (${driver.vehicleType})` : driver.vehicleType} · ${driver.vehicleNumber}`;
 
   emitToUser(req, booking.passengerId, 'booking:arrived', updated);
-  await notifyUser(booking.passengerId, {
+  notifyUser(booking.passengerId, {
     type: 'booking-arrived',
     title: 'Your driver has arrived',
     message: `${driverUser?.name || 'Your driver'} (${vehicleLabel}) is waiting at ${booking.pickupAddress}.`,
@@ -1213,43 +1213,49 @@ router.put('/:id/complete', auth, roleMiddleware(['driver']), async (req, res) =
       ...(booking.paymentMethod !== 'card' && { paymentStatus: 'paid' }),
     });
 
-    const driver = await Driver.findById(booking.driverId);
-    await Driver.findByIdAndUpdate(driver._id, {
-      totalTrips: (driver.totalTrips || 0) + 1,
-      totalEarnings: (driver.totalEarnings || 0) + updated.actualFare,
-    });
-
-    const passenger = await User.findById(booking.passengerId);
-    const driverUser = await User.findById(driver.userId);
-    // The completion email *is* the receipt: same invoice as GET
-    // /:id/receipt, PDF attached. Not awaited - the driver's Complete tap
-    // shouldn't wait on PDF generation plus a mail API round-trip, and
-    // send() never throws. A passenger with no real email (registered by
-    // a driver/admin, or via the guest QR flow) gets the receipt link on
-    // WhatsApp from the driver's phone instead - see DriverDashboard.jsx
-    // complete(), fed by receiptToken/passengerHasEmail on GET /driver.
-    if (hasRealEmail(passenger)) {
-      const billedTo = { name: passenger.name, address: passenger.address };
-      buildInvoicePdf(updated, billedTo, driver, driverUser?.name)
-        .catch((err) => { console.error(`[receipt] PDF for ${updated.bookingId} failed: ${err.message}`); return undefined; })
-        .then((pdf) => emailService.sendInvoiceEmail(passenger.email, updated, billedTo, driver, driverUser?.name, pdf));
-    }
+    // The trip is complete as soon as that write lands - answer the driver
+    // now and do everything else (running totals, receipt PDF + email,
+    // notifications) in the background, so the Complete tap never waits on
+    // PDF generation or a slow mail server.
     emitToUser(req, booking.passengerId, 'booking:completed', updated);
-    await notifyUser(booking.passengerId, {
+    res.json(updated);
+
+    notifyUser(booking.passengerId, {
       type: 'booking-completed',
       title: 'Trip completed',
       message: `Final fare: $${updated.actualFare}`,
       link: '/passenger',
     });
 
-    await notifyAdmins({
-      type: 'driver-action',
-      title: 'Driver completed a trip',
-      message: `${driverUser?.name || 'A driver'} completed booking ${updated._id} - $${updated.actualFare}`,
-      link: '/admin',
-    });
+    runInBackground(`complete ${updated.bookingId}`, async () => {
+      const driver = await Driver.findById(booking.driverId);
+      if (!driver) return;
+      await Driver.findByIdAndUpdate(driver._id, {
+        totalTrips: (driver.totalTrips || 0) + 1,
+        totalEarnings: (driver.totalEarnings || 0) + (updated.actualFare || 0),
+      });
 
-    res.json(updated);
+      const [passenger, driverUser] = await Promise.all([User.findById(booking.passengerId), User.findById(driver.userId)]);
+      notifyAdmins({
+        type: 'driver-action',
+        title: 'Driver completed a trip',
+        message: `${driverUser?.name || 'A driver'} completed booking ${updated._id} - $${updated.actualFare}`,
+        link: '/admin',
+      });
+
+      // The completion email *is* the receipt: same invoice as GET
+      // /:id/receipt, PDF attached. A passenger with no real email
+      // (registered by a driver/admin, or via the guest QR flow) gets the
+      // receipt link on WhatsApp from the driver's phone instead - see
+      // DriverDashboard.jsx complete(), fed by receiptToken/
+      // passengerHasEmail on GET /driver.
+      if (hasRealEmail(passenger)) {
+        const billedTo = { name: passenger.name, address: passenger.address };
+        const pdf = await buildInvoicePdf(updated, billedTo, driver, driverUser?.name)
+          .catch((err) => { console.error(`[receipt] PDF for ${updated.bookingId} failed: ${err.message}`); return undefined; });
+        await emailService.sendInvoiceEmail(passenger.email, updated, billedTo, driver, driverUser?.name, pdf);
+      }
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1278,7 +1284,7 @@ router.put('/:id/cancel', auth, roleMiddleware(['passenger', 'driver']), async (
     } else {
       const notifyId = req.user.role === 'passenger' ? booking.driverId : booking.passengerId;
       emitToUser(req, notifyId, 'booking:cancelled', updated);
-      await notifyUser(notifyId, {
+      notifyUser(notifyId, {
         type: 'booking-cancelled',
         title: 'A booking was cancelled',
         message: `${updated.pickupAddress} → ${updated.dropAddress}${reason ? ` - ${reason}` : ''}`,
@@ -1288,7 +1294,7 @@ router.put('/:id/cancel', auth, roleMiddleware(['passenger', 'driver']), async (
 
     if (req.user.role === 'driver') {
       const driverUser = await User.findById(req.user.id);
-      await notifyAdmins({
+      notifyAdmins({
         type: 'driver-action',
         title: 'Driver cancelled a trip',
         message: `${driverUser?.name || 'A driver'} cancelled booking ${updated._id}${reason ? ` - ${reason}` : ''}`,
@@ -1299,7 +1305,7 @@ router.put('/:id/cancel', auth, roleMiddleware(['passenger', 'driver']), async (
       // reaches them regardless (WhatsApp is handled client-side by the
       // driver, see pages/driver/DriverDashboard.jsx cancelTrip()).
       const passenger = await User.findById(booking.passengerId);
-      if (passenger) await emailService.sendBookingCancelledByDriver(passenger.email, updated, reason);
+      if (passenger) runInBackground('email sendBookingCancelledByDriver', () => emailService.sendBookingCancelledByDriver(passenger.email, updated, reason));
     }
 
     res.json(updated);
@@ -1435,7 +1441,7 @@ router.put('/:id/payment-method', auth, roleMiddleware(['passenger']), async (re
       const driverUser = await User.findById((await Driver.findById(booking.driverId)).userId);
       if (driverUser) {
         emitToUser(req, driverUser._id, 'booking:updated', { bookingId: booking._id });
-        await notifyUser(driverUser._id, {
+        notifyUser(driverUser._id, {
           type: 'booking-updated',
           title: 'Passenger changed payment method',
           message: `${updated.bookingId}: now paying by ${paymentMethod === 'card' ? 'card (online)' : 'cash'}`,

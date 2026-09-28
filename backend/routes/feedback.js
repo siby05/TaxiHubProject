@@ -26,7 +26,7 @@ router.post('/', rateLimit({ windowMs: 60 * 60 * 1000, max: 10 }), async (req, r
     userId,
   });
 
-  await notifyAdmins({
+  notifyAdmins({
     type: 'feedback-new',
     title: 'New feedback received',
     message: `${feedback.name}: ${message.slice(0, 80)}${message.length > 80 ? '...' : ''}`,

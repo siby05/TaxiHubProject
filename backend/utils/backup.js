@@ -146,7 +146,7 @@ async function checkScheduledBackup() {
     const alreadyFailing = !!settings.lastBackupError;
     updateSettings({ lastBackupError: { at: new Date().toISOString(), message: err.message } });
     if (!alreadyFailing) {
-      await notifyAdmins({
+      notifyAdmins({
         type: 'backup-failed',
         title: 'Scheduled data backup failed',
         message: `The weekly backup email could not be sent: ${err.message}. It will retry automatically - check the admin email and email settings.`,

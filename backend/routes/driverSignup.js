@@ -5,6 +5,7 @@ const router = express.Router();
 const User = require('../models/User');
 const Driver = require('../models/Driver');
 const { emailService } = require('../services/emailService');
+const { runInBackground } = require('../utils/background');
 const { notifyAdmins } = require('../utils/notify');
 const { isValidVehicleType } = require('../config/vehicleTypes');
 const { DRIVER_DOCUMENTS } = require('../config/driverDocuments');
@@ -109,8 +110,8 @@ router.post(
         termsAcceptedAt: new Date(),
       });
 
-      await emailService.sendDriverApplicationReceived(user.email, user.name);
-      await notifyAdmins({
+      runInBackground('email sendDriverApplicationReceived', () => emailService.sendDriverApplicationReceived(user.email, user.name));
+      notifyAdmins({
         type: 'driver-signup',
         title: 'New driver application',
         message: `${name} applied to drive - documents submitted, awaiting approval.`,

@@ -6,6 +6,7 @@ const User = require('../models/User');
 const Driver = require('../models/Driver');
 const { auth, roleMiddleware } = require('../middleware/auth');
 const { emailService } = require('../services/emailService');
+const { runInBackground } = require('../utils/background');
 const { notifyUser, notifyAdmins } = require('../utils/notify');
 const multer = require('multer');
 
@@ -76,13 +77,13 @@ router.post('/', auth, roleMiddleware(['passenger']), upload.array('attachments'
       attachments,
     });
 
-    await emailService.sendComplaintAcknowledgement(passenger.email, complaint);
-    if (driverUser) await emailService.sendComplaintNotification(driverUser.email, complaint);
-    if (complaint.isSerious) await emailService.sendAdminAlertSerious(complaint);
+    runInBackground('email sendComplaintAcknowledgement', () => emailService.sendComplaintAcknowledgement(passenger.email, complaint));
+    if (driverUser) runInBackground('email sendComplaintNotification', () => emailService.sendComplaintNotification(driverUser.email, complaint));
+    if (complaint.isSerious) runInBackground('email sendAdminAlertSerious', () => emailService.sendAdminAlertSerious(complaint));
 
     const io = req.app.get('io');
     if (io) io.to('admins').emit('complaint:new', complaint);
-    await notifyAdmins({
+    notifyAdmins({
       type: complaint.isSerious ? 'complaint-serious' : 'complaint-new',
       title: complaint.isSerious ? 'SERIOUS complaint lodged' : 'New complaint lodged',
       message: `${complaint.complaintId} - ${complaint.complaintType.replace(/-/g, ' ')} vs ${complaint.driverName}`,
@@ -130,13 +131,13 @@ router.put('/passenger/:complaintId/reopen', auth, roleMiddleware(['passenger'])
     $push: { adminNotes: { note: `Passenger reopened this complaint: ${reason}`, noteBy: req.user.id, noteByName: passenger.name, noteAt: new Date() } },
   });
 
-  await notifyAdmins({
+  notifyAdmins({
     type: 'complaint-reopened',
     title: 'Complaint reopened by passenger',
     message: `${complaint.complaintId} - ${reason}`,
     link: '/admin/complaints',
   });
-  await emailService.sendReopenedConfirmation(passenger.email, complaint);
+  runInBackground('email sendReopenedConfirmation', () => emailService.sendReopenedConfirmation(passenger.email, complaint));
 
   res.json({ message: 'Complaint reopened', complaint: updated });
 });
@@ -190,8 +191,8 @@ router.post('/:complaintId/driver-comment', auth, roleMiddleware(['driver']), as
 
     const passenger = await User.findById(complaint.complainantId);
     if (passenger) {
-      await emailService.sendDriverResponseNotification(passenger.email, complaint);
-      await notifyUser(passenger._id, {
+      runInBackground('email sendDriverResponseNotification', () => emailService.sendDriverResponseNotification(passenger.email, complaint));
+      notifyUser(passenger._id, {
         type: 'complaint-driver-response',
         title: 'Driver responded to your complaint',
         message: complaint.complaintId,
@@ -276,11 +277,11 @@ router.put('/admin/:complaintId/status', auth, roleMiddleware(['admin']), async 
   const passenger = await User.findById(complaint.complainantId);
   if (passenger) {
     if (status === 'resolved' || status === 'closed') {
-      await emailService.sendComplaintResolution(passenger.email, complaint);
+      runInBackground('email sendComplaintResolution', () => emailService.sendComplaintResolution(passenger.email, complaint));
     } else {
-      await emailService.sendComplaintStatusChanged(passenger.email, complaint);
+      runInBackground('email sendComplaintStatusChanged', () => emailService.sendComplaintStatusChanged(passenger.email, complaint));
     }
-    await notifyUser(passenger._id, {
+    notifyUser(passenger._id, {
       type: 'complaint-status',
       title: `Complaint ${status}`,
       message: complaint.complaintId,
@@ -326,8 +327,8 @@ router.put('/admin/:complaintId/escalate', auth, roleMiddleware(['admin']), asyn
   });
   if (!complaint) return res.status(404).json({ error: 'Complaint not found' });
 
-  await emailService.sendEscalationAlert(complaint);
-  await notifyAdmins({
+  runInBackground('email sendEscalationAlert', () => emailService.sendEscalationAlert(complaint));
+  notifyAdmins({
     type: 'complaint-escalated',
     title: 'Complaint escalated',
     message: complaint.complaintId,

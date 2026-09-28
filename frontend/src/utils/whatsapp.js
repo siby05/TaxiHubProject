@@ -25,11 +25,35 @@ function withSite(text) {
   return `${text}\n\nEasyRide - ${SITE_LABEL}`;
 }
 
+// Opened from the iPhone home-screen app (navigator.standalone is
+// iOS-only), a wa.me link loads in an in-app browser sheet that hands off
+// to WhatsApp and is then left behind as a blank white page - reloading
+// only reloads the blank wa.me page, so the driver had to force-quit
+// EasyRide. The whatsapp:// scheme goes straight to the WhatsApp app and
+// leaves EasyRide's own page untouched.
+function inIosHomeScreenApp() {
+  return typeof navigator !== 'undefined' && navigator.standalone === true;
+}
+
 export function waLink(mobile, text) {
   if (!mobile) return null;
   const digits = String(mobile).replace(/[^\d]/g, ''); // wa.me wants digits only, no leading +
   if (!digits) return null;
-  return `https://wa.me/${digits}${text ? `?text=${encodeURIComponent(withSite(text))}` : ''}`;
+  const encoded = text ? encodeURIComponent(withSite(text)) : '';
+  if (inIosHomeScreenApp()) return `whatsapp://send?phone=${digits}${encoded ? `&text=${encoded}` : ''}`;
+  return `https://wa.me/${digits}${encoded ? `?text=${encoded}` : ''}`;
+}
+
+// Opens a waLink() automatically as part of a button tap (DriverDashboard's
+// "I've arrived" and Complete). An app-scheme link is followed in place -
+// it switches to WhatsApp without navigating EasyRide away - while a wa.me
+// link gets its own tab so the app stays open behind it.
+export function openWhatsApp(link) {
+  if (!link) return;
+  try {
+    if (link.startsWith('whatsapp:')) window.location.href = link;
+    else window.open(link, '_blank');
+  } catch { /* popup blocked - the same links are rendered as buttons */ }
 }
 
 // No fixed recipient - opens WhatsApp's own contact picker with the text
@@ -39,6 +63,7 @@ export function waLink(mobile, text) {
 // - see pages/ForgotPassword.jsx and pages/admin/AdminDashboard.jsx's
 // reset-password action, which does have a number and uses waLink instead).
 export function waShareLink(text) {
+  if (inIosHomeScreenApp()) return `whatsapp://send?text=${encodeURIComponent(withSite(text))}`;
   return `https://wa.me/?text=${encodeURIComponent(withSite(text))}`;
 }
 

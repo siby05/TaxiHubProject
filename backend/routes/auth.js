@@ -16,6 +16,7 @@ const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 40, message: 'Too
 // much tighter budget than login.
 const claimLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, message: 'Too many attempts - please wait 15 minutes and try again' });
 const { emailService } = require('../services/emailService');
+const { runInBackground } = require('../utils/background');
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 
@@ -140,7 +141,7 @@ router.post('/register', authLimiter, async (req, res) => {
       emailVerified: true,
     });
 
-    await emailService.sendVerificationEmail(user.email, user.name);
+    runInBackground('email sendVerificationEmail', () => emailService.sendVerificationEmail(user.email, user.name));
 
     res.status(201).json({ token: signToken(user), user: publicUser(user) });
   } catch (err) {

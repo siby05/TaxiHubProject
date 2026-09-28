@@ -53,7 +53,7 @@ async function checkReminders() {
         if (!recipient || sentTo.has(role)) continue;
         sentTo.add(role);
         await emailService.sendTripReminder(recipient.email, booking, r.label);
-        await notifyUser(recipient._id, {
+        notifyUser(recipient._id, {
           type: 'trip-reminder',
           title: `Trip reminder - ${r.label}`,
           message: `${booking.pickupAddress} → ${booking.dropAddress} at ${formatNzDateTime(booking.scheduledFor)}`,

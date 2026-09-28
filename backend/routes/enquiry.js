@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Enquiry = require('../models/Enquiry');
 const { emailService } = require('../services/emailService');
+const { runInBackground } = require('../utils/background');
 const { notifyAdmins } = require('../utils/notify');
 const { rateLimit } = require('../middleware/rateLimit');
 
@@ -23,8 +24,8 @@ router.post('/', rateLimit({ windowMs: 60 * 60 * 1000, max: 5, message: 'Too man
     message: message.trim(),
   });
 
-  await emailService.sendEnquiryEmail(enquiry);
-  await notifyAdmins({
+  runInBackground('email sendEnquiryEmail', () => emailService.sendEnquiryEmail(enquiry));
+  notifyAdmins({
     type: 'enquiry-new',
     title: 'New enquiry from the website',
     message: `${enquiry.name}: ${enquiry.message.slice(0, 80)}${enquiry.message.length > 80 ? '...' : ''}`,

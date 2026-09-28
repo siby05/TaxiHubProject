@@ -8,6 +8,7 @@ const Booking = require('../models/Booking');
 const Complaint = require('../models/Complaint');
 const { auth, roleMiddleware } = require('../middleware/auth');
 const { emailService } = require('../services/emailService');
+const { runInBackground } = require('../utils/background');
 const { ensureDriverQrCode } = require('../utils/qrcode');
 const { getDriverBilling } = require('../utils/billing');
 const WeeklyPayment = require('../models/WeeklyPayment');
@@ -268,7 +269,7 @@ router.post('/drivers', async (req, res) => {
       vehicleCofExpiry: vehicleCofExpiry || null,
     });
 
-    await emailService.sendVerificationEmail(user.email, user.name);
+    runInBackground('email sendVerificationEmail', () => emailService.sendVerificationEmail(user.email, user.name));
 
     res.status(201).json({ driver, temporaryPassword: tempPassword, note: 'Send this temporary password to the driver securely (SMS/WhatsApp) - not emailed for security.' });
   } catch (err) {
@@ -418,7 +419,7 @@ router.put('/drivers/:id/verify-document', async (req, res) => {
 
   const driverUser = await User.findById(driver.userId);
   if (driverUser) {
-    await notifyUser(driverUser._id, {
+    notifyUser(driverUser._id, {
       type: status === 'rejected' ? 'document-rejected' : 'document-verified',
       title: status === 'rejected' ? `${documentLabel(documentKey)} needs re-uploading` : `${documentLabel(documentKey)} verified`,
       message: status === 'rejected' ? reason.trim() : 'Thanks - this document has been checked and accepted.',
@@ -444,8 +445,8 @@ router.put('/drivers/:id/approve', async (req, res) => {
   const driver = await Driver.findByIdAndUpdate(req.params.id, { status: 'approved' });
   const driverUser = await User.findById(driver.userId);
   if (driverUser) {
-    await emailService.sendDriverApproved(driverUser.email, driverUser.name);
-    await notifyUser(driverUser._id, {
+    runInBackground('email sendDriverApproved', () => emailService.sendDriverApproved(driverUser.email, driverUser.name));
+    notifyUser(driverUser._id, {
       type: 'driver-approved',
       title: 'You are approved to drive',
       message: 'Log in and go online to start receiving trips.',

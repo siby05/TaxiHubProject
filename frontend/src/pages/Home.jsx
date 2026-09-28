@@ -275,8 +275,8 @@ export default function Home() {
               </div>
             </div>
           </div>
-          <div className="hm-reveal" style={{ textAlign: 'center', marginTop: 26 }}>
-            <Link className="btn" to="/register">Pre-book your trip</Link>{' '}
+          <div className="hm-reveal" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 12, marginTop: 26 }}>
+            <Link className="btn" to="/register">Pre-book your trip</Link>
             <Link className="btn secondary" to="/airport-transfers">Airport transfer details</Link>
           </div>
         </div>

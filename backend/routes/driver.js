@@ -9,6 +9,7 @@ const { auth, roleMiddleware } = require('../middleware/auth');
 const { ensureDriverQrCode } = require('../utils/qrcode');
 const { calculateTripFare, calculateCardSurcharge, routeDistanceKm, invalidStopsError, cleanStops } = require('../utils/distance');
 const { emailService } = require('../services/emailService');
+const { runInBackground } = require('../utils/background');
 const { placeholderEmail } = require('../utils/users');
 const { notifyUser, notifyAdmins } = require('../utils/notify');
 const { checkDriverCompliance } = require('../utils/compliance');
@@ -97,7 +98,7 @@ router.post('/documents/:key', auth, roleMiddleware(['driver']), documentUpload.
   });
 
   const driverUser = await User.findById(req.user.id);
-  await notifyAdmins({
+  notifyAdmins({
     type: 'driver-document',
     title: 'Driver re-uploaded a document',
     message: `${driverUser?.name || 'A driver'} re-uploaded their ${documentLabel(key)} for review.`,
@@ -278,7 +279,7 @@ router.put('/rate', auth, roleMiddleware(['driver']), async (req, res) => {
   const updated = await Driver.findByIdAndUpdate(driver._id, { pendingRatePerKm: ratePerKm });
 
   const driverUser = await User.findById(req.user.id);
-  await notifyAdmins({
+  notifyAdmins({
     type: 'rate-request',
     title: 'Driver requested a rate change',
     message: `${driverUser?.name || 'A driver'} requested $${ratePerKm}/km (currently $${driver.ratePerKm}/km)`,
@@ -449,8 +450,8 @@ router.post('/bookings', auth, roleMiddleware(['driver']), async (req, res) => {
     });
 
     if (passenger.emailVerified) {
-      await emailService.sendBookingConfirmation(passenger.email, booking, driver, req.user.name);
-      await notifyUser(passenger._id, {
+      runInBackground('email sendBookingConfirmation', () => emailService.sendBookingConfirmation(passenger.email, booking, driver, req.user.name));
+      notifyUser(passenger._id, {
         type: 'booking-accepted',
         title: 'A driver booked a ride for you',
         message: `${booking.pickupAddress} → ${booking.dropAddress} - $${booking.estimatedFare}`,
@@ -460,7 +461,7 @@ router.post('/bookings', auth, roleMiddleware(['driver']), async (req, res) => {
 
     const driverUser = await User.findById(req.user.id);
 
-    await notifyAdmins({
+    notifyAdmins({
       type: 'driver-action',
       title: 'Driver booked a trip for a passenger',
       message: `${driverUser?.name || 'A driver'} booked for ${passenger.name}`,

@@ -4,7 +4,7 @@ import { useBookingStore } from '../../store/bookingStore';
 import { useSocket } from '../../hooks/useSocket';
 import StarRating from '../../components/StarRating';
 import { notificationPermission, requestNotificationPermission, showBrowserNotification } from '../../utils/browserNotify';
-import { waLink, driverPendingMessage, driverConfirmedMessage, driverArrivedMessage, driverCancelledMessage, paymentReminderMessage, receiptMessage, vehicleLabel } from '../../utils/whatsapp';
+import { waLink, openWhatsApp, driverPendingMessage, driverConfirmedMessage, driverArrivedMessage, driverCancelledMessage, paymentReminderMessage, receiptMessage, vehicleLabel } from '../../utils/whatsapp';
 import { formatNzDateTime, formatNzTime } from '../../utils/nzTime';
 import { directionsLink } from '../../utils/maps';
 import WhatsAppIcon from '../../components/WhatsAppIcon';
@@ -120,7 +120,7 @@ export default function DriverDashboard() {
     const booking = bookings.find((b) => b._id === id);
     const link = booking && waLink(booking.passengerId?.mobile, driverArrivedMessage(booking, profile?.userId?.name, vehicleLabel(profile)));
     if (link) {
-      try { window.open(link, '_blank'); } catch { /* popup blocked - nothing else to fall back to, per "no separate button" */ }
+      openWhatsApp(link);
     }
 
     try {
@@ -173,7 +173,7 @@ export default function DriverDashboard() {
         : owing ? paymentReminderMessage(finalBooking, profile?.userId?.name, payLink) : null;
       const link = text && waLink(booking.passengerId?.mobile, text);
       if (link) {
-        try { window.open(link, '_blank'); } catch { /* the same links are rendered as buttons below for a blocked popup */ }
+        openWhatsApp(link);
       }
     }
 
