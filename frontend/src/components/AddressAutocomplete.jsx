@@ -22,7 +22,10 @@ export default function AddressAutocomplete({ label, placeholder, onSelect, requ
   const [loading, setLoading] = useState(false);
   const [locating, setLocating] = useState(false);
   const [locateError, setLocateError] = useState('');
+  const [searchError, setSearchError] = useState('');
+  const [highlight, setHighlight] = useState(-1);
   const timer = useRef(null);
+  const inflight = useRef(null);
   const wrapRef = useRef(null);
 
   useEffect(() => {
@@ -33,33 +36,77 @@ export default function AddressAutocomplete({ label, placeholder, onSelect, requ
     return () => document.removeEventListener('mousedown', onClickOutside);
   }, []);
 
+  function cancelPending() {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+    inflight.current?.abort();
+    inflight.current = null;
+  }
+
+  useEffect(() => cancelPending, []);
+
   function onInput(value) {
     setQuery(value);
     onSelect(null);
-    if (timer.current) clearTimeout(timer.current);
+    cancelPending();
+    setHighlight(-1);
+    setSearchError('');
     if (value.trim().length < 3) {
       setResults([]);
+      setLoading(false);
+      setOpen(false);
       return;
     }
+    // Show "Searching..." straight away rather than a dead field while the
+    // debounce and request run.
+    setLoading(true);
+    setOpen(true);
     timer.current = setTimeout(async () => {
-      setLoading(true);
+      // Abort the previous search so a slow response for "12 Kar" can't
+      // land after, and overwrite, the results for "12 Karamea".
+      const controller = new AbortController();
+      inflight.current = controller;
       try {
-        const { data } = await client.get('/geocode/search', { params: { q: value } });
+        const { data } = await client.get('/geocode/search', { params: { q: value }, signal: controller.signal });
+        if (inflight.current !== controller) return;
         setResults(data);
-        setOpen(true);
-      } catch {
+      } catch (err) {
+        if (inflight.current !== controller || err.code === 'ERR_CANCELED') return;
         setResults([]);
-      } finally {
-        setLoading(false);
+        setSearchError(err.response?.data?.error || 'Address lookup failed - check your connection and try again');
       }
-    }, 450);
+      inflight.current = null;
+      setLoading(false);
+    }, 300);
   }
 
   function pick(result) {
+    // A debounced search still pending would otherwise reopen the list
+    // right after the user has chosen an address.
+    cancelPending();
+    setLoading(false);
     setQuery(result.label);
     setResults([]);
     setOpen(false);
+    setHighlight(-1);
     onSelect(result);
+  }
+
+  function onKeyDown(e) {
+    if (!open || results.length === 0) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlight((h) => (h + 1) % results.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlight((h) => (h <= 0 ? results.length - 1 : h - 1));
+    } else if (e.key === 'Enter' && highlight >= 0) {
+      // Pick the highlighted suggestion instead of submitting the form.
+      e.preventDefault();
+      pick(results[highlight]);
+    } else if (e.key === 'Escape') {
+      setOpen(false);
+    }
   }
 
   function useCurrentLocation() {
@@ -98,7 +145,8 @@ export default function AddressAutocomplete({ label, placeholder, onSelect, requ
           autoComplete="off"
           placeholder={placeholder || 'Start typing an address...'}
           onChange={(e) => onInput(e.target.value)}
-          onFocus={() => results.length && setOpen(true)}
+          onKeyDown={onKeyDown}
+          onFocus={() => (results.length || loading) && setOpen(true)}
         />
         {allowLocate && (
           <button type="button" className="btn secondary" style={{ whiteSpace: 'nowrap', flexShrink: 0 }} onClick={useCurrentLocation} disabled={locating}>
@@ -110,9 +158,20 @@ export default function AddressAutocomplete({ label, placeholder, onSelect, requ
       {open && (
         <div className="autocomplete-list">
           {loading && <div className="autocomplete-item muted">Searching...</div>}
-          {!loading && results.length === 0 && <div className="autocomplete-item muted">No matches - keep typing</div>}
+          {!loading && searchError && <div className="autocomplete-item error">{searchError}</div>}
+          {!loading && !searchError && results.length === 0 && <div className="autocomplete-item muted">No matches - try adding the suburb or town</div>}
           {results.map((r, i) => (
-            <div key={i} className="autocomplete-item" onClick={() => pick(r)}>{r.label}</div>
+            // mousedown (with preventDefault) rather than click: on phones
+            // the tap otherwise first blurs the input and closes the
+            // keyboard, the list shifts, and the click can miss the item.
+            <div
+              key={`${r.label}-${i}`}
+              className={`autocomplete-item${i === highlight ? ' active' : ''}`}
+              onMouseDown={(e) => { e.preventDefault(); pick(r); }}
+              onMouseEnter={() => setHighlight(i)}
+            >
+              {r.label}
+            </div>
           ))}
         </div>
       )}

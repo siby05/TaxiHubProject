@@ -43,8 +43,15 @@ export function onServerWaking(fn) {
 
 function isColdStartError(err) {
   if (!err.config || err.code === 'ERR_CANCELED') return false;
+  // The device itself is offline - not something waiting on the server fixes.
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
   if (!err.response) return true; // network error - server not answering yet
-  return [502, 503, 504].includes(err.response.status);
+  if (![502, 503, 504].includes(err.response.status)) return false;
+  // Our own API answers errors with a JSON { error } body (e.g. the address
+  // lookup when the external geocoder is down) - the server is clearly
+  // awake. Render's proxy answers a sleeping server with an HTML page.
+  const data = err.response.data;
+  return !(data && typeof data === 'object' && 'error' in data);
 }
 
 // Fired once on app start so a sleeping server starts booting while the
@@ -64,15 +71,22 @@ client.interceptors.response.use(
       localStorage.removeItem('easyride_user');
     }
     const config = err.config;
-    if (isColdStartError(err) && RETRYABLE_METHODS.includes((config.method || 'get').toLowerCase())) {
+    if (config?.wakeRetry !== false && isColdStartError(err) && RETRYABLE_METHODS.includes((config.method || 'get').toLowerCase())) {
       const attempt = config.__wakeAttempt || 0;
       if (attempt < WAKE_RETRY_DELAYS_MS.length) {
-        setWaking(true);
+        // A single failed request is often just a blip (a phone coming back
+        // from the background, a flaky connection) - only say the server is
+        // waking once a retry has failed too.
+        if (attempt >= 1) setWaking(true);
         await new Promise((resolve) => setTimeout(resolve, WAKE_RETRY_DELAYS_MS[attempt]));
         return client({ ...config, __wakeAttempt: attempt + 1 });
       }
-      setWaking(false);
     }
+    // Not retrying this one. Any answer from the server (even a 404) means
+    // it's awake, and a request that was mid-retry giving up (out of
+    // retries, or cancelled because the user moved on) must not leave the
+    // banner up with nothing left to clear it.
+    if (err.response || config?.__wakeAttempt) setWaking(false);
     return Promise.reject(err);
   },
 );

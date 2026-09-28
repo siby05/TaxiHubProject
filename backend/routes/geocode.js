@@ -27,32 +27,106 @@ function shortLabel(result) {
   return label || result.display_name;
 }
 
+// Photon (photon.komoot.io) uses the same OpenStreetMap data as Nominatim
+// but is built for search-as-you-type: it matches partial words ("12
+// karam", "kfc new ply") where Nominatim only matches whole words, so
+// Nominatim alone showed "No matches" until each word was fully typed.
+// The bbox covers New Zealand; results are also filtered on countrycode
+// since the bbox doesn't strictly exclude everything outside it.
+const NZ_BBOX = '165.8,-47.4,179,-34';
+
+function photonLabel(p) {
+  const street = [p.housenumber, p.street].filter(Boolean).join(' ');
+  // For roads `name` is the road itself and for places it's the town -
+  // only lead with it for real venues/POIs.
+  const isVenue = p.name && p.osm_key !== 'highway' && p.osm_key !== 'place';
+  const suburb = p.district || p.locality;
+  const city = p.city || p.town || p.village || p.county;
+
+  const parts = [];
+  parts.push(isVenue ? p.name : street || p.name);
+  if (suburb && suburb !== city && suburb !== parts[0]) parts.push(suburb);
+  if (city && city !== parts[0]) parts.push(p.postcode ? `${city} ${p.postcode}` : city);
+  return parts.filter(Boolean).join(', ');
+}
+
+async function photonSearch(q) {
+  const url = `https://photon.komoot.io/api/?limit=10&lang=en&bbox=${NZ_BBOX}&q=${encodeURIComponent(q)}`;
+  const response = await fetch(url, { headers: NOMINATIM_HEADERS, signal: AbortSignal.timeout(6000) });
+  if (!response.ok) throw new Error(`Photon responded ${response.status}`);
+  const { features = [] } = await response.json();
+  return features
+    .filter((f) => (f.properties?.countrycode || '').toUpperCase() === 'NZ')
+    .map((f) => ({ label: photonLabel(f.properties), lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0] }));
+}
+
+async function nominatimSearch(q) {
+  const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=6&countrycodes=nz&q=${encodeURIComponent(q)}`;
+  const response = await fetch(url, { headers: NOMINATIM_HEADERS, signal: AbortSignal.timeout(6000) });
+  if (!response.ok) throw new Error(`Nominatim responded ${response.status}`);
+  const results = await response.json();
+  return results.map((r) => ({ label: shortLabel(r), lat: Number(r.lat), lng: Number(r.lon) }));
+}
+
+// The free public geocoders rate-limit, and the same prefixes get typed
+// over and over across booking forms - cache results for a while.
+const searchCache = new Map();
+const SEARCH_CACHE_MAX = 500;
+const SEARCH_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+
+function dedupeByLabel(results) {
+  const seen = new Set();
+  return results.filter((r) => {
+    const key = (r.label || '').toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 /**
- * Proxies OpenStreetMap Nominatim (free, no API key) instead of calling it
- * from the browser: Nominatim's usage policy wants a real User-Agent
- * identifying the app, which browsers won't let client-side code set, and
- * proxying avoids CORS/rate-limit surprises on the client.
- *
- * countrycodes=nz restricts results to New Zealand, matching where this
- * service currently operates.
+ * Address search, proxied instead of called from the browser: the
+ * geocoders' usage policies want a real User-Agent identifying the app,
+ * which browsers won't let client-side code set, and proxying lets
+ * results be cached. Photon first, Nominatim as a fallback when Photon is
+ * down or finds nothing. Restricted to New Zealand, where this service
+ * currently operates.
  *
  * Public (no auth) - needed by the passenger and driver signup pages
  * before a token exists, as well as the logged-in booking flows.
  */
 router.get('/search', async (req, res) => {
-  const q = (req.query.q || '').trim();
+  const q = (req.query.q || '').trim().replace(/\s+/g, ' ');
   if (q.length < 3) return res.json([]);
 
+  const cacheKey = q.toLowerCase();
+  const cached = searchCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < SEARCH_CACHE_TTL_MS) return res.json(cached.results);
+
+  let results = [];
+  let failures = 0;
   try {
-    const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=6&countrycodes=nz&q=${encodeURIComponent(q)}`;
-    const response = await fetch(url, { headers: NOMINATIM_HEADERS });
-    if (!response.ok) throw new Error(`Nominatim responded ${response.status}`);
-    const results = await response.json();
-    res.json(results.map((r) => ({ label: shortLabel(r), lat: Number(r.lat), lng: Number(r.lon) })));
+    results = await photonSearch(q);
   } catch (err) {
-    console.error(`[geocode] search failed: ${err.message}`);
-    res.status(502).json({ error: 'Address lookup failed, try again' });
+    failures++;
+    console.error(`[geocode] photon search failed: ${err.message}`);
   }
+  if (results.length === 0) {
+    try {
+      results = await nominatimSearch(q);
+    } catch (err) {
+      failures++;
+      console.error(`[geocode] nominatim search failed: ${err.message}`);
+    }
+  }
+  // 503, not 502: a 502 is what Render's proxy returns while the server is
+  // still asleep, and the frontend treats that as "waking up".
+  if (failures === 2) return res.status(503).json({ error: 'Address lookup failed, try again' });
+
+  results = dedupeByLabel(results).slice(0, 6);
+  if (searchCache.size >= SEARCH_CACHE_MAX) searchCache.delete(searchCache.keys().next().value);
+  searchCache.set(cacheKey, { at: Date.now(), results });
+  res.json(results);
 });
 
 // GET /api/geocode/reverse?lat=&lng= - turns "use my current location" GPS
@@ -64,14 +138,14 @@ router.get('/reverse', async (req, res) => {
 
   try {
     const url = `https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}`;
-    const response = await fetch(url, { headers: NOMINATIM_HEADERS });
+    const response = await fetch(url, { headers: NOMINATIM_HEADERS, signal: AbortSignal.timeout(8000) });
     if (!response.ok) throw new Error(`Nominatim responded ${response.status}`);
     const result = await response.json();
     if (!result || result.error) return res.status(404).json({ error: 'Could not resolve an address for this location' });
     res.json({ label: shortLabel(result), lat: Number(lat), lng: Number(lng) });
   } catch (err) {
     console.error(`[geocode] reverse failed: ${err.message}`);
-    res.status(502).json({ error: 'Reverse lookup failed, try again' });
+    res.status(503).json({ error: 'Reverse lookup failed, try again' });
   }
 });
 

@@ -378,7 +378,8 @@ img, video { max-width: 100%; height: auto; }
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 .autocomplete-item { padding: 8px 12px; cursor: pointer; font-size: 0.9rem; }
-.autocomplete-item:hover { background: #f0f9ff; }
+.autocomplete-item:hover, .autocomplete-item.active { background: #f0f9ff; }
+.autocomplete-item.error { color: #b91c1c; cursor: default; }
 
 .fare-confirm { background: #f0f9ff; border: 1px solid var(--primary); }
 
