@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
+import { wakeServer } from './api/client';
 import './index.css';
 
 // Required for Chrome/Android to consider the app installable (see
@@ -20,6 +21,9 @@ if ('serviceWorker' in navigator) {
 window.addEventListener('pageshow', (e) => {
   if (e.persisted && !document.getElementById('root')?.hasChildNodes()) window.location.reload();
 });
+
+// Start a sleeping backend booting as early as possible (see api/client.js).
+wakeServer();
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

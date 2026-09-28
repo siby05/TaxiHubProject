@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
+import ServerWakeBanner from './components/ServerWakeBanner';
 import ProtectedRoute from './components/ProtectedRoute';
 import RouteMeta from './components/RouteMeta';
 import Home from './pages/Home';
@@ -40,6 +41,7 @@ export default function App() {
     <>
       <RouteMeta />
       <Navbar />
+      <ServerWakeBanner />
       <Routes>
         <Route path="/" element={user ? <Navigate to={home} replace /> : <Home />} />
         <Route path="/about" element={<About />} />
