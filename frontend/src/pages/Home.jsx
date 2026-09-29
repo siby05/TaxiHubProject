@@ -15,6 +15,27 @@ const TRIP_STATES = [
   { at: 5000, chip: 'ok', label: 'Trip completed' },
 ];
 
+// Long-distance routes shown in the airport & long-distance section - both
+// directions, since passengers also need getting back to Taranaki.
+const INTERCITY_ROUTES = [
+  {
+    from: 'New Plymouth', to: 'Palmerston North', meta: 'About 230 km · around 3 hours',
+    blurb: 'Down SH3 via Stratford, Hāwera and Whanganui - stop at any of them on the way.',
+  },
+  {
+    from: 'New Plymouth', to: 'Auckland', meta: 'About 350 km · 4.5-5 hours', link: '/new-plymouth-to-auckland',
+    blurb: 'Door to door, including Auckland Airport, with stops in Te Kūiti or Hamilton if you need them.',
+  },
+  {
+    from: 'Palmerston North', to: 'New Plymouth', meta: 'About 230 km · around 3 hours',
+    blurb: 'Heading home to Taranaki - or drop off in Whanganui, Hāwera or Stratford on the way.',
+  },
+  {
+    from: 'Auckland', to: 'New Plymouth', meta: 'About 350 km · 4.5-5 hours',
+    blurb: 'Pick-up from anywhere in Auckland, including the airport - or finish in Hamilton or Te Kūiti on the way.',
+  },
+];
+
 const Icon = {
   check: (p) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M20 6 9 17l-5-5" /></svg>,
   qr: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><path d="M14 14h3v3M21 14v3h-4M14 21h7" /></svg>,
@@ -264,7 +285,7 @@ export default function Home() {
               <div className="hm-icon"><Icon.road /></div>
               <div>
                 <h4>Long-distance trips</h4>
-                <p>Stratford, Hāwera, Whanganui, Wellington or <Link to="/new-plymouth-to-auckland">New Plymouth to Auckland</Link> - one upfront fare for the whole journey, with stops along the way if you need them.</p>
+                <p>Stratford, Hāwera, Whanganui, Palmerston North, Wellington or <Link to="/new-plymouth-to-auckland">New Plymouth to Auckland</Link> - one upfront fare for the whole journey, with stops along the way if you need them.</p>
               </div>
             </div>
             <div className="hm-feature hm-reveal" data-delay="2">
@@ -274,6 +295,21 @@ export default function Home() {
                 <p>Airport and long trips need at least 12 hours' notice so a driver can commit to your time. Just pick a date and time instead of "now" when you book.</p>
               </div>
             </div>
+          </div>
+          <h3 className="hm-ic-title hm-reveal">Popular intercity routes</h3>
+          <div className="hm-ic-grid">
+            {INTERCITY_ROUTES.map((r, i) => (
+              <div key={`${r.from}-${r.to}`} className="hm-ic hm-reveal" data-delay={i % 4}>
+                <div className="hm-ic-ends">
+                  <span>{r.from}</span>
+                  <span className="hm-ic-arrow" aria-label="to">→</span>
+                  <span>{r.to}</span>
+                </div>
+                <div className="hm-ic-meta">{r.meta}</div>
+                <p>{r.blurb}</p>
+                {r.link && <Link to={r.link}>Route details</Link>}
+              </div>
+            ))}
           </div>
           <div className="hm-reveal" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 12, marginTop: 26 }}>
             <Link className="btn" to="/register">Pre-book your trip</Link>

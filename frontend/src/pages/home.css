@@ -94,6 +94,17 @@
 .hm-feature h4 { margin: 2px 0 6px; font-size: 1rem; color: var(--ink); }
 .hm-feature p { margin: 0; color: var(--muted); font-size: 0.9rem; line-height: 1.5; }
 
+/* Intercity route cards (airport & long-distance section) */
+.hm-ic-title { text-align: center; margin: 40px 0 18px; font-size: 1.15rem; color: var(--ink); }
+.hm-ic-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px; }
+.hm-ic { background: #fff; border: 1px solid var(--border); border-radius: 16px; padding: 18px 20px; transition: transform 0.25s ease, box-shadow 0.25s ease; }
+.hm-ic:hover { transform: translateY(-3px); box-shadow: 0 14px 34px rgba(11, 41, 66, 0.08); }
+.hm-ic-ends { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-weight: 700; color: var(--ink); font-size: 1rem; }
+.hm-ic-arrow { color: var(--primary); }
+.hm-ic-meta { margin-top: 6px; font-size: 0.8rem; font-weight: 600; color: var(--primary-dark); }
+.hm-ic p { margin: 8px 0 0; color: var(--muted); font-size: 0.9rem; line-height: 1.5; }
+.hm-ic a { display: inline-block; margin-top: 8px; font-size: 0.88rem; font-weight: 600; }
+
 /* Fleet spotlight */
 .hm-fleet { display: grid; grid-template-columns: 1.1fr 1fr; gap: 40px; align-items: center; background: radial-gradient(90% 80% at 30% 50%, #e0f2fe 0%, #f8fafc 70%); border: 1px solid var(--border); border-radius: 24px; padding: 36px; overflow: hidden; }
 .hm-fleet-img { position: relative; }
