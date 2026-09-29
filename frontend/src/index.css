@@ -465,3 +465,8 @@ img, video { max-width: 100%; height: auto; }
     max-height: calc(100vh - 80px);
   }
 }
+
+/* Small loading spinner (e.g. QR booking page while the backend wakes) */
+.spinner { width: 28px; height: 28px; margin: 4px auto; border: 3px solid #bae6fd; border-top-color: var(--primary); border-radius: 50%; animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }

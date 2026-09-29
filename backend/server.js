@@ -35,10 +35,12 @@ const feedbackRoutes = require('./routes/feedback');
 const enquiryRoutes = require('./routes/enquiry');
 const cronRoutes = require('./routes/cron');
 const stripeConnectRoutes = require('./routes/stripeConnect');
+const expenseRoutes = require('./routes/expenses');
 const { setIo } = require('./utils/notify');
 const { startReminderScheduler } = require('./utils/reminders');
 const { startBackupScheduler } = require('./utils/backup');
 const { startRetentionScheduler } = require('./utils/retention');
+const { startKeepAwake } = require('./utils/keepAwake');
 const { loadSettings } = require('./config/platformSettings');
 const { verifyEmailConfig, emailStatus } = require('./services/emailService');
 const { signUploadsInResponses, serveSignedUpload } = require('./middleware/signedUploads');
@@ -103,6 +105,7 @@ app.use('/api/feedback', feedbackRoutes);
 app.use('/api/enquiry', enquiryRoutes);
 app.use('/api/cron', cronRoutes);
 app.use('/api/driver/stripe', stripeConnectRoutes);
+app.use('/api/driver/expenses', expenseRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
@@ -147,6 +150,7 @@ connectDatabase().then(async () => {
   startReminderScheduler();
   startBackupScheduler();
   startRetentionScheduler();
+  startKeepAwake();
 }).catch((err) => {
   console.error('[startup] failed to start:', err.message);
   process.exit(1);

@@ -20,6 +20,7 @@ const ROLE_LINKS = {
     { to: '/driver/documents', label: 'Documents' },
     { to: '/driver/complaints', label: 'Complaints' },
     { to: '/driver/reports', label: 'Reports' },
+    { to: '/driver/expenses', label: 'Expenses' },
     { to: '/driver/settings', label: 'Settings' },
     { to: '/terms', label: 'Terms' },
   ],

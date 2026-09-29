@@ -2,6 +2,7 @@ const User = require('../models/User');
 const Driver = require('../models/Driver');
 const Booking = require('../models/Booking');
 const Complaint = require('../models/Complaint');
+const Expense = require('../models/Expense');
 const { getSettings, updateSettings } = require('../config/platformSettings');
 const { emailService } = require('../services/emailService');
 const { toCsv } = require('./csv');
@@ -82,25 +83,40 @@ const COMPLAINT_COLUMNS = [
   { header: 'Created', key: 'createdAt' },
 ];
 
-// Builds the three CSV attachments (as plain string content - small enough
+const EXPENSE_COLUMNS = [
+  { header: 'Expense ID', key: '_id' },
+  { header: 'Driver ID', key: 'driverId' },
+  { header: 'Date', key: 'date' },
+  { header: 'Category', key: 'category' },
+  { header: 'Amount', key: 'amount' },
+  { header: 'Includes GST', key: 'gstIncluded' },
+  { header: 'Supplier', key: 'supplier' },
+  { header: 'Reference', key: 'reference' },
+  { header: 'Notes', key: 'notes' },
+  { header: 'Created', key: 'createdAt' },
+];
+
+// Builds the CSV attachments (as plain string content - small enough
 // data volumes here that streaming to disk first isn't worth the
 // complexity) and the counts used in the covering email's body.
 async function buildBackupAttachments() {
-  const [passengers, drivers, bookings, complaints] = await Promise.all([
+  const [passengers, drivers, bookings, complaints, expenses] = await Promise.all([
     User.find({ role: 'passenger' }),
     Driver.find({}).populate('userId', 'name email mobile'),
     Booking.find({}),
     Complaint.find({}),
+    Expense.find({}),
   ]);
 
   const dateStr = new Date().toISOString().slice(0, 10);
   return {
-    counts: { passengers: passengers.length, drivers: drivers.length, bookings: bookings.length, complaints: complaints.length },
+    counts: { passengers: passengers.length, drivers: drivers.length, bookings: bookings.length, complaints: complaints.length, expenses: expenses.length },
     attachments: [
       { filename: `passengers-${dateStr}.csv`, content: toCsv(passengers, PASSENGER_COLUMNS) },
       { filename: `drivers-${dateStr}.csv`, content: toCsv(drivers, DRIVER_COLUMNS) },
       { filename: `trips-${dateStr}.csv`, content: toCsv(bookings, BOOKING_COLUMNS) },
       { filename: `complaints-${dateStr}.csv`, content: toCsv(complaints, COMPLAINT_COLUMNS) },
+      { filename: `driver-expenses-${dateStr}.csv`, content: toCsv(expenses, EXPENSE_COLUMNS) },
     ],
   };
 }

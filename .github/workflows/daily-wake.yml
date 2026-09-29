@@ -1,4 +1,4 @@
-# Wakes the backend once a day and runs the scheduled-backup check.
+# Wakes the backend at 6am NZ time and runs the scheduled-backup check.
 #
 # Render's free plan puts the server to sleep when nobody is using the site,
 # and while it's asleep its hourly backup check never runs. This calls
@@ -15,9 +15,13 @@ name: Daily backend wake-up
 
 on:
   schedule:
-    # 19:00 UTC = 7am NZST / 8am NZDT. GitHub may run scheduled jobs a
-    # little late at busy times.
-    - cron: '0 19 * * *'
+    # 6am NZ time, which also starts the server's own 6am-11pm keep-awake
+    # pings (backend/utils/keepAwake.js). Two runs because cron here is UTC:
+    # 17:00 UTC = 6am NZDT (summer), 18:00 UTC = 6am NZST (winter) - the
+    # other run is harmless, the backup only sends when one is due. GitHub
+    # may run scheduled jobs a little late at busy times.
+    - cron: '0 17 * * *'
+    - cron: '0 18 * * *'
   workflow_dispatch: {}
 
 jobs:

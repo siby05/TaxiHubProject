@@ -28,16 +28,63 @@ export default function BookDriver() {
   const [nextAvailableTime, setNextAvailableTime] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    client.get(`/booking/driver-preview/${driverId}`).then((r) => setPreview(r.data)).catch(() => {});
-  }, [driverId]);
+  // 'loading' | 'ready' | 'failed'. A QR scan is often the first visit in
+  // a while, so the Render backend may still be asleep - the booking form
+  // needs the driver's details, so keep trying (api/client.js already
+  // retries for ~70s per call) instead of silently showing no form.
+  const [driverLoad, setDriverLoad] = useState('loading');
+  const [loadTry, setLoadTry] = useState(0);
+  const isLoggedInPassenger = user?.role === 'passenger';
 
   useEffect(() => {
-    if (!user || user.role !== 'passenger') return;
-    client.get(`/booking/driver-info/${driverId}`)
-      .then((r) => setDriver(r.data))
-      .catch((err) => { if (err.response?.status === 404) setNotFound(true); });
-  }, [user, driverId]);
+    let cancelled = false;
+    setDriverLoad('loading');
+    const path = isLoggedInPassenger ? `/booking/driver-info/${driverId}` : `/booking/driver-preview/${driverId}`;
+    (async () => {
+      // ~3.5 minutes in all - a cold start on Render's free plan is
+      // usually well under that.
+      for (let i = 0; i < 3 && !cancelled; i++) {
+        try {
+          const { data } = await client.get(path);
+          if (cancelled) return;
+          if (isLoggedInPassenger) setDriver(data);
+          else setPreview(data);
+          setDriverLoad('ready');
+          return;
+        } catch (err) {
+          if (cancelled) return;
+          if (err.response?.status === 404) {
+            if (isLoggedInPassenger) setNotFound(true);
+            else setPreview({ available: false });
+            setDriverLoad('ready');
+            return;
+          }
+          // The server answered with a real error - retrying won't help.
+          if (err.response && ![502, 503, 504].includes(err.response.status)) break;
+        }
+      }
+      if (!cancelled) setDriverLoad('failed');
+    })();
+    return () => { cancelled = true; };
+  }, [isLoggedInPassenger, driverId, loadTry]);
+
+  const loadStatus = driverLoad !== 'ready' && (
+    <div className="card" style={{ maxWidth: 460, margin: '0 auto 20px', textAlign: 'center' }}>
+      {driverLoad === 'loading' ? (
+        <>
+          <div className="spinner" aria-hidden="true" />
+          <p style={{ margin: '8px 0 4px' }}><strong>Connecting to your driver...</strong></p>
+          <p className="muted" style={{ margin: 0 }}>If EasyRide hasn't been used for a while this can take up to a minute - please keep this page open.</p>
+        </>
+      ) : (
+        <>
+          <p style={{ marginTop: 0 }}><strong>We couldn't reach EasyRide just now.</strong></p>
+          <p className="muted">Check your mobile data or Wi-Fi, then try again.</p>
+          <button type="button" className="btn" onClick={() => setLoadTry((n) => n + 1)}>Try again</button>
+        </>
+      )}
+    </div>
+  );
 
   // Only hail the specific driver when they're still approved; otherwise
   // send no driverId at all so the backend auto-matches any available
@@ -223,6 +270,8 @@ export default function BookDriver() {
           )}
         </div>
 
+        {loadStatus}
+
         {preview && preview.available && (
           <div className="card" style={{ maxWidth: 460, margin: '0 auto', textAlign: 'left' }}>
             <h3 style={{ marginTop: 0 }}>Book now - no account needed</h3>
@@ -339,7 +388,7 @@ export default function BookDriver() {
       <div className="card" style={{ maxWidth: 480 }}>
         <h2>{driver?.available === false ? 'Book a ride' : 'Book this driver'}</h2>
 
-        {!driver && <p className="muted">Loading driver details...</p>}
+        {!driver && loadStatus}
 
         {driver?.available && (
           <p className="muted">{driver.name} · {driver.vehicleType} · {driver.vehicleNumber} · ${driver.ratePerKm}/km · ⭐ {driver.rating || 'new'}</p>
