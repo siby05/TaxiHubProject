@@ -1,4 +1,5 @@
 const express = require('express');
+const { serverError } = require('../utils/serverError');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const router = express.Router();
@@ -470,7 +471,7 @@ router.post('/bookings', auth, roleMiddleware(['driver']), async (req, res) => {
 
     res.status(201).json({ booking, passenger: { _id: passenger._id, name: passenger.name, mobile: passenger.mobile } });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    serverError(res, err, req);
   }
 });
 

@@ -1,4 +1,5 @@
 const express = require('express');
+const { serverError } = require('../utils/serverError');
 const router = express.Router();
 const Booking = require('../models/Booking');
 const Driver = require('../models/Driver');
@@ -83,7 +84,7 @@ router.post('/start', auth, roleMiddleware(['passenger']), async (req, res) => {
     await Booking.findByIdAndUpdate(booking._id, { paymentIntentId: mockId, paymentStatus: 'paid' });
     res.json({ mock: true, message: 'STRIPE_SECRET_KEY not set - payment auto-marked as paid for testing' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    serverError(res, err, req);
   }
 });
 
@@ -197,7 +198,7 @@ router.post('/confirm', auth, roleMiddleware(['passenger']), async (req, res) =>
 
     res.json(await Booking.findByIdAndUpdate(bookingId, { paymentStatus: 'paid' }));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    serverError(res, err, req);
   }
 });
 

@@ -1,4 +1,5 @@
 const express = require('express');
+const { serverError } = require('../utils/serverError');
 const crypto = require('crypto');
 const { checkScheduledBackup } = require('../utils/backup');
 
@@ -29,7 +30,7 @@ router.post('/backup', async (req, res) => {
   try {
     res.json(await checkScheduledBackup());
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    serverError(res, err, req);
   }
 });
 

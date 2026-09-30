@@ -1,4 +1,5 @@
 const express = require('express');
+const { serverError } = require('../utils/serverError');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const router = express.Router();
@@ -125,7 +126,7 @@ router.post(
         message: 'Application submitted. An admin will review your documents before you can go online.',
       });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      serverError(res, err, req);
     }
   },
 );

@@ -62,8 +62,11 @@
 
 /* Road strip along the bottom of the hero with a car driving across */
 .hm-road { position: relative; height: 76px; margin-top: 20px; }
-.hm-road::before { content: ''; position: absolute; left: 0; right: 0; bottom: 22px; height: 2px; background: repeating-linear-gradient(90deg, rgba(255,255,255,0.35) 0 28px, transparent 28px 52px); animation: hm-lane 1.1s linear infinite; }
-@keyframes hm-lane { to { background-position: -52px 0; } }
+/* One dash period wider than the road and slid with transform (composited)
+   rather than background-position (a repaint every frame); the hero's
+   overflow: hidden clips the extra width. */
+.hm-road::before { content: ''; position: absolute; left: 0; right: -52px; bottom: 22px; height: 2px; background: repeating-linear-gradient(90deg, rgba(255,255,255,0.35) 0 28px, transparent 28px 52px); animation: hm-lane 1.1s linear infinite; }
+@keyframes hm-lane { to { transform: translateX(-52px); } }
 .hm-road::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent); }
 .hm-road svg { position: absolute; bottom: 16px; left: -140px; width: 120px; height: auto; animation: hm-drive 16s linear infinite; }
 @keyframes hm-drive { to { transform: translateX(calc(100vw + 300px)); } }
@@ -173,5 +176,14 @@
   .hm-map .hm-route { stroke-dashoffset: 0; }
   .hm-toast { opacity: 1; transform: none; }
   .hm-reveal { opacity: 1; transform: none; }
-  .hm-road svg { left: 60%; }
+  /* The two cars still drive, just slower: many phones switch reduced
+     motion on with battery saver, and a parked car looked broken. The
+     map car is SMIL, which ignores this media query anyway. */
+  .hm .hm-road svg { animation: hm-drive 24s linear infinite !important; }
+  .hm .hm-road .hm-wheel { animation: hm-spin 1.2s linear infinite !important; }
 }
+
+/* Hero scrolled out of view (Home.jsx): freeze its animations so they
+   stop costing CPU/battery. Declared last so it beats the car exemption
+   above. */
+.hm .hm-hero.hm-paused *, .hm .hm-hero.hm-paused *::before, .hm .hm-hero.hm-paused *::after { animation-play-state: paused !important; }

@@ -1,4 +1,5 @@
 const express = require('express');
+const { serverError } = require('../utils/serverError');
 const router = express.Router();
 const Complaint = require('../models/Complaint');
 const Booking = require('../models/Booking');
@@ -92,7 +93,7 @@ router.post('/', auth, roleMiddleware(['passenger']), upload.array('attachments'
 
     res.status(201).json({ message: 'Complaint logged successfully', complaintId: complaint.complaintId, complaint });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    serverError(res, err, req);
   }
 });
 
@@ -202,7 +203,7 @@ router.post('/:complaintId/driver-comment', auth, roleMiddleware(['driver']), as
 
     res.json({ message: 'Comment added successfully', complaint });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    serverError(res, err, req);
   }
 });
 

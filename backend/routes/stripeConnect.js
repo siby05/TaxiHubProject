@@ -1,4 +1,5 @@
 const express = require('express');
+const { serverError } = require('../utils/serverError');
 const router = express.Router();
 const Driver = require('../models/Driver');
 const User = require('../models/User');
@@ -68,7 +69,7 @@ router.post('/onboard', auth, roleMiddleware(['driver']), async (req, res) => {
 
     res.json({ url: accountLink.url });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    serverError(res, err, req);
   }
 });
 

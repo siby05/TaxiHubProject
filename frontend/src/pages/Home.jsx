@@ -67,28 +67,34 @@ function CarSide() {
   );
 }
 
-function TripCard() {
+// `active` is false while the hero is scrolled off screen: the car and the
+// status cycle pause (the CSS pauses the rest), so nothing keeps redrawing
+// or re-rendering where nobody can see it.
+function TripCard({ active }) {
   const [state, setState] = useState(TRIP_STATES[0]);
   const mapRef = useRef(null);
 
-  // SMIL ignores prefers-reduced-motion, so park the car at the
-  // destination ourselves, matching what the CSS does for everything else.
+  // The status chip follows the SMIL clock rather than its own timers, so
+  // it stays in step with the car through pauses and background-tab
+  // throttling. The car keeps driving even with reduced motion on (see
+  // home.css) - it's small and slow, and on many phones battery saver
+  // turns that setting on, which left the hero looking broken.
   useEffect(() => {
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches && mapRef.current) {
-      mapRef.current.pauseAnimations();
-      mapRef.current.setCurrentTime(5);
+    const svg = mapRef.current;
+    if (!svg?.getCurrentTime) return undefined;
+    if (!active) {
+      svg.pauseAnimations();
+      return undefined;
     }
-  }, []);
-
-  useEffect(() => {
-    let timers = [];
-    function run() {
-      timers = TRIP_STATES.map((s) => setTimeout(() => setState(s), s.at));
-    }
-    run();
-    const loop = setInterval(run, 9000);
-    return () => { clearInterval(loop); timers.forEach(clearTimeout); };
-  }, []);
+    svg.unpauseAnimations();
+    const tick = () => {
+      const t = (svg.getCurrentTime() * 1000) % 9000;
+      setState(TRIP_STATES.reduce((cur, s) => (t >= s.at ? s : cur), TRIP_STATES[0]));
+    };
+    tick();
+    const id = setInterval(tick, 250);
+    return () => clearInterval(id);
+  }, [active]);
 
   return (
     <div className="hm-visual">
@@ -195,15 +201,29 @@ function useReveal() {
 export default function Home() {
   const driverSignupEnabled = useDriverSignupEnabled();
   const [vehicleTypes, setVehicleTypes] = useState(FALLBACK_VEHICLE_TYPES);
+  const heroRef = useRef(null);
+  const [heroOnScreen, setHeroOnScreen] = useState(true);
   useReveal();
 
   useEffect(() => {
-    client.get('/booking/vehicle-types').then((r) => { if (r.data?.length) setVehicleTypes(r.data.map((t) => t.label)); }).catch(() => {});
+    let cancelled = false;
+    client.get('/booking/vehicle-types')
+      .then((r) => { if (!cancelled && r.data?.length) setVehicleTypes(r.data.map((t) => t.label)); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  // Pause the hero's animations while it's scrolled out of view.
+  useEffect(() => {
+    if (!heroRef.current || !('IntersectionObserver' in window)) return undefined;
+    const io = new IntersectionObserver(([entry]) => setHeroOnScreen(entry.isIntersecting));
+    io.observe(heroRef.current);
+    return () => io.disconnect();
   }, []);
 
   return (
     <div className="hm">
-      <section className="hm-hero">
+      <section className={`hm-hero${heroOnScreen ? '' : ' hm-paused'}`} ref={heroRef}>
         <div className="hm-aurora" aria-hidden="true"><span /><span /><span /></div>
         <div className="hm-grid" aria-hidden="true" />
         <div className="hm-hero-inner">
@@ -225,7 +245,7 @@ export default function Home() {
               <span><Icon.check /> Cash or card</span>
             </div>
           </div>
-          <TripCard />
+          <TripCard active={heroOnScreen} />
           <div className="hm-trust hm-trust-mobile">
             <span><Icon.check /> Admin-approved drivers</span>
             <span><Icon.check /> NZTA compliant</span>

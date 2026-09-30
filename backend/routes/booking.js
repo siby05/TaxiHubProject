@@ -1,4 +1,5 @@
 const express = require('express');
+const { serverError } = require('../utils/serverError');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
@@ -391,7 +392,7 @@ router.post('/guest-quote', guestLimiter, async (req, res) => {
       requestedOffSchedule: resolved.requestedOffSchedule,
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    serverError(res, err, req);
   }
 });
 
@@ -450,7 +451,7 @@ router.post('/quote', auth, roleMiddleware(['passenger', 'driver']), async (req,
       total: Math.round((estimatedFare + cardSurchargeAmount) * 100) / 100,
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    serverError(res, err, req);
   }
 });
 
@@ -584,7 +585,7 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
 
     res.status(201).json({ ...booking, usedFallback, requestedUnavailable, requestedCashOnly, requestedName, broadcast: !targetDriverId });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    serverError(res, err, req);
   }
 });
 
@@ -727,7 +728,7 @@ router.post('/guest', guestLimiter, async (req, res) => {
       ...(booking.paymentMethod === 'card' && { token: signToken(passenger), user: passengerPublic }),
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    serverError(res, err, req);
   }
 });
 
@@ -858,7 +859,7 @@ router.put('/:id/edit', auth, roleMiddleware(['passenger']), async (req, res) =>
 
     res.json(updated);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    serverError(res, err, req);
   }
 });
 
@@ -1051,7 +1052,7 @@ router.put('/:id/accept', auth, roleMiddleware(['driver']), async (req, res) => 
     if (result.error) return res.status(result.status).json({ error: result.error });
     res.json(result.updated);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    serverError(res, err, req);
   }
 });
 
@@ -1257,7 +1258,7 @@ router.put('/:id/complete', auth, roleMiddleware(['driver']), async (req, res) =
       }
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    serverError(res, err, req);
   }
 });
 
@@ -1310,7 +1311,7 @@ router.put('/:id/cancel', auth, roleMiddleware(['passenger', 'driver']), async (
 
     res.json(updated);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    serverError(res, err, req);
   }
 });
 
@@ -1452,7 +1453,7 @@ router.put('/:id/payment-method', auth, roleMiddleware(['passenger']), async (re
 
     res.json(updated);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    serverError(res, err, req);
   }
 });
 

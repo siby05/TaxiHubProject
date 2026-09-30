@@ -1,4 +1,5 @@
 const express = require('express');
+const { serverError } = require('../utils/serverError');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const router = express.Router();
@@ -273,7 +274,7 @@ router.post('/drivers', async (req, res) => {
 
     res.status(201).json({ driver, temporaryPassword: tempPassword, note: 'Send this temporary password to the driver securely (SMS/WhatsApp) - not emailed for security.' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    serverError(res, err, req);
   }
 });
 

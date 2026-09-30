@@ -1,4 +1,5 @@
 const express = require('express');
+const { serverError } = require('../utils/serverError');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
@@ -85,7 +86,7 @@ router.post('/claim', claimLimiter, async (req, res) => {
     const updated = await User.findByIdAndUpdate(user._id, patch, { new: true });
     res.json({ token: signToken(updated), user: publicUser(updated) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    serverError(res, err, req);
   }
 });
 
@@ -111,7 +112,7 @@ router.post('/claim-link', claimLimiter, async (req, res) => {
     });
     res.json(generic);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    serverError(res, err, req);
   }
 });
 
@@ -120,6 +121,13 @@ router.post('/register', authLimiter, async (req, res) => {
   try {
     const { name, email, password, mobile, address } = req.body;
     if (!name || !email || !password) return res.status(400).json({ error: 'name, email and password are required' });
+    // Same rules the signup form enforces, so a hand-crafted request can't
+    // store a non-string (e.g. a query object) or a blank password.
+    if ([name, email, password].some((v) => typeof v !== 'string') || (mobile != null && typeof mobile !== 'string') || (address != null && typeof address !== 'string')) {
+      return res.status(400).json({ error: 'Invalid signup details' });
+    }
+    if (!/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: 'email must be a valid address' });
+    if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
 
     const existing = await User.findOne({ email: email.toLowerCase() });
     if (existing) return res.status(409).json({ error: 'An account with this email already exists' });
@@ -145,7 +153,7 @@ router.post('/register', authLimiter, async (req, res) => {
 
     res.status(201).json({ token: signToken(user), user: publicUser(user) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    serverError(res, err, req);
   }
 });
 
@@ -154,6 +162,7 @@ router.post('/login', authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'email and password are required' });
+    if (typeof email !== 'string' || typeof password !== 'string') return res.status(401).json({ error: 'Invalid credentials' });
 
     const user = await User.findOne({ email: email.toLowerCase() });
     if (!user) return res.status(401).json({ error: 'Invalid credentials' });
@@ -164,7 +173,7 @@ router.post('/login', authLimiter, async (req, res) => {
 
     res.json({ token: signToken(user), user: publicUser(user) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    serverError(res, err, req);
   }
 });
 
@@ -206,7 +215,7 @@ router.put('/me', auth, async (req, res) => {
     });
     res.json(publicUser(updated));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    serverError(res, err, req);
   }
 });
 
@@ -248,7 +257,7 @@ router.post('/forgot-password', authLimiter, async (req, res) => {
 
     res.json({ ...generic, resetLink });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    serverError(res, err, req);
   }
 });
 
@@ -277,7 +286,7 @@ router.post('/reset-password', authLimiter, async (req, res) => {
     });
     res.json({ message: 'Password reset - you can now log in with your new password.' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    serverError(res, err, req);
   }
 });
 
