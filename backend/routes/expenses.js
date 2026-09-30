@@ -41,13 +41,22 @@ function isRealDate(str) {
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === str;
 }
 
+// Built-in categories plus the driver's own (driver.expenseCategories,
+// [{key, label}] - added via POST /categories below). Custom keys are
+// prefixed 'custom-' so they can never collide with a built-in one.
+function categoriesFor(driver) {
+  return [...EXPENSE_CATEGORIES, ...(driver.expenseCategories || []).map((c) => ({ ...c, custom: true }))];
+}
+
 // Validates and normalises a create/update body. Returns { error } or
 // { value } with only the fields a driver may set.
-function parseExpense(body) {
+function parseExpense(body, driver) {
   const date = String(body.date || '').trim();
   if (!isRealDate(date)) return { error: 'Enter the date the expense was paid' };
   if (date > nzToday()) return { error: 'The expense date can\'t be in the future' };
-  if (!isValidExpenseCategory(body.category)) return { error: 'Choose a category' };
+  if (!isValidExpenseCategory(body.category) && !(driver.expenseCategories || []).some((c) => c.key === body.category)) {
+    return { error: 'Choose a category' };
+  }
   const amount = Number(body.amount);
   if (!Number.isFinite(amount) || amount <= 0) return { error: 'Enter an amount greater than $0' };
   if (amount > 100000) return { error: 'Amount looks too large - check it and try again' };
@@ -100,7 +109,8 @@ router.get('/', driverOnly, async (req, res) => {
       .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
       .map((e) => ({ ...e, gst: gstPortion(e) }));
 
-    const byCategory = EXPENSE_CATEGORIES.map((c) => {
+    const categories = categoriesFor(driver);
+    const byCategory = categories.map((c) => {
       const items = expenses.filter((e) => e.category === c.key);
       return { key: c.key, label: c.label, count: items.length, total: round2(items.reduce((s, e) => s + e.amount, 0)) };
     }).filter((c) => c.count > 0).sort((a, b) => b.total - a.total);
@@ -112,19 +122,31 @@ router.get('/', driverOnly, async (req, res) => {
     const totalExpenses = round2(expenses.reduce((s, e) => s + e.amount, 0));
     const tripIncome = round2(tripsInYear.reduce((s, t) => s + (t.actualFare || 0), 0));
 
+    // Month-by-month income and expenses, April first, for the report.
+    const byMonth = Array.from({ length: 12 }, (_, i) => {
+      const m = ((i + 3) % 12) + 1;
+      const month = `${m >= 4 ? fy - 1 : fy}-${String(m).padStart(2, '0')}`;
+      const monthExpenses = expenses.filter((e) => e.date.startsWith(month));
+      const monthTrips = tripsInYear.filter((t) => nzDateOf(t.completedAt || t.updatedAt || t.createdAt).startsWith(month));
+      const income = round2(monthTrips.reduce((s, t) => s + (t.actualFare || 0), 0));
+      const spent = round2(monthExpenses.reduce((s, e) => s + e.amount, 0));
+      return { month, tripCount: monthTrips.length, income, expenses: spent, net: round2(income - spent) };
+    });
+
     res.json({
       financialYear: fy,
       currentFinancialYear: currentFy,
       start,
       end,
       years: [...years].sort((a, b) => b - a),
-      categories: EXPENSE_CATEGORIES,
+      categories,
       expenses,
       summary: {
         count: expenses.length,
         totalExpenses,
         gstClaimable: round2(expenses.reduce((s, e) => s + e.gst, 0)),
         byCategory,
+        byMonth,
         tripCount: tripsInYear.length,
         tripIncome,
         netIncome: round2(tripIncome - totalExpenses),
@@ -141,7 +163,7 @@ router.post('/', driverOnly, async (req, res) => {
   try {
     const driver = await getDriver(req, res);
     if (!driver) return;
-    const { error, value } = parseExpense(req.body);
+    const { error, value } = parseExpense(req.body, driver);
     if (error) return res.status(400).json({ error });
     const expense = await Expense.create({ ...value, driverId: driver._id });
     res.status(201).json(expense);
@@ -160,13 +182,56 @@ async function findOwnExpense(driver, id) {
   }
 }
 
+// POST /api/driver/expenses/categories { label } - adds a category of the
+// driver's own. Returns the new {key, label}; re-adding an existing label
+// just returns that category.
+router.post('/categories', driverOnly, async (req, res) => {
+  try {
+    const driver = await getDriver(req, res);
+    if (!driver) return;
+    const label = String(req.body.label || '').trim().replace(/\s+/g, ' ').slice(0, 40);
+    if (!label) return res.status(400).json({ error: 'Enter a name for the category' });
+    const existing = categoriesFor(driver).find((c) => c.label.toLowerCase() === label.toLowerCase());
+    if (existing) return res.json({ key: existing.key, label: existing.label });
+    const own = driver.expenseCategories || [];
+    if (own.length >= 30) return res.status(400).json({ error: 'You can have up to 30 categories of your own' });
+    const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'category';
+    let key = `custom-${slug}`;
+    for (let n = 2; own.some((c) => c.key === key); n += 1) key = `custom-${slug}-${n}`;
+    const category = { key, label };
+    await Driver.findByIdAndUpdate(driver._id, { expenseCategories: [...own, category] });
+    res.status(201).json(category);
+  } catch (err) {
+    console.error(`[expenses] add category failed: ${err.message}`);
+    res.status(500).json({ error: 'Could not add the category' });
+  }
+});
+
+// DELETE /api/driver/expenses/categories/:key - removes one of the driver's
+// own categories, only while no expense uses it.
+router.delete('/categories/:key', driverOnly, async (req, res) => {
+  try {
+    const driver = await getDriver(req, res);
+    if (!driver) return;
+    const own = driver.expenseCategories || [];
+    if (!own.some((c) => c.key === req.params.key)) return res.status(404).json({ error: 'Category not found' });
+    const inUse = await Expense.findOne({ driverId: driver._id, category: req.params.key });
+    if (inUse) return res.status(400).json({ error: 'This category has expenses - move or delete them first' });
+    await Driver.findByIdAndUpdate(driver._id, { expenseCategories: own.filter((c) => c.key !== req.params.key) });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(`[expenses] delete category failed: ${err.message}`);
+    res.status(500).json({ error: 'Could not delete the category' });
+  }
+});
+
 // PUT /api/driver/expenses/:id
 router.put('/:id', driverOnly, async (req, res) => {
   try {
     const driver = await getDriver(req, res);
     if (!driver) return;
     if (!(await findOwnExpense(driver, req.params.id))) return res.status(404).json({ error: 'Expense not found' });
-    const { error, value } = parseExpense(req.body);
+    const { error, value } = parseExpense(req.body, driver);
     if (error) return res.status(400).json({ error });
     const updated = await Expense.findByIdAndUpdate(req.params.id, value, { new: true });
     res.json(updated);

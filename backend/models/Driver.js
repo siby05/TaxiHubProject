@@ -36,6 +36,8 @@ const { createModel } = require('../lib/createModel');
 // /api/driver/payment-preference) - false means cash-only: they're
 // excluded from auto-match for card bookings, and a direct QR hail with
 // paymentMethod:'card' is rejected instead of silently charging them.
+// expenseCategories: the driver's own expense categories, [{key, label}],
+// on top of config/expenseCategories.js (see routes/expenses.js).
 const Driver = createModel('Driver', {
   userId: 'User',
 });
