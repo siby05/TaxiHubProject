@@ -5,6 +5,7 @@ import { useAuthStore } from '../store/authStore';
 import { useDriverSignupEnabled } from '../hooks/useDriverSignupEnabled';
 import AddressAutocomplete from '../components/AddressAutocomplete';
 import PhoneField from '../components/PhoneField';
+import GoogleSignInButton from '../components/GoogleSignInButton';
 
 export default function Register() {
   const driverSignupEnabled = useDriverSignupEnabled();
@@ -86,6 +87,13 @@ export default function Register() {
     <div className="auth-shell card">
       <h2>Passenger sign-up</h2>
       {driverSignupEnabled && <p className="muted">Driver accounts <Link to="/driver-signup">apply here</Link> instead.</p>}
+      <GoogleSignInButton
+        text="signup_with"
+        onSignedIn={(token, user) => {
+          setSession(token, user);
+          navigate(user.role === 'passenger' ? (location.state?.from || '/passenger') : user.role === 'driver' ? '/driver' : '/login');
+        }}
+      />
       <PhoneField value={form.mobile} onChange={(v) => update('mobile', v)}
         hint="Already had a trip booked for you by a driver? Enter that number and we'll find your details." />
 

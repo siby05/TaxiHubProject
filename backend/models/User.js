@@ -15,7 +15,9 @@ const { createModel } = require('../lib/createModel');
 // three flows took the account over with their own password - see
 // routes/auth.js POST /claim), resetToken/resetTokenExpiry (forgot-password flow, see
 // routes/auth.js POST /forgot-password and /reset-password - null/unset
-// once used or expired), createdAt.
+// once used or expired), googleId (the Google account's stable "sub" id,
+// set once someone signs in with Google - see routes/auth.js POST /google),
+// createdAt.
 const User = createModel('User');
 
 module.exports = User;

@@ -3,6 +3,7 @@ const { serverError } = require('../utils/serverError');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const { OAuth2Client } = require('google-auth-library');
 const router = express.Router();
 const User = require('../models/User');
 const Booking = require('../models/Booking');
@@ -20,6 +21,12 @@ const { emailService } = require('../services/emailService');
 const { runInBackground } = require('../utils/background');
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+// "Sign in with Google" (POST /google). Free - Google Identity Services;
+// GOOGLE_CLIENT_ID is the OAuth web client id from Google Cloud Console
+// (the same value as the frontend's VITE_GOOGLE_CLIENT_ID). Unset = off.
+const GOOGLE_CLIENT_ID = (process.env.GOOGLE_CLIENT_ID || '').trim();
+const googleClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
 
 function signToken(user) {
   // Long-lived by default so users stay signed in across visits instead of
@@ -152,6 +159,63 @@ router.post('/register', authLimiter, async (req, res) => {
     runInBackground('email sendVerificationEmail', () => emailService.sendVerificationEmail(user.email, user.name));
 
     res.status(201).json({ token: signToken(user), user: publicUser(user) });
+  } catch (err) {
+    serverError(res, err, req);
+  }
+});
+
+// POST /api/auth/google { credential } - "Sign in with Google" for
+// passengers (new or existing) and drivers with an existing account. The
+// credential is the ID token Google Identity Services hands the browser.
+router.post('/google', authLimiter, async (req, res) => {
+  try {
+    if (!googleClient) return res.status(503).json({ error: 'Google sign-in isn\'t set up yet - use email and password' });
+    const { credential } = req.body;
+    if (typeof credential !== 'string' || !credential) return res.status(400).json({ error: 'Missing Google credential' });
+
+    let payload;
+    try {
+      // Checks Google's signature, expiry, issuer and that the token was
+      // issued for *our* client id - a token minted for another site is
+      // rejected here.
+      const ticket = await googleClient.verifyIdToken({ idToken: credential, audience: GOOGLE_CLIENT_ID });
+      payload = ticket.getPayload();
+    } catch {
+      return res.status(401).json({ error: 'Google sign-in failed - please try again' });
+    }
+    if (!payload?.email || !payload.email_verified) {
+      return res.status(401).json({ error: 'Your Google account email isn\'t verified' });
+    }
+
+    const email = payload.email.toLowerCase();
+    let user = await User.findOne({ email });
+    if (user) {
+      // Admin accounts stay password-only.
+      if (user.role === 'admin') return res.status(403).json({ error: 'Admin accounts sign in with email and password' });
+      if (!user.isActive) return res.status(403).json({ error: 'Account is deactivated' });
+      if (user.googleId && user.googleId !== payload.sub) {
+        return res.status(403).json({ error: 'This account is linked to a different Google account' });
+      }
+      if (!user.googleId || !user.emailVerified) {
+        user = await User.findByIdAndUpdate(user._id, { googleId: payload.sub, emailVerified: true });
+      }
+    } else {
+      // New passenger. They get an unguessable random password, so the
+      // account is Google-only until they choose to set one via
+      // "Forgot password".
+      user = await User.create({
+        name: String(payload.name || email.split('@')[0]).slice(0, 100),
+        email,
+        password: await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10),
+        role: 'passenger',
+        isActive: true,
+        emailVerified: true,
+        googleId: payload.sub,
+      });
+      runInBackground('email sendVerificationEmail', () => emailService.sendVerificationEmail(user.email, user.name));
+    }
+
+    res.json({ token: signToken(user), user: publicUser(user) });
   } catch (err) {
     serverError(res, err, req);
   }

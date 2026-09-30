@@ -2,10 +2,13 @@ import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useDriverSignupEnabled } from '../hooks/useDriverSignupEnabled';
+import GoogleSignInButton from '../components/GoogleSignInButton';
+
+const homeFor = (user) => (user.role === 'admin' ? '/admin' : user.role === 'driver' ? '/driver' : '/passenger');
 
 export default function Login() {
   const driverSignupEnabled = useDriverSignupEnabled();
-  const { login } = useAuthStore();
+  const { login, setSession } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
   const [email, setEmail] = useState('');
@@ -19,8 +22,7 @@ export default function Login() {
     setLoading(true);
     try {
       const user = await login(email, password);
-      const home = user.role === 'admin' ? '/admin' : user.role === 'driver' ? '/driver' : '/passenger';
-      navigate(location.state?.from || home);
+      navigate(location.state?.from || homeFor(user));
     } catch (err) {
       setError(err.response?.data?.error || 'Login failed');
     } finally {
@@ -31,6 +33,10 @@ export default function Login() {
   return (
     <div className="auth-shell card">
       <h2>Log in to EasyRide</h2>
+      <GoogleSignInButton
+        text="signin_with"
+        onSignedIn={(token, user) => { setSession(token, user); navigate(location.state?.from || homeFor(user)); }}
+      />
       <form onSubmit={onSubmit}>
         <div>
           <label>Email</label>
