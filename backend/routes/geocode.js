@@ -34,6 +34,31 @@ function shortLabel(result) {
 // The bbox covers New Zealand; results are also filtered on countrycode
 // since the bbox doesn't strictly exclude everything outside it.
 const NZ_BBOX = '165.8,-47.4,179,-34';
+const inNz = (lat, lng) => lat >= -47.4 && lat <= -34 && lng >= 165.8 && lng <= 179;
+
+// Where results are ranked around when the caller doesn't say: central New
+// Plymouth, where the service runs. "kfc" then lists the New Plymouth KFC
+// first instead of Auckland's.
+const DEFAULT_NEAR = { lat: -39.06, lng: 174.08 };
+
+// Airport codes people type as shorthand. Photon fuzzy-matches "npl" to
+// "NPD" (the fuel company), so New Plymouth Airport never came up. The
+// airport's name is searched too and its results lead the list.
+const PLACE_ALIASES = {
+  npl: 'New Plymouth Airport',
+  akl: 'Auckland Airport',
+  wlg: 'Wellington Airport',
+  pmr: 'Palmerston North Airport',
+  hlz: 'Hamilton Airport',
+  wag: 'Whanganui Airport',
+  trg: 'Tauranga Airport',
+  rot: 'Rotorua Airport',
+  npe: "Hawke's Bay Airport",
+  nsn: 'Nelson Airport',
+  chc: 'Christchurch Airport',
+  zqn: 'Queenstown Airport',
+  dud: 'Dunedin Airport',
+};
 
 function photonLabel(p) {
   const street = [p.housenumber, p.street].filter(Boolean).join(' ');
@@ -50,22 +75,28 @@ function photonLabel(p) {
   return parts.filter(Boolean).join(', ');
 }
 
-async function photonSearch(q) {
-  const url = `https://photon.komoot.io/api/?limit=10&lang=en&bbox=${NZ_BBOX}&q=${encodeURIComponent(q)}`;
+async function photonSearch(q, near) {
+  const url = `https://photon.komoot.io/api/?limit=10&lang=en&bbox=${NZ_BBOX}&lat=${near.lat}&lon=${near.lng}&q=${encodeURIComponent(q)}`;
   const response = await fetch(url, { headers: NOMINATIM_HEADERS, signal: AbortSignal.timeout(6000) });
   if (!response.ok) throw new Error(`Photon responded ${response.status}`);
   const { features = [] } = await response.json();
   return features
     .filter((f) => (f.properties?.countrycode || '').toUpperCase() === 'NZ')
-    .map((f) => ({ label: photonLabel(f.properties), lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0] }));
+    .map((f) => ({ label: photonLabel(f.properties), lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0] }))
+    .filter((r) => inNz(r.lat, r.lng));
 }
 
-async function nominatimSearch(q) {
-  const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=6&countrycodes=nz&q=${encodeURIComponent(q)}`;
+async function nominatimSearch(q, near) {
+  // A viewbox without bounded=1 prefers results around `near` without
+  // excluding the rest of the country.
+  const viewbox = [near.lng - 1, near.lat + 1, near.lng + 1, near.lat - 1].join(',');
+  const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=6&countrycodes=nz&viewbox=${viewbox}&q=${encodeURIComponent(q)}`;
   const response = await fetch(url, { headers: NOMINATIM_HEADERS, signal: AbortSignal.timeout(6000) });
   if (!response.ok) throw new Error(`Nominatim responded ${response.status}`);
   const results = await response.json();
-  return results.map((r) => ({ label: shortLabel(r), lat: Number(r.lat), lng: Number(r.lon) }));
+  return results
+    .map((r) => ({ label: shortLabel(r), lat: Number(r.lat), lng: Number(r.lon) }))
+    .filter((r) => inNz(r.lat, r.lng));
 }
 
 // The free public geocoders rate-limit, and the same prefixes get typed
@@ -94,26 +125,44 @@ function dedupeByLabel(results) {
  *
  * Public (no auth) - needed by the passenger and driver signup pages
  * before a token exists, as well as the logged-in booking flows.
+ *
+ * ?lat=&lng= (optional, inside NZ) ranks results near that point - the
+ * frontend sends the last address the user picked; otherwise central New
+ * Plymouth.
  */
 router.get('/search', async (req, res) => {
-  const q = (req.query.q || '').trim().replace(/\s+/g, ' ');
+  const q = String(req.query.q || '').trim().replace(/\s+/g, ' ').slice(0, 200);
   if (q.length < 3) return res.json([]);
+  const lat = Number(req.query.lat);
+  const lng = Number(req.query.lng);
+  // Rounded to ~1 km so nearby callers share cache entries.
+  const near = Number.isFinite(lat) && Number.isFinite(lng) && inNz(lat, lng)
+    ? { lat: Math.round(lat * 100) / 100, lng: Math.round(lng * 100) / 100 }
+    : DEFAULT_NEAR;
+  const alias = PLACE_ALIASES[q.toLowerCase()];
 
-  const cacheKey = q.toLowerCase();
+  const cacheKey = `${q.toLowerCase()}|${near.lat},${near.lng}`;
   const cached = searchCache.get(cacheKey);
   if (cached && Date.now() - cached.at < SEARCH_CACHE_TTL_MS) return res.json(cached.results);
 
   let results = [];
   let failures = 0;
+  if (alias) {
+    try {
+      results = await photonSearch(alias, near);
+    } catch (err) {
+      console.error(`[geocode] photon alias search failed: ${err.message}`);
+    }
+  }
   try {
-    results = await photonSearch(q);
+    results = [...results, ...(await photonSearch(q, near))];
   } catch (err) {
     failures++;
     console.error(`[geocode] photon search failed: ${err.message}`);
   }
   if (results.length === 0) {
     try {
-      results = await nominatimSearch(q);
+      results = await nominatimSearch(alias || q, near);
     } catch (err) {
       failures++;
       console.error(`[geocode] nominatim search failed: ${err.message}`);
