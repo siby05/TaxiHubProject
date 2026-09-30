@@ -314,6 +314,9 @@ th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--bor
 .btn.whatsapp { background: linear-gradient(180deg, #2bd46c 0%, #1fb85a 100%); color: #fff; }
 .btn.whatsapp:hover { background: linear-gradient(180deg, #1fb85a 0%, #179c4c 100%); color: #fff; box-shadow: 0 4px 12px rgba(31, 184, 90, 0.3); }
 .btn.whatsapp:focus-visible { box-shadow: 0 0 0 3px rgba(31, 184, 90, 0.35); }
+.btn.call { background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%); color: #fff; }
+.btn.call:hover { background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%); color: #fff; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3); }
+.btn.call:focus-visible { box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35); }
 .auth-shell { max-width: 380px; margin: 60px auto; }
 .tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
 .tabs button {

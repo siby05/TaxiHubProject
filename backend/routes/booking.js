@@ -17,6 +17,7 @@ function signToken(user) {
 const Booking = require('../models/Booking');
 const Driver = require('../models/Driver');
 const User = require('../models/User');
+const TripLocation = require('../models/TripLocation');
 const { auth, roleMiddleware } = require('../middleware/auth');
 const { emailService, buildReceiptPage, buildRespondPage, buildRespondResultPage } = require('../services/emailService');
 const { runInBackground } = require('../utils/background');
@@ -942,6 +943,49 @@ router.get('/driver', auth, roleMiddleware(['driver']), async (req, res) => {
       ...(b.driverId && { receiptToken: receiptToken(b._id) }),
     };
   }));
+});
+
+// POST /api/booking/driver/location - a GPS fix from the driver's phone
+// (DriverDashboard.jsx watches the position while the driver has a trip
+// on the go). The server decides which trips it belongs to rather than the
+// client: every trip of this driver's that's in progress, or accepted and
+// due now (not one scheduled well ahead), gets its own TripLocation row.
+// Kept for 7 days - see utils/retention.js cleanupOldTripLocations().
+router.post('/driver/location', auth, roleMiddleware(['driver']), async (req, res) => {
+  try {
+    const lat = Number(req.body.lat);
+    const lng = Number(req.body.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+      return res.status(400).json({ error: 'Valid lat and lng are required' });
+    }
+    const driver = await Driver.findOne({ userId: req.user.id });
+    if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
+
+    const active = (await Booking.find({ driverId: driver._id, status: { $in: ['accepted', 'in-progress'] } }))
+      .filter((b) => b.status === 'in-progress' || b.arrivedAt || !isScheduledAhead(b.scheduledFor));
+    if (active.length === 0) return res.json({ recorded: 0 });
+
+    const num = (v) => (v == null || !Number.isFinite(Number(v)) ? null : Number(v));
+    const takenAt = req.body.recordedAt ? new Date(req.body.recordedAt) : null;
+    // Trust the phone's own timestamp only if it's sane (not in the future,
+    // not stale) - otherwise use the time it reached us.
+    const recordedAt = takenAt && !Number.isNaN(takenAt.getTime()) && takenAt <= new Date() && Date.now() - takenAt.getTime() < 10 * 60 * 1000
+      ? takenAt : new Date();
+
+    await Promise.all(active.map((b) => TripLocation.create({
+      bookingId: b._id,
+      driverId: driver._id,
+      lat,
+      lng,
+      accuracy: num(req.body.accuracy),
+      speed: num(req.body.speed),
+      heading: num(req.body.heading),
+      recordedAt,
+    })));
+    res.json({ recorded: active.length });
+  } catch (err) {
+    serverError(res, err, req);
+  }
 });
 
 // GET /api/booking/previous-drivers - distinct drivers this passenger has

@@ -1,6 +1,7 @@
 const Booking = require('../models/Booking');
 const Complaint = require('../models/Complaint');
 const Notification = require('../models/Notification');
+const TripLocation = require('../models/TripLocation');
 const { getSettings } = require('../config/platformSettings');
 
 // NZ Transport Agency requires complaint records to be kept for 2 years.
@@ -61,11 +62,25 @@ async function cleanupOldNotifications() {
   return removed;
 }
 
+// GPS points recorded while a trip is active are kept for one week, so a
+// route can still be checked if something about a recent trip is queried,
+// without keeping everyone's movements indefinitely.
+const TRIP_LOCATION_RETENTION_DAYS = 7;
+
+async function cleanupOldTripLocations() {
+  const cutoff = new Date(Date.now() - TRIP_LOCATION_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const result = await TripLocation.deleteMany({ recordedAt: { $lt: cutoff } });
+  if (result.deletedCount > 0) {
+    console.log(`[retention] removed ${result.deletedCount} trip GPS point(s) older than ${TRIP_LOCATION_RETENTION_DAYS} days`);
+  }
+  return result.deletedCount;
+}
+
 function startRetentionScheduler(pollIntervalMs = 24 * 60 * 60 * 1000) {
-  const run = () => Promise.all([cleanupOldComplaints(), cleanupOldTrips(), cleanupOldNotifications()])
+  const run = () => Promise.all([cleanupOldComplaints(), cleanupOldTrips(), cleanupOldNotifications(), cleanupOldTripLocations()])
     .catch((err) => console.error('[retention] check failed:', err.message));
   run();
   return setInterval(run, pollIntervalMs);
 }
 
-module.exports = { cleanupOldComplaints, cleanupOldTrips, cleanupOldNotifications, startRetentionScheduler };
+module.exports = { cleanupOldComplaints, cleanupOldTrips, cleanupOldNotifications, cleanupOldTripLocations, TRIP_LOCATION_RETENTION_DAYS, startRetentionScheduler };

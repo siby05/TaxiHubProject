@@ -7,6 +7,7 @@ const User = require('../models/User');
 const Driver = require('../models/Driver');
 const Booking = require('../models/Booking');
 const Complaint = require('../models/Complaint');
+const TripLocation = require('../models/TripLocation');
 const { auth, roleMiddleware } = require('../middleware/auth');
 const { emailService } = require('../services/emailService');
 const { runInBackground } = require('../utils/background');
@@ -23,6 +24,7 @@ const Feedback = require('../models/Feedback');
 const Enquiry = require('../models/Enquiry');
 const { notifyUser } = require('../utils/notify');
 const { runBackup } = require('../utils/backup');
+const { TRIP_LOCATION_RETENTION_DAYS } = require('../utils/retention');
 
 function withCompliance(driver) {
   return { ...driver, compliance: checkDriverCompliance(driver) };
@@ -625,6 +627,19 @@ router.get('/bookings', async (req, res) => {
   }));
 
   res.json(enriched);
+});
+
+// GET /api/admin/bookings/:id/track - the GPS points recorded for one trip
+// (see routes/booking.js POST /driver/location), oldest first. Only the
+// last 7 days are ever returned, even if the daily cleanup hasn't run yet.
+router.get('/bookings/:id/track', async (req, res) => {
+  const booking = await Booking.findById(req.params.id);
+  if (!booking) return res.status(404).json({ error: 'Booking not found' });
+  const cutoff = new Date(Date.now() - TRIP_LOCATION_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const points = (await TripLocation.find({ bookingId: booking._id }).sort({ recordedAt: 1 }))
+    .filter((p) => new Date(p.recordedAt) >= cutoff)
+    .map(({ lat, lng, accuracy, speed, heading, recordedAt }) => ({ lat, lng, accuracy, speed, heading, recordedAt }));
+  res.json({ bookingId: booking.bookingId, retentionDays: TRIP_LOCATION_RETENTION_DAYS, points });
 });
 
 // GET /api/admin/feedback - submissions from the public feedback form

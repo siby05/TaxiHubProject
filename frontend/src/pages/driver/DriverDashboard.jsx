@@ -7,7 +7,20 @@ import { notificationPermission, requestNotificationPermission, showBrowserNotif
 import { waLink, openWhatsApp, driverPendingMessage, driverConfirmedMessage, driverArrivedMessage, driverCancelledMessage, paymentReminderMessage, receiptMessage, vehicleLabel } from '../../utils/whatsapp';
 import { formatNzDateTime, formatNzTime } from '../../utils/nzTime';
 import { directionsLink } from '../../utils/maps';
+import { telLink } from '../../utils/phone';
+import { useTripGpsTracking } from '../../hooks/useTripGpsTracking';
 import WhatsAppIcon from '../../components/WhatsAppIcon';
+
+// Same rule as the backend's POST /api/booking/driver/location: a trip is
+// "on the go" (so its GPS route is recorded) once it's in progress, or
+// accepted and either due now or the driver has already arrived - not an
+// accepted trip scheduled for later in the week.
+const SCHEDULED_AHEAD_MS = 15 * 60 * 1000;
+function isTripOnTheGo(b) {
+  if (b.status === 'in-progress') return true;
+  if (b.status !== 'accepted') return false;
+  return !!b.arrivedAt || !b.scheduledFor || new Date(b.scheduledFor).getTime() - Date.now() <= SCHEDULED_AHEAD_MS;
+}
 
 export default function DriverDashboard() {
   const { bookings, fetchDriverBookings } = useBookingStore();
@@ -27,6 +40,11 @@ export default function DriverDashboard() {
   // successful cancel so the link can still show inline in that row.
   const [cancelWaLinks, setCancelWaLinks] = useState({});
   const [receiptSent, setReceiptSent] = useState({});
+  const [gpsError, setGpsError] = useState('');
+
+  const tracking = bookings.some((b) => b.driverId && isTripOnTheGo(b));
+  useTripGpsTracking(tracking, setGpsError);
+  useEffect(() => { if (!tracking) setGpsError(''); }, [tracking]);
 
   function load() {
     fetchDriverBookings(showAllTrips ? { all: true } : undefined);
@@ -203,6 +221,11 @@ export default function DriverDashboard() {
   return (
     <div className="container">
       <h1>Driver dashboard</h1>
+      {tracking && (
+        <div className="card" style={{ background: gpsError ? '#fef3c7' : '#ecfdf5' }}>
+          {gpsError || '📡 GPS tracking is on for your current trip. The route is kept for 7 days.'}
+        </div>
+      )}
       {alert && <div className="card" style={{ background: '#fef3c7' }}>{alert} <button className="btn secondary" onClick={() => setAlert('')}>Dismiss</button></div>}
       {profile?.compliance && !profile.compliance.compliant && (
         <div className="card" style={{ background: '#fef3c7' }}>
@@ -286,6 +309,12 @@ export default function DriverDashboard() {
             {(b.status === 'accepted' || b.status === 'in-progress') && (
               <div className="booking-actions">
                 <a className="btn secondary" target="_blank" rel="noreferrer" href={directionsLink(b)}>📍 Directions</a>
+                {/* Call is only offered while the trip is live (accepted / in
+                    progress) - e.g. the passenger can't be found at pickup.
+                    It disappears once the trip is completed or cancelled. */}
+                {telLink(b.passengerId?.mobile) && (
+                  <a className="btn call" href={telLink(b.passengerId?.mobile)}>📞 Call passenger</a>
+                )}
                 {b.status === 'accepted' && !b.arrivedAt && (
                   <>
                     <button className="btn secondary" onClick={() => markArrived(b._id)}>I've arrived</button>

@@ -5,6 +5,7 @@ import AddressAutocomplete from '../../components/AddressAutocomplete';
 import PhoneField from '../../components/PhoneField';
 import { useAuthStore } from '../../store/authStore';
 import { waLink } from '../../utils/whatsapp';
+import { trackLink } from '../../utils/maps';
 import { formatNzDate, formatNzDateTime } from '../../utils/nzTime';
 
 const DOC_STATUS_CLASS = { verified: 'approved', rejected: 'rejected', pending: 'pending' };
@@ -53,6 +54,8 @@ export default function AdminDashboard() {
   const [tripDriverFilter, setTripDriverFilter] = useState('');
   const [tripDateFrom, setTripDateFrom] = useState('');
   const [tripDateTo, setTripDateTo] = useState('');
+  // GPS route per trip, loaded on demand: { [bookingId]: 'loading' | { points } | { error } }
+  const [tripTracks, setTripTracks] = useState({});
   const [feedback, setFeedback] = useState([]);
   const [enquiries, setEnquiries] = useState([]);
   const [vehicleTypes, setVehicleTypes] = useState([]);
@@ -73,6 +76,16 @@ export default function AdminDashboard() {
   }
 
   useEffect(() => { load(); }, []);
+
+  async function loadTrack(id) {
+    setTripTracks((t) => ({ ...t, [id]: 'loading' }));
+    try {
+      const { data } = await client.get(`/admin/bookings/${id}/track`);
+      setTripTracks((t) => ({ ...t, [id]: data }));
+    } catch (err) {
+      setTripTracks((t) => ({ ...t, [id]: { error: err.response?.data?.error || 'Could not load GPS track' } }));
+    }
+  }
 
   function update(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
@@ -657,7 +670,22 @@ export default function AdminDashboard() {
                     <td>{t.driverId?.userId?.name || '-'}</td>
                     <td>${t.actualFare ?? t.estimatedFare}{t.rating && <div className="muted">⭐ {t.rating} (driver)</div>}</td>
                     <td><span className={`badge ${t.status}`}>{t.status}</span></td>
-                    <td className="muted">{formatNzDateTime(t.createdAt)}</td>
+                    <td className="muted">
+                      {formatNzDateTime(t.createdAt)}
+                      {t.driverId && t.status !== 'pending' && (() => {
+                        const track = tripTracks[t._id];
+                        if (!track) return <div><button className="btn secondary" onClick={() => loadTrack(t._id)}>GPS route</button></div>;
+                        if (track === 'loading') return <div>Loading GPS...</div>;
+                        if (track.error) return <div>{track.error}</div>;
+                        if (track.points.length === 0) return <div>No GPS points (kept {track.retentionDays} days)</div>;
+                        return (
+                          <div>
+                            {track.points.length} GPS points, {formatNzDateTime(track.points[0].recordedAt)} to {formatNzDateTime(track.points[track.points.length - 1].recordedAt)}
+                            <div><a className="btn secondary" target="_blank" rel="noreferrer" href={trackLink(track.points)}>🗺️ View route</a></div>
+                          </div>
+                        );
+                      })()}
+                    </td>
                   </tr>
                 ))}
                 {filteredTrips.length === 0 && <tr><td colSpan={7} className="muted">No trips match this filter.</td></tr>}

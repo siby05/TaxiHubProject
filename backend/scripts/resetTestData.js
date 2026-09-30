@@ -24,6 +24,7 @@ const { connectDatabase } = require('../config/database');
 const Booking = require('../models/Booking');
 const Complaint = require('../models/Complaint');
 const Notification = require('../models/Notification');
+const TripLocation = require('../models/TripLocation');
 const WeeklyPayment = require('../models/WeeklyPayment');
 const Feedback = require('../models/Feedback');
 const Enquiry = require('../models/Enquiry');
@@ -39,15 +40,16 @@ async function main() {
   const mode = process.env.DB_MODE || 'memory';
   console.log(`[reset] DB_MODE=${mode}${mode === 'mongo' ? ` (database "${mongoose.connection.name}")` : ' - nothing persists here, this is a no-op'}`);
 
-  const [bookings, complaints, notifications, weeklyPayments, feedback, enquiries] = await Promise.all([
+  const [bookings, complaints, notifications, tripLocations, weeklyPayments, feedback, enquiries] = await Promise.all([
     Booking.deleteMany({}),
     Complaint.deleteMany({}),
     Notification.deleteMany({}),
+    TripLocation.deleteMany({}),
     WeeklyPayment.deleteMany({}),
     Feedback.deleteMany({}),
     Enquiry.deleteMany({}),
   ]);
-  console.log(`[reset] deleted bookings=${bookings.deletedCount} complaints=${complaints.deletedCount} notifications=${notifications.deletedCount} weeklyPayments=${weeklyPayments.deletedCount} feedback=${feedback.deletedCount} enquiries=${enquiries.deletedCount}`);
+  console.log(`[reset] deleted bookings=${bookings.deletedCount} complaints=${complaints.deletedCount} notifications=${notifications.deletedCount} tripLocations=${tripLocations.deletedCount} weeklyPayments=${weeklyPayments.deletedCount} feedback=${feedback.deletedCount} enquiries=${enquiries.deletedCount}`);
 
   const drivers = await Driver.find({});
   for (const d of drivers) {
