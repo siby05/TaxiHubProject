@@ -6,9 +6,13 @@ const { createModel } = require('../lib/createModel');
 // filters compare the same way in memory and in MongoDB), category (a key
 // from config/expenseCategories.js), amount (NZD, as paid), gstIncluded
 // (whether that amount includes 15% GST), supplier, reference (receipt or
-// invoice number), notes.
+// invoice number), notes, repeat ('none' | 'weekly' | 'monthly'),
+// repeatThrough (last date a repeating expense's copies were added up to),
+// recurringFromId (-> Expense; set on a copy added by a repeating expense).
+// See addDueRepeats() in routes/expenses.js.
 const Expense = createModel('Expense', {
   driverId: 'Driver',
+  recurringFromId: 'Expense',
 });
 
 module.exports = Expense;

@@ -15,7 +15,9 @@ const money = (n) => `$${Number(n || 0).toLocaleString('en-NZ', { minimumFractio
 const fyLabel = (fy) => `${fy - 1}-${String(fy).slice(2)}`;
 const monthLabel = (ym) => new Date(`${ym}-15T12:00:00`).toLocaleDateString('en-NZ', { month: 'short', year: 'numeric' });
 
-const emptyForm = () => ({ date: nzToday(), category: '', amount: '', gstIncluded: true, supplier: '', reference: '', notes: '' });
+const emptyForm = () => ({ date: nzToday(), category: '', amount: '', gstIncluded: true, supplier: '', reference: '', notes: '', repeat: 'none' });
+
+const REPEAT_LABELS = { weekly: 'every week', monthly: 'every month' };
 
 // Value of the category <select> option that opens the "new category" box.
 const NEW_CATEGORY = '__new__';
@@ -40,6 +42,7 @@ export default function DriverExpenses() {
   const [loadError, setLoadError] = useState('');
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
+  const [editingCopy, setEditingCopy] = useState(false); // editing a copy added by a repeating expense
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
   const [newCategory, setNewCategory] = useState(null); // null = box closed
@@ -119,10 +122,11 @@ export default function DriverExpenses() {
 
   function startEdit(e) {
     setEditingId(e._id);
+    setEditingCopy(!!e.recurringFromId);
     setNewCategory(null);
     setForm({
       date: e.date, category: e.category, amount: String(e.amount), gstIncluded: e.gstIncluded !== false,
-      supplier: e.supplier || '', reference: e.reference || '', notes: e.notes || '',
+      supplier: e.supplier || '', reference: e.reference || '', notes: e.notes || '', repeat: e.repeat || 'none',
     });
     setFormError('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -130,6 +134,7 @@ export default function DriverExpenses() {
 
   function cancelEdit() {
     setEditingId(null);
+    setEditingCopy(false);
     setNewCategory(null);
     setForm(emptyForm());
     setFormError('');
@@ -151,6 +156,7 @@ export default function DriverExpenses() {
       // from the same day; clear the rest.
       setForm((f) => ({ ...emptyForm(), date: editingId ? nzToday() : f.date, category: editingId ? '' : f.category }));
       setEditingId(null);
+      setEditingCopy(false);
       load();
     } catch (err) {
       setFormError(err.response?.data?.error || 'Could not save the expense');
@@ -160,7 +166,10 @@ export default function DriverExpenses() {
   }
 
   async function remove(e) {
-    if (!window.confirm(`Delete this ${money(e.amount)} ${e.categoryLabel} expense?`)) return;
+    const msg = REPEAT_LABELS[e.repeat]
+      ? `Delete this ${money(e.amount)} ${e.categoryLabel} expense? It repeats ${REPEAT_LABELS[e.repeat]} - deleting it stops the repeat (copies already added stay).`
+      : `Delete this ${money(e.amount)} ${e.categoryLabel} expense?`;
+    if (!window.confirm(msg)) return;
     try {
       await client.delete(`/driver/expenses/${e._id}`);
       if (editingId === e._id) cancelEdit();
@@ -283,6 +292,29 @@ ${data.expenses.slice().sort((a, b) => a.date.localeCompare(b.date)).map((e) => 
           <input type="checkbox" checked={form.gstIncluded} onChange={(e) => update('gstIncluded', e.target.checked)} style={{ width: 'auto' }} />
           Amount includes GST (untick for GST-free costs, e.g. RUC bought overseas, bank fees)
         </label>
+        {editingCopy ? (
+          <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+            ↻ Added automatically by a repeating expense. Changes here apply to this one only - edit the original to change or stop the repeat.
+          </p>
+        ) : (
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div style={{ flex: '0 1 220px' }}>
+              <label>Repeats</label>
+              <select value={form.repeat} onChange={(e) => update('repeat', e.target.value)}>
+                <option value="none">Does not repeat</option>
+                <option value="weekly">Every week</option>
+                <option value="monthly">Every month</option>
+              </select>
+            </div>
+            {form.repeat !== 'none' && (
+              <p className="muted" style={{ flex: '1 1 260px', margin: 0, fontSize: '0.85rem' }}>
+                The same expense is added automatically {REPEAT_LABELS[form.repeat]} from the date paid
+                {form.repeat === 'monthly' ? ' (on the same day of the month, or the last day if the month is shorter)' : ''}.
+                Set this back to "Does not repeat" to stop it.
+              </p>
+            )}
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 160px' }}><label>Supplier (optional)</label><input value={form.supplier} maxLength={100} onChange={(e) => update('supplier', e.target.value)} placeholder="e.g. Tyre Pro, NZTA" /></div>
           <div style={{ flex: '1 1 120px' }}><label>Receipt / invoice no. (optional)</label><input value={form.reference} maxLength={60} onChange={(e) => update('reference', e.target.value)} /></div>
@@ -341,6 +373,8 @@ ${data.expenses.slice().sort((a, b) => a.date.localeCompare(b.date)).map((e) => 
                     <td style={{ whiteSpace: 'nowrap' }}>{formatNzDate(`${e.date}T12:00:00`)}</td>
                     <td>
                       {e.categoryLabel}
+                      {REPEAT_LABELS[e.repeat] && <div style={{ fontSize: '0.8rem', color: 'var(--primary)' }}>↻ Repeats {REPEAT_LABELS[e.repeat]}</div>}
+                      {e.recurringFromId && <div className="muted" style={{ fontSize: '0.8rem' }}>↻ Added automatically</div>}
                       {e.notes && <div className="muted" style={{ fontSize: '0.8rem' }}>{e.notes}</div>}
                     </td>
                     <td>

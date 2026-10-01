@@ -70,8 +70,69 @@ function parseExpense(body, driver) {
       supplier: text(body.supplier, 100),
       reference: text(body.reference, 60),
       notes: text(body.notes, 500),
+      repeat: REPEAT_OPTIONS.includes(body.repeat) ? body.repeat : 'none',
     },
   };
+}
+
+// Repeating expenses (e.g. weekly car wash, monthly phone plan): the
+// expense the driver entered stays as the template (repeat: 'weekly' |
+// 'monthly') and a copy of it is added for each due date up to today, linked
+// back via recurringFromId. repeatThrough records the last date already
+// handled, so a copy the driver deletes isn't added back. Monthly repeats
+// keep the original day of the month, moved to the month's last day when
+// it's shorter (31 Jan -> 28 Feb -> 31 Mar).
+const REPEAT_OPTIONS = ['none', 'weekly', 'monthly'];
+// Safety cap on copies added for one template in one go (a weekly expense
+// backdated several years).
+const MAX_COPIES_PER_RUN = 520;
+
+function addDaysTo(dateStr, n) {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+// The nth repeat after `anchor` ('YYYY-MM-DD').
+function nthRepeat(anchor, repeat, n) {
+  if (repeat === 'weekly') return addDaysTo(anchor, 7 * n);
+  const [y, m, d] = anchor.split('-').map(Number);
+  const monthIndex = m - 1 + n;
+  const year = y + Math.floor(monthIndex / 12);
+  const month = ((monthIndex % 12) + 12) % 12;
+  const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  return `${year}-${String(month + 1).padStart(2, '0')}-${String(Math.min(d, lastDay)).padStart(2, '0')}`;
+}
+
+// Adds any copies of the driver's repeating expenses that have come due.
+// Run before every list, so nothing needs a background job.
+async function addDueRepeats(driverId, expenses) {
+  const today = nzToday();
+  for (const tpl of expenses.filter((e) => e.repeat === 'weekly' || e.repeat === 'monthly')) {
+    const through = tpl.repeatThrough && tpl.repeatThrough > tpl.date ? tpl.repeatThrough : tpl.date;
+    if (through >= today) continue;
+    const existing = new Set(expenses.filter((e) => String(e.recurringFromId) === String(tpl._id)).map((e) => e.date));
+    let copies = 0;
+    for (let n = 1; copies < MAX_COPIES_PER_RUN; n += 1) {
+      const date = nthRepeat(tpl.date, tpl.repeat, n);
+      if (date > today) break;
+      if (date <= through || existing.has(date)) continue;
+      await Expense.create({
+        driverId,
+        date,
+        category: tpl.category,
+        amount: tpl.amount,
+        gstIncluded: tpl.gstIncluded,
+        supplier: tpl.supplier,
+        reference: '',
+        notes: tpl.notes,
+        repeat: 'none',
+        recurringFromId: tpl._id,
+      });
+      copies += 1;
+    }
+    await Expense.findByIdAndUpdate(tpl._id, { repeatThrough: today });
+  }
 }
 
 async function getDriver(req, res) {
@@ -93,6 +154,7 @@ router.get('/', driverOnly, async (req, res) => {
     if (fy < 2000 || fy > currentFy + 1) return res.status(400).json({ error: 'Invalid financial year' });
     const { start, end } = financialYearRange(fy);
 
+    await addDueRepeats(driver._id, await Expense.find({ driverId: driver._id }));
     const [allExpenses, completedTrips] = await Promise.all([
       Expense.find({ driverId: driver._id }),
       Booking.find({ driverId: driver._id, status: 'completed' }),
@@ -165,7 +227,7 @@ router.post('/', driverOnly, async (req, res) => {
     if (!driver) return;
     const { error, value } = parseExpense(req.body, driver);
     if (error) return res.status(400).json({ error });
-    const expense = await Expense.create({ ...value, driverId: driver._id });
+    const expense = await Expense.create({ ...value, driverId: driver._id, repeatThrough: null });
     res.status(201).json(expense);
   } catch (err) {
     console.error(`[expenses] create failed: ${err.message}`);
@@ -230,9 +292,16 @@ router.put('/:id', driverOnly, async (req, res) => {
   try {
     const driver = await getDriver(req, res);
     if (!driver) return;
-    if (!(await findOwnExpense(driver, req.params.id))) return res.status(404).json({ error: 'Expense not found' });
+    const current = await findOwnExpense(driver, req.params.id);
+    if (!current) return res.status(404).json({ error: 'Expense not found' });
     const { error, value } = parseExpense(req.body, driver);
     if (error) return res.status(400).json({ error });
+    // A copy added by a repeating expense can't start repeating itself -
+    // that's set on the original. Changing how or from when an expense
+    // repeats starts its schedule afresh (copies already added are kept
+    // and never duplicated).
+    if (current.recurringFromId) value.repeat = 'none';
+    if (value.repeat !== (current.repeat || 'none') || value.date !== current.date) value.repeatThrough = null;
     const updated = await Expense.findByIdAndUpdate(req.params.id, value, { new: true });
     res.json(updated);
   } catch (err) {
