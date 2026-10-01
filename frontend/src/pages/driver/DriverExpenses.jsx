@@ -297,21 +297,29 @@ ${data.expenses.slice().sort((a, b) => a.date.localeCompare(b.date)).map((e) => 
             ↻ Added automatically by a repeating expense. Changes here apply to this one only - edit the original to change or stop the repeat.
           </p>
         ) : (
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-            <div style={{ flex: '0 1 220px' }}>
-              <label>Repeats</label>
-              <select value={form.repeat} onChange={(e) => update('repeat', e.target.value)}>
-                <option value="none">Does not repeat</option>
-                <option value="weekly">Every week</option>
-                <option value="monthly">Every month</option>
-              </select>
-            </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 'normal' }}>
+              <input type="checkbox" checked={form.repeat !== 'none'} style={{ width: 'auto' }}
+                onChange={(e) => update('repeat', e.target.checked ? 'monthly' : 'none')} />
+              Repeat this expense (e.g. phone plan, insurance, weekly car wash)
+            </label>
             {form.repeat !== 'none' && (
-              <p className="muted" style={{ flex: '1 1 260px', margin: 0, fontSize: '0.85rem' }}>
-                The same expense is added automatically {REPEAT_LABELS[form.repeat]} from the date paid
-                {form.repeat === 'monthly' ? ' (on the same day of the month, or the last day if the month is shorter)' : ''}.
-                Set this back to "Does not repeat" to stop it.
-              </p>
+              <div style={{ paddingLeft: 26, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                  {['weekly', 'monthly'].map((r) => (
+                    <label key={r} style={{ display: 'flex', gap: 6, alignItems: 'center', fontWeight: 'normal' }}>
+                      <input type="radio" name="repeat" value={r} checked={form.repeat === r} style={{ width: 'auto' }}
+                        onChange={() => update('repeat', r)} />
+                      {r === 'weekly' ? 'Every week' : 'Every month'}
+                    </label>
+                  ))}
+                </div>
+                <span className="muted" style={{ fontSize: '0.85rem' }}>
+                  Added again automatically {REPEAT_LABELS[form.repeat]} from the date paid
+                  {form.repeat === 'monthly' ? ' (same day of the month, or the last day if the month is shorter)' : ''}.
+                  Untick to stop repeating.
+                </span>
+              </div>
             )}
           </div>
         )}
