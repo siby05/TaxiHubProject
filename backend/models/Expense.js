@@ -8,6 +8,7 @@ const { createModel } = require('../lib/createModel');
 // (whether that amount includes 15% GST), supplier, reference (receipt or
 // invoice number), notes, repeat ('none' | 'weekly' | 'fortnightly' | 'monthly'),
 // repeatThrough (last date a repeating expense's copies were added up to),
+// repeatFrom (first due date after an interval change, see PUT /:id/repeat),
 // recurringFromId (-> Expense; set on a copy added by a repeating expense).
 // See addDueRepeats() in routes/expenses.js.
 const Expense = createModel('Expense', {

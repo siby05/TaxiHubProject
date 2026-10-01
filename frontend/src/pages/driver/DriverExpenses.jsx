@@ -19,6 +19,24 @@ const emptyForm = () => ({ date: nzToday(), category: '', amount: '', gstInclude
 
 const REPEAT_LABELS = { weekly: 'every week', fortnightly: 'every fortnight', monthly: 'every month' };
 const REPEAT_CHOICES = [['weekly', 'Every week'], ['fortnightly', 'Every fortnight'], ['monthly', 'Every month']];
+const isRepeating = (e) => !!REPEAT_LABELS[e.repeat];
+
+function addDays(dateStr, n) {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+// One interval on from `dateStr` - the default "next payment" when
+// changing a repeat's interval, counted from today.
+function oneIntervalAfter(dateStr, repeat) {
+  if (repeat === 'weekly') return addDays(dateStr, 7);
+  if (repeat === 'fortnightly') return addDays(dateStr, 14);
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const lastDay = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  const next = new Date(Date.UTC(y, m, Math.min(d, lastDay)));
+  return next.toISOString().slice(0, 10);
+}
 
 // Value of the category <select> option that opens the "new category" box.
 const NEW_CATEGORY = '__new__';
@@ -50,6 +68,10 @@ export default function DriverExpenses() {
   const [addingCategory, setAddingCategory] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState('');
   const [sort, setSort] = useState({ key: 'date', dir: -1 });
+  const [listTab, setListTab] = useState('all'); // 'all' | 'repeating'
+  const [editingRepeating, setEditingRepeating] = useState(null); // repeat label of the original being edited
+  const [intervalEdit, setIntervalEdit] = useState(null); // { id, repeat, nextDate } while changing an interval
+  const [repeatError, setRepeatError] = useState('');
 
   function load(year = fy) {
     setLoadError('');
@@ -124,6 +146,7 @@ export default function DriverExpenses() {
   function startEdit(e) {
     setEditingId(e._id);
     setEditingCopy(!!e.recurringFromId);
+    setEditingRepeating(isRepeating(e) ? REPEAT_LABELS[e.repeat] : null);
     setNewCategory(null);
     setForm({
       date: e.date, category: e.category, amount: String(e.amount), gstIncluded: e.gstIncluded !== false,
@@ -136,6 +159,7 @@ export default function DriverExpenses() {
   function cancelEdit() {
     setEditingId(null);
     setEditingCopy(false);
+    setEditingRepeating(null);
     setNewCategory(null);
     setForm(emptyForm());
     setFormError('');
@@ -158,6 +182,7 @@ export default function DriverExpenses() {
       setForm((f) => ({ ...emptyForm(), date: editingId ? nzToday() : f.date, category: editingId ? '' : f.category }));
       setEditingId(null);
       setEditingCopy(false);
+      setEditingRepeating(null);
       load();
     } catch (err) {
       setFormError(err.response?.data?.error || 'Could not save the expense');
@@ -177,6 +202,40 @@ export default function DriverExpenses() {
       load();
     } catch (err) {
       setLoadError(err.response?.data?.error || 'Could not delete the expense');
+    }
+  }
+
+  async function stopRepeat(e) {
+    const label = categoryLabels[e.category] || e.category;
+    if (!window.confirm(`Stop repeating the ${money(e.amount)} ${label} expense? No more copies will be added - the ones already added stay.`)) return;
+    setRepeatError('');
+    try {
+      await client.put(`/driver/expenses/${e._id}/repeat`, { repeat: 'none' });
+      if (intervalEdit?.id === e._id) setIntervalEdit(null);
+      load();
+    } catch (err) {
+      setRepeatError(err.response?.data?.error || 'Could not stop the repeat');
+    }
+  }
+
+  function startIntervalEdit(e) {
+    setRepeatError('');
+    setIntervalEdit({ id: e._id, repeat: e.repeat, nextDate: oneIntervalAfter(nzToday(), e.repeat) });
+  }
+
+  function chooseInterval(repeat) {
+    // Keep the next date following the chosen interval, counted from today.
+    setIntervalEdit((ie) => ({ ...ie, repeat, nextDate: oneIntervalAfter(nzToday(), repeat) }));
+  }
+
+  async function saveInterval() {
+    setRepeatError('');
+    try {
+      await client.put(`/driver/expenses/${intervalEdit.id}/repeat`, { repeat: intervalEdit.repeat, nextDate: intervalEdit.nextDate });
+      setIntervalEdit(null);
+      load();
+    } catch (err) {
+      setRepeatError(err.response?.data?.error || 'Could not change the interval');
     }
   }
 
@@ -295,7 +354,11 @@ ${data.expenses.slice().sort((a, b) => a.date.localeCompare(b.date)).map((e) => 
         </label>
         {editingCopy ? (
           <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
-            ↻ Added automatically by a repeating expense. Changes here apply to this one only - edit the original to change or stop the repeat.
+            ↻ Added automatically by a repeating expense. Changes here apply to this one only - stop or change the repeat in the Repeating tab below.
+          </p>
+        ) : editingRepeating ? (
+          <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+            ↻ Repeats {editingRepeating}. Stop it or change its interval in the Repeating tab below.
           </p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -343,6 +406,72 @@ ${data.expenses.slice().sort((a, b) => a.date.localeCompare(b.date)).map((e) => 
       {/* 2. List */}
       {data && (
         <div className="card" style={{ marginBottom: 16 }}>
+          <div className="tabs" style={{ marginBottom: 12 }}>
+            <button type="button" className={listTab === 'all' ? 'active' : ''} onClick={() => setListTab('all')}>All expenses</button>
+            <button type="button" className={listTab === 'repeating' ? 'active' : ''} onClick={() => setListTab('repeating')}>
+              ↻ Repeating ({data.repeating?.length || 0})
+            </button>
+          </div>
+
+          {listTab === 'repeating' && (
+            <div>
+              <p className="muted" style={{ marginTop: 0, fontSize: '0.85rem' }}>
+                Expenses that are added again automatically. Stop one when you no longer pay it, or change how often it's paid -
+                copies already added stay in your records.
+              </p>
+              {repeatError && <p className="error-text">{repeatError}</p>}
+              {(data.repeating || []).length === 0 && (
+                <p className="muted">No repeating expenses. Tick "Repeat this expense" when adding one.</p>
+              )}
+              {(data.repeating || []).map((e) => (
+                <div key={e._id} className="booking-row">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                    <div>
+                      <strong>{categoryLabels[e.category] || e.category}</strong>{e.supplier ? ` · ${e.supplier}` : ''}
+                      <div>{money(e.amount)} <span style={{ color: 'var(--primary)' }}>↻ {REPEAT_LABELS[e.repeat]}</span></div>
+                      <div className="muted" style={{ fontSize: '0.85rem' }}>
+                        Started {formatNzDate(`${e.date}T12:00:00`)}
+                        {` · ${e.copyCount} added so far`}
+                        {e.lastCopyDate ? ` (last ${formatNzDate(`${e.lastCopyDate}T12:00:00`)})` : ''}
+                      </div>
+                      {e.nextDate && <div className="muted" style={{ fontSize: '0.85rem' }}>Next: {formatNzDate(`${e.nextDate}T12:00:00`)}</div>}
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                      <button type="button" className="btn secondary" onClick={() => (intervalEdit?.id === e._id ? setIntervalEdit(null) : startIntervalEdit(e))}>Change interval</button>
+                      <button type="button" className="btn danger" onClick={() => stopRepeat(e)}>Stop repeating</button>
+                    </div>
+                  </div>
+                  {intervalEdit?.id === e._id && (
+                    <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                        {REPEAT_CHOICES.map(([r, label]) => (
+                          <label key={r} style={{ display: 'flex', gap: 6, alignItems: 'center', fontWeight: 'normal' }}>
+                            <input type="radio" name={`interval-${e._id}`} checked={intervalEdit.repeat === r} style={{ width: 'auto' }}
+                              onChange={() => chooseInterval(r)} />
+                            {label}
+                          </label>
+                        ))}
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                        <div>
+                          <label>Next payment due</label>
+                          <input type="date" value={intervalEdit.nextDate} min={nzToday()}
+                            onChange={(ev) => setIntervalEdit((ie) => ({ ...ie, nextDate: ev.target.value }))} />
+                        </div>
+                        <button type="button" className="btn" onClick={saveInterval} disabled={!intervalEdit.nextDate}>Save</button>
+                        <button type="button" className="btn secondary" onClick={() => setIntervalEdit(null)}>Cancel</button>
+                      </div>
+                      <span className="muted" style={{ fontSize: '0.85rem' }}>
+                        Counted from today. Change the date if your next payment falls on a different day - it then repeats {REPEAT_LABELS[intervalEdit.repeat]} from that date.
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {listTab === 'all' && (<>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 12 }}>
             <div>
               <label>Financial year</label>
@@ -405,6 +534,7 @@ ${data.expenses.slice().sort((a, b) => a.date.localeCompare(b.date)).map((e) => 
               </tbody>
             </table>
           </div>
+          </>)}
         </div>
       )}
 

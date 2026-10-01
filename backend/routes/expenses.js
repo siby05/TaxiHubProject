@@ -82,10 +82,12 @@ function parseExpense(body, driver) {
 // repeat ticked is filled in up to today (every missed week/fortnight/
 // month gets its copy). Ticking repeat on an expense that was already
 // saved only adds copies from that day on, so existing records are never
-// backfilled. repeatThrough records the last
-// date already handled, so a copy the driver deletes isn't added back. Monthly repeats
-// keep the original day of the month, moved to the month's last day when
-// it's shorter (31 Jan -> 28 Feb -> 31 Mar).
+// backfilled. repeatThrough records the last date already handled, so a
+// copy the driver deletes isn't added back. repeatFrom, when set, is the
+// first due date of a changed interval (PUT /:id/repeat) - copies then
+// count from it instead of from the date paid. Monthly repeats keep the
+// start's day of the month, moved to the month's last day when it's
+// shorter (31 Jan -> 28 Feb -> 31 Mar).
 const REPEAT_OPTIONS = ['none', 'weekly', 'fortnightly', 'monthly'];
 // Safety cap on copies added for one template in one go (a weekly expense
 // backdated several years).
@@ -109,18 +111,38 @@ function nthRepeat(anchor, repeat, n) {
   return `${year}-${String(month + 1).padStart(2, '0')}-${String(Math.min(d, lastDay)).padStart(2, '0')}`;
 }
 
+const isRepeating = (e) => !!e.repeat && e.repeat !== 'none' && REPEAT_OPTIONS.includes(e.repeat);
+
+// Due dates of a repeating expense, in order: from repeatFrom (inclusive)
+// after an interval change, otherwise every interval after the date paid.
+function* dueDates(tpl) {
+  const start = tpl.repeatFrom || tpl.date;
+  for (let n = tpl.repeatFrom ? 0 : 1; ; n += 1) yield nthRepeat(start, tpl.repeat, n);
+}
+
+function handledThrough(tpl) {
+  return tpl.repeatThrough && tpl.repeatThrough > tpl.date ? tpl.repeatThrough : tpl.date;
+}
+
+// The first due date not yet handled - when the next copy will be added.
+function nextDueDate(tpl) {
+  const through = handledThrough(tpl);
+  for (const date of dueDates(tpl)) if (date > through) return date;
+  return null;
+}
+
 // Adds any copies of the driver's repeating expenses that have come due.
 // Run before every list, so nothing needs a background job.
 async function addDueRepeats(driverId, expenses) {
   const today = nzToday();
-  for (const tpl of expenses.filter((e) => e.repeat && e.repeat !== 'none' && REPEAT_OPTIONS.includes(e.repeat))) {
-    const through = tpl.repeatThrough && tpl.repeatThrough > tpl.date ? tpl.repeatThrough : tpl.date;
+  for (const tpl of expenses.filter(isRepeating)) {
+    const through = handledThrough(tpl);
     if (through >= today) continue;
     const existing = new Set(expenses.filter((e) => String(e.recurringFromId) === String(tpl._id)).map((e) => e.date));
+    existing.add(tpl.date);
     let copies = 0;
-    for (let n = 1; copies < MAX_COPIES_PER_RUN; n += 1) {
-      const date = nthRepeat(tpl.date, tpl.repeat, n);
-      if (date > today) break;
+    for (const date of dueDates(tpl)) {
+      if (date > today || copies >= MAX_COPIES_PER_RUN) break;
       if (date <= through || existing.has(date)) continue;
       await Expense.create({
         driverId,
@@ -200,7 +222,21 @@ router.get('/', driverOnly, async (req, res) => {
       return { month, tripCount: monthTrips.length, income, expenses: spent, net: round2(income - spent) };
     });
 
+    // Every active repeating expense, whatever tax year it started in, for
+    // the Repeating tab - with how many copies it has added so far and
+    // when the next one is due.
+    const repeating = allExpenses.filter(isRepeating).map((tpl) => {
+      const copies = allExpenses.filter((e) => String(e.recurringFromId) === String(tpl._id));
+      return {
+        ...tpl,
+        copyCount: copies.length,
+        lastCopyDate: copies.reduce((max, e) => (e.date > max ? e.date : max), '') || null,
+        nextDate: nextDueDate(tpl),
+      };
+    }).sort((a, b) => (a.nextDate || '').localeCompare(b.nextDate || ''));
+
     res.json({
+      repeating,
       financialYear: fy,
       currentFinancialYear: currentFy,
       start,
@@ -294,6 +330,46 @@ router.delete('/categories/:key', driverOnly, async (req, res) => {
   }
 });
 
+// PUT /api/driver/expenses/:id/repeat { repeat, nextDate } - stops a
+// repeating expense (repeat: 'none') or changes its interval. nextDate
+// ('YYYY-MM-DD', today or later) is when the first copy at the new interval
+// is due; copies then follow every interval from it. Nothing is added or
+// removed for dates already past - copies already added are kept.
+router.put('/:id/repeat', driverOnly, async (req, res) => {
+  try {
+    const driver = await getDriver(req, res);
+    if (!driver) return;
+    const current = await findOwnExpense(driver, req.params.id);
+    if (!current) return res.status(404).json({ error: 'Expense not found' });
+    if (current.recurringFromId) return res.status(400).json({ error: 'Change the repeat on the original expense, not a copy' });
+    const { repeat } = req.body;
+    if (!REPEAT_OPTIONS.includes(repeat)) return res.status(400).json({ error: 'Choose how often it repeats' });
+
+    if (repeat === 'none') {
+      const updated = await Expense.findByIdAndUpdate(current._id, { repeat: 'none', repeatThrough: null, repeatFrom: null }, { new: true });
+      return res.json(updated);
+    }
+
+    const today = nzToday();
+    const nextDate = String(req.body.nextDate || '');
+    if (!isRealDate(nextDate)) return res.status(400).json({ error: 'Choose the date the next payment is due' });
+    if (nextDate < today) return res.status(400).json({ error: 'The next payment date can\'t be in the past' });
+    if (nextDate > addDaysTo(today, 366)) return res.status(400).json({ error: 'The next payment date must be within a year' });
+
+    const updated = await Expense.findByIdAndUpdate(current._id, {
+      repeat,
+      repeatFrom: nextDate,
+      // Everything before nextDate counts as handled, so the first copy at
+      // the new interval lands on nextDate itself.
+      repeatThrough: addDaysTo(nextDate, -1),
+    }, { new: true });
+    res.json(updated);
+  } catch (err) {
+    console.error(`[expenses] change repeat failed: ${err.message}`);
+    res.status(500).json({ error: 'Could not change the repeat' });
+  }
+});
+
 // PUT /api/driver/expenses/:id
 router.put('/:id', driverOnly, async (req, res) => {
   try {
@@ -307,9 +383,13 @@ router.put('/:id', driverOnly, async (req, res) => {
     // that's set on the original. Changing how or from when an expense
     // repeats restarts it from today: copies already added are kept, and
     // nothing is added for past dates.
+    // An expense that already repeats keeps its interval here - stopping
+    // or changing it is PUT /:id/repeat (the Repeating tab).
     if (current.recurringFromId) value.repeat = 'none';
-    if (value.repeat !== (current.repeat || 'none') || value.date !== current.date) {
+    if (isRepeating(current)) value.repeat = current.repeat;
+    if (value.repeat !== (current.repeat || 'none') || (value.date !== current.date && !current.repeatFrom)) {
       value.repeatThrough = value.repeat !== 'none' ? nzToday() : null;
+      value.repeatFrom = null;
     }
     const updated = await Expense.findByIdAndUpdate(req.params.id, value, { new: true });
     res.json(updated);
