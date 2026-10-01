@@ -229,10 +229,15 @@ async function saveDateShifts(req, res, slots) {
   const next = (Array.isArray(driver.dateSchedule) ? driver.dateSchedule : []).filter((d) => d.date !== date);
   if (slots) next.push({ date, slots });
   // NZTA work time rules (utils/workTime.js), checked before pruning so
-  // yesterday's shifts still count against today's first shift.
+  // yesterday's shifts still count against today's first shift. Only
+  // shifts the driver has actually entered on the calendar are compared:
+  // a neighbouring date they haven't set shows as "Not scheduled", so
+  // its repeating weekly hours mustn't block this date (e.g. a late Friday
+  // shift being refused because of weekly Saturday hours the driver never
+  // put on Saturday's date). The clash is caught instead when they do
+  // enter a shift on that neighbouring date.
   const workTimeError = checkSchedule({
-    weekly: Array.isArray(driver.availabilitySchedule) ? driver.availabilitySchedule : [],
-    dated: next, today, involves: (d) => d === date,
+    weekly: [], dated: next, today, involves: (d) => d === date,
   });
   if (workTimeError) return res.status(400).json({ error: workTimeError });
 
