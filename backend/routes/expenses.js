@@ -77,14 +77,14 @@ function parseExpense(body, driver) {
 
 // Repeating expenses (e.g. weekly car wash, monthly phone plan): the
 // expense the driver entered stays as the template (repeat: 'weekly' |
-// 'monthly') and a copy of it is added for each due date up to today, linked
+// 'fortnightly' | 'monthly') and a copy of it is added for each due date up to today, linked
 // back via recurringFromId. Repeats only ever add copies from the day the
 // repeat is switched on - never for past dates, so ticking "repeat" on an
 // older expense doesn't backfill records. repeatThrough records the last
 // date already handled, so a copy the driver deletes isn't added back. Monthly repeats
 // keep the original day of the month, moved to the month's last day when
 // it's shorter (31 Jan -> 28 Feb -> 31 Mar).
-const REPEAT_OPTIONS = ['none', 'weekly', 'monthly'];
+const REPEAT_OPTIONS = ['none', 'weekly', 'fortnightly', 'monthly'];
 // Safety cap on copies added for one template in one go (a weekly expense
 // backdated several years).
 const MAX_COPIES_PER_RUN = 520;
@@ -98,6 +98,7 @@ function addDaysTo(dateStr, n) {
 // The nth repeat after `anchor` ('YYYY-MM-DD').
 function nthRepeat(anchor, repeat, n) {
   if (repeat === 'weekly') return addDaysTo(anchor, 7 * n);
+  if (repeat === 'fortnightly') return addDaysTo(anchor, 14 * n);
   const [y, m, d] = anchor.split('-').map(Number);
   const monthIndex = m - 1 + n;
   const year = y + Math.floor(monthIndex / 12);
@@ -110,7 +111,7 @@ function nthRepeat(anchor, repeat, n) {
 // Run before every list, so nothing needs a background job.
 async function addDueRepeats(driverId, expenses) {
   const today = nzToday();
-  for (const tpl of expenses.filter((e) => e.repeat === 'weekly' || e.repeat === 'monthly')) {
+  for (const tpl of expenses.filter((e) => e.repeat && e.repeat !== 'none' && REPEAT_OPTIONS.includes(e.repeat))) {
     const through = tpl.repeatThrough && tpl.repeatThrough > tpl.date ? tpl.repeatThrough : tpl.date;
     if (through >= today) continue;
     const existing = new Set(expenses.filter((e) => String(e.recurringFromId) === String(tpl._id)).map((e) => e.date));

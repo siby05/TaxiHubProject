@@ -17,7 +17,8 @@ const monthLabel = (ym) => new Date(`${ym}-15T12:00:00`).toLocaleDateString('en-
 
 const emptyForm = () => ({ date: nzToday(), category: '', amount: '', gstIncluded: true, supplier: '', reference: '', notes: '', repeat: 'none' });
 
-const REPEAT_LABELS = { weekly: 'every week', monthly: 'every month' };
+const REPEAT_LABELS = { weekly: 'every week', fortnightly: 'every fortnight', monthly: 'every month' };
+const REPEAT_CHOICES = [['weekly', 'Every week'], ['fortnightly', 'Every fortnight'], ['monthly', 'Every month']];
 
 // Value of the category <select> option that opens the "new category" box.
 const NEW_CATEGORY = '__new__';
@@ -306,16 +307,16 @@ ${data.expenses.slice().sort((a, b) => a.date.localeCompare(b.date)).map((e) => 
             {form.repeat !== 'none' && (
               <div style={{ paddingLeft: 26, display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                  {['weekly', 'monthly'].map((r) => (
+                  {REPEAT_CHOICES.map(([r, label]) => (
                     <label key={r} style={{ display: 'flex', gap: 6, alignItems: 'center', fontWeight: 'normal' }}>
                       <input type="radio" name="repeat" value={r} checked={form.repeat === r} style={{ width: 'auto' }}
                         onChange={() => update('repeat', r)} />
-                      {r === 'weekly' ? 'Every week' : 'Every month'}
+                      {label}
                     </label>
                   ))}
                 </div>
                 <span className="muted" style={{ fontSize: '0.85rem' }}>
-                  Added again automatically {REPEAT_LABELS[form.repeat]} on the same {form.repeat === 'weekly' ? 'day of the week' : 'day of the month (or the last day if the month is shorter)'} as
+                  Added again automatically {REPEAT_LABELS[form.repeat]} on the same {form.repeat !== 'monthly' ? 'day of the week' : 'day of the month (or the last day if the month is shorter)'} as
                   the date paid - from today on only, nothing is added for past dates. Untick to stop repeating.
                 </span>
               </div>
