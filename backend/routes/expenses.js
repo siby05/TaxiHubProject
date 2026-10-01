@@ -78,9 +78,11 @@ function parseExpense(body, driver) {
 // Repeating expenses (e.g. weekly car wash, monthly phone plan): the
 // expense the driver entered stays as the template (repeat: 'weekly' |
 // 'fortnightly' | 'monthly') and a copy of it is added for each due date up to today, linked
-// back via recurringFromId. Repeats only ever add copies from the day the
-// repeat is switched on - never for past dates, so ticking "repeat" on an
-// older expense doesn't backfill records. repeatThrough records the last
+// back via recurringFromId. A new expense entered with a past date and
+// repeat ticked is filled in up to today (every missed week/fortnight/
+// month gets its copy). Ticking repeat on an expense that was already
+// saved only adds copies from that day on, so existing records are never
+// backfilled. repeatThrough records the last
 // date already handled, so a copy the driver deletes isn't added back. Monthly repeats
 // keep the original day of the month, moved to the month's last day when
 // it's shorter (31 Jan -> 28 Feb -> 31 Mar).
@@ -230,7 +232,9 @@ router.post('/', driverOnly, async (req, res) => {
     if (!driver) return;
     const { error, value } = parseExpense(req.body, driver);
     if (error) return res.status(400).json({ error });
-    const expense = await Expense.create({ ...value, driverId: driver._id, repeatThrough: value.repeat !== 'none' ? nzToday() : null });
+    // repeatThrough null = fill in from the date paid up to today on the
+    // next list load (see addDueRepeats).
+    const expense = await Expense.create({ ...value, driverId: driver._id, repeatThrough: null });
     res.status(201).json(expense);
   } catch (err) {
     console.error(`[expenses] create failed: ${err.message}`);

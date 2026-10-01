@@ -317,7 +317,9 @@ ${data.expenses.slice().sort((a, b) => a.date.localeCompare(b.date)).map((e) => 
                 </div>
                 <span className="muted" style={{ fontSize: '0.85rem' }}>
                   Added again automatically {REPEAT_LABELS[form.repeat]} on the same {form.repeat !== 'monthly' ? 'day of the week' : 'day of the month (or the last day if the month is shorter)'} as
-                  the date paid - from today on only, nothing is added for past dates. Untick to stop repeating.
+                  the date paid. {editingId
+                    ? 'For an expense already saved, copies are added from today on only.'
+                    : 'If the date paid is in the past, every missed one up to today is filled in too.'} Untick to stop repeating.
                 </span>
               </div>
             )}
