@@ -78,8 +78,10 @@ function parseExpense(body, driver) {
 // Repeating expenses (e.g. weekly car wash, monthly phone plan): the
 // expense the driver entered stays as the template (repeat: 'weekly' |
 // 'monthly') and a copy of it is added for each due date up to today, linked
-// back via recurringFromId. repeatThrough records the last date already
-// handled, so a copy the driver deletes isn't added back. Monthly repeats
+// back via recurringFromId. Repeats only ever add copies from the day the
+// repeat is switched on - never for past dates, so ticking "repeat" on an
+// older expense doesn't backfill records. repeatThrough records the last
+// date already handled, so a copy the driver deletes isn't added back. Monthly repeats
 // keep the original day of the month, moved to the month's last day when
 // it's shorter (31 Jan -> 28 Feb -> 31 Mar).
 const REPEAT_OPTIONS = ['none', 'weekly', 'monthly'];
@@ -227,7 +229,7 @@ router.post('/', driverOnly, async (req, res) => {
     if (!driver) return;
     const { error, value } = parseExpense(req.body, driver);
     if (error) return res.status(400).json({ error });
-    const expense = await Expense.create({ ...value, driverId: driver._id, repeatThrough: null });
+    const expense = await Expense.create({ ...value, driverId: driver._id, repeatThrough: value.repeat !== 'none' ? nzToday() : null });
     res.status(201).json(expense);
   } catch (err) {
     console.error(`[expenses] create failed: ${err.message}`);
@@ -298,10 +300,12 @@ router.put('/:id', driverOnly, async (req, res) => {
     if (error) return res.status(400).json({ error });
     // A copy added by a repeating expense can't start repeating itself -
     // that's set on the original. Changing how or from when an expense
-    // repeats starts its schedule afresh (copies already added are kept
-    // and never duplicated).
+    // repeats restarts it from today: copies already added are kept, and
+    // nothing is added for past dates.
     if (current.recurringFromId) value.repeat = 'none';
-    if (value.repeat !== (current.repeat || 'none') || value.date !== current.date) value.repeatThrough = null;
+    if (value.repeat !== (current.repeat || 'none') || value.date !== current.date) {
+      value.repeatThrough = value.repeat !== 'none' ? nzToday() : null;
+    }
     const updated = await Expense.findByIdAndUpdate(req.params.id, value, { new: true });
     res.json(updated);
   } catch (err) {

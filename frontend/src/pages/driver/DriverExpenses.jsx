@@ -315,9 +315,8 @@ ${data.expenses.slice().sort((a, b) => a.date.localeCompare(b.date)).map((e) => 
                   ))}
                 </div>
                 <span className="muted" style={{ fontSize: '0.85rem' }}>
-                  Added again automatically {REPEAT_LABELS[form.repeat]} from the date paid
-                  {form.repeat === 'monthly' ? ' (same day of the month, or the last day if the month is shorter)' : ''}.
-                  Untick to stop repeating.
+                  Added again automatically {REPEAT_LABELS[form.repeat]} on the same {form.repeat === 'weekly' ? 'day of the week' : 'day of the month (or the last day if the month is shorter)'} as
+                  the date paid - from today on only, nothing is added for past dates. Untick to stop repeating.
                 </span>
               </div>
             )}
