@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import client from '../../api/client';
 import { formatNzDate } from '../../utils/nzTime';
-import { printHtml, saveTextFile } from '../../utils/nativeApp';
 
 // A driver's business expenses for their tax return, one NZ tax year
 // (1 April - 31 March) at a time - see backend/routes/expenses.js.
@@ -248,7 +247,12 @@ export default function DriverExpenses() {
     const header = ['Date', 'Category', 'Supplier', 'Reference', 'Amount (NZD)', 'Includes GST', 'GST portion', 'Notes'];
     const lines = rows.map((e) => [e.date, e.categoryLabel, e.supplier, e.reference, e.amount.toFixed(2), e.gstIncluded ? 'Yes' : 'No', e.gst.toFixed(2), e.notes]);
     const csv = [header, ...lines].map((r) => r.map(csvCell).join(',')).join('\n');
-    saveTextFile(`expenses-${fyLabel(data.financialYear)}${categoryFilter ? `-${categoryFilter}` : ''}.csv`, 'text/csv', csv);
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `expenses-${fyLabel(data.financialYear)}${categoryFilter ? `-${categoryFilter}` : ''}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   // Opens a plain, printable income & expenses report for the tax year
@@ -279,10 +283,14 @@ ${row(['Total', sm.tripCount, money(sm.tripIncome), money(sm.totalExpenses), mon
 <h2>All expenses</h2><table><tr><th>Date</th><th>Category</th><th>Supplier</th><th>Ref</th><th class="n">Amount</th><th class="n">GST</th></tr>
 ${data.expenses.slice().sort((a, b) => a.date.localeCompare(b.date)).map((e) => row([e.date, escapeHtml(categoryLabels[e.category] || e.category), escapeHtml(e.supplier), escapeHtml(e.reference), money(e.amount), money(e.gst)])).join('')}
 </table>
-</body></html>`;
-    if (!printHtml(html, `Income & expenses ${fyLabel(data.financialYear)}`)) {
+<script>window.onload=()=>window.print()</script></body></html>`;
+    const w = window.open('', '_blank');
+    if (!w) {
       setLoadError('Allow pop-ups for this site to open the report');
+      return;
     }
+    w.document.write(html);
+    w.document.close();
   }
 
   const sortMark = (key) => (sort.key === key ? (sort.dir === 1 ? ' ▲' : ' ▼') : '');

@@ -3,7 +3,9 @@
 A small native Android app that opens the driver website
 (https://easyridenz.com/driver) full-screen. Everything is the same as on the
 website, and website updates show up in the app straight away - only changes
-to this folder need a new APK.
+to this folder need a new APK. The website itself has no app-specific code:
+the few things a WebView can't do on its own are handled by a script the app
+injects into each page (see PAGE_SCRIPT in MainActivity.java).
 
 What the app adds on top of the website:
 - Location permission prompt, so trip GPS tracking and "use my location" work
@@ -14,8 +16,8 @@ What the app adds on top of the website:
 - "No connection" screen with a retry button
 
 Not supported in the app (same limits as any app WebView):
-- "Sign in with Google" - Google blocks it inside apps, so the button is hidden;
-  drivers sign in with email and password
+- "Sign in with Google" - Google blocks it inside apps, so the app hides the
+  button; drivers sign in with email and password
 - Pop-up notifications while the app is closed
 - Recording trip GPS while the app is in the background or the screen is off
 

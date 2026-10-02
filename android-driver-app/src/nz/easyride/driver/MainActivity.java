@@ -5,11 +5,14 @@ import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.Message;
 import android.print.PrintAttributes;
 import android.print.PrintManager;
-import android.view.View;
 import android.webkit.CookieManager;
 import android.webkit.DownloadListener;
 import android.webkit.GeolocationPermissions;
@@ -29,9 +32,13 @@ import java.nio.charset.Charset;
  * WebView, so everything works exactly as on the site and site updates show
  * up without reinstalling. Native parts: location permission for trip GPS,
  * file uploads (driver documents), phone/WhatsApp/Maps/receipt links opened
- * in their own apps, printing, saving files, and the back button. The site
- * reaches the native helpers through window.EasyRideApp (see
- * frontend/src/utils/nativeApp.js).
+ * in their own apps, printing, saving files, and the back button.
+ *
+ * The website itself is not changed for the app: PAGE_SCRIPT is injected
+ * into each page to route window.print() and blob CSV downloads to native
+ * code, and to hide "Sign in with Google" (Google blocks it in WebViews).
+ * Pop-up windows (the expenses report) are printed natively, and
+ * new-tab links go to the matching app or browser.
  */
 public class MainActivity extends Activity {
     private static final String START_URL = "https://easyridenz.com/driver";
@@ -45,6 +52,29 @@ public class MainActivity extends Activity {
     private String geoOrigin;
     private String pendingSaveText;
     private WebView printView; // kept referenced until printing has started
+    private final Handler handler = new Handler(Looper.getMainLooper());
+
+    // Injected after every page load. Overrides are looked up when the page
+    // calls them, so injecting after the site's own scripts is fine.
+    private static final String PAGE_SCRIPT = "(function(){"
+            + "if(window.__easyRideApp)return;window.__easyRideApp=true;"
+            // window.print() does nothing in a WebView - print natively.
+            + "window.print=function(){EasyRideApp.printPage();};"
+            // CSV export: <a download href=blob:...>.click() - read the blob
+            // and hand the text to native "save as".
+            + "var blobs={};var oc=URL.createObjectURL;"
+            + "URL.createObjectURL=function(o){var u=oc.call(URL,o);if(o instanceof Blob)blobs[u]=o;return u;};"
+            + "var ck=HTMLAnchorElement.prototype.click;"
+            + "HTMLAnchorElement.prototype.click=function(){var h=this.href||'';"
+            + "if(this.hasAttribute('download')&&h.indexOf('blob:')===0&&blobs[h]){"
+            + "var n=this.getAttribute('download')||'download',b=blobs[h],r=new FileReader();"
+            + "r.onload=function(){EasyRideApp.saveTextFile(n,b.type||'text/plain',r.result);};r.readAsText(b);return;}"
+            + "return ck.call(this);};"
+            // Hide the Google sign-in button and its "or with email" divider.
+            + "var st=document.createElement('style');"
+            + "st.textContent='div:has(iframe[src*=\"accounts.google.com/gsi\"]):not(:has(form)):not(:has(input)){display:none!important}';"
+            + "document.head.appendChild(st);"
+            + "})();";
 
     static boolean isOwnSite(Uri uri) {
         String scheme = uri.getScheme();
@@ -65,7 +95,7 @@ public class MainActivity extends Activity {
         s.setDatabaseEnabled(true);
         s.setGeolocationEnabled(true);
         s.setJavaScriptCanOpenWindowsAutomatically(true);
-        s.setSupportMultipleWindows(false); // new-tab links load here, then go through shouldOverrideUrlLoading
+        s.setSupportMultipleWindows(true); // new-tab links and pop-ups -> ChromeClient.onCreateWindow
         s.setMediaPlaybackRequiresUserGesture(false);
         s.setUserAgentString(s.getUserAgentString() + " EasyRideDriverApp/1.0");
 
@@ -124,6 +154,11 @@ public class MainActivity extends Activity {
         }
 
         @Override
+        public void onPageFinished(WebView view, String url) {
+            view.evaluateJavascript(PAGE_SCRIPT, null);
+        }
+
+        @Override
         public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
             // Pre-API-23 signature: only called for the main page - show a
             // simple offline screen with a retry instead of the WebView's own.
@@ -138,6 +173,65 @@ public class MainActivity extends Activity {
     }
 
     private class ChromeClient extends WebChromeClient {
+        // A new tab / window.open(). Either it opens a URL (a WhatsApp, Maps
+        // or receipt link - sent to its app, or our own site - shown here),
+        // or the site writes a document into it (the expenses report),
+        // which is printed.
+        @Override
+        public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg) {
+            final WebView popup = new WebView(MainActivity.this);
+            popup.getSettings().setJavaScriptEnabled(true);
+            final boolean[] handled = { false };
+            popup.setWebViewClient(new WebViewClient() {
+                private void route(String url) {
+                    if (handled[0] || url == null || url.startsWith("about:") || url.startsWith("data:")) return;
+                    handled[0] = true;
+                    Uri uri = Uri.parse(url);
+                    if (isOwnSite(uri)) web.loadUrl(url);
+                    else openExternally(uri);
+                }
+
+                @Override
+                public boolean shouldOverrideUrlLoading(WebView v, String url) {
+                    route(url);
+                    return true;
+                }
+
+                @Override
+                public void onPageStarted(WebView v, String url, Bitmap favicon) {
+                    if (url != null && !url.startsWith("about:") && !url.startsWith("data:")) {
+                        v.stopLoading();
+                        route(url);
+                    }
+                }
+            });
+            WebView.WebViewTransport transport = (WebView.WebViewTransport) resultMsg.obj;
+            transport.setWebView(popup);
+            resultMsg.sendToTarget();
+
+            handler.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    if (handled[0]) {
+                        popup.destroy();
+                        return;
+                    }
+                    popup.evaluateJavascript("(document.body&&document.body.innerHTML.length)||0", new ValueCallback<String>() {
+                        @Override
+                        public void onReceiveValue(String length) {
+                            if (!"0".equals(length) && !"null".equals(length)) {
+                                printView = popup;
+                                print(popup, popup.getTitle());
+                            } else {
+                                popup.destroy();
+                            }
+                        }
+                    });
+                }
+            }, 800);
+            return true;
+        }
+
         @Override
         public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
             if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -227,24 +321,6 @@ public class MainActivity extends Activity {
                 @Override
                 public void run() {
                     print(web, web.getTitle());
-                }
-            });
-        }
-
-        @JavascriptInterface
-        public void printHtml(final String html, final String title) {
-            runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    printView = new WebView(MainActivity.this);
-                    printView.setVisibility(View.GONE);
-                    printView.setWebViewClient(new WebViewClient() {
-                        @Override
-                        public void onPageFinished(WebView view, String url) {
-                            print(view, title);
-                        }
-                    });
-                    printView.loadDataWithBaseURL(START_URL, html, "text/html", "UTF-8", null);
                 }
             });
         }

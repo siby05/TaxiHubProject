@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { isDriverApp } from '../utils/nativeApp';
 
 const DISMISS_KEY = 'installPromptDismissedAt';
 const DISMISS_DAYS = 30;
@@ -20,7 +19,6 @@ export default function InstallPrompt() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    if (isDriverApp()) return undefined; // already installed as the Android app
     function onBeforeInstallPrompt(e) {
       e.preventDefault();
       if (recentlyDismissed()) return;
