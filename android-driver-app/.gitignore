@@ -1,0 +1,5 @@
+build/
+# Signing key - never commit (see README)
+*.keystore
+*.jks
+keystore-password.txt

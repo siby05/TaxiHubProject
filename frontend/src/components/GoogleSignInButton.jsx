@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import client from '../api/client';
+import { isDriverApp } from '../utils/nativeApp';
 
 // "Sign in with Google" via Google Identity Services (free). Renders
 // nothing unless VITE_GOOGLE_CLIENT_ID is set. Google's script is loaded
@@ -7,7 +8,9 @@ import client from '../api/client';
 // page. The ID token it returns is verified by the backend (POST
 // /api/auth/google), which replies with our own session token.
 
-const CLIENT_ID = (import.meta.env.VITE_GOOGLE_CLIENT_ID || '').trim();
+// Google blocks its sign-in inside app WebViews, so the Android driver app
+// hides the button (drivers sign in with email and password there).
+const CLIENT_ID = isDriverApp() ? '' : (import.meta.env.VITE_GOOGLE_CLIENT_ID || '').trim();
 
 let scriptPromise = null;
 function loadGoogleScript() {

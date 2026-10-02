@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import client from '../../api/client';
 import PrintableQrCard from '../../components/PrintableQrCard';
+import { printPage } from '../../utils/nativeApp';
 
 export default function DriverQrCode() {
   const [qr, setQr] = useState(null);
@@ -26,7 +27,7 @@ export default function DriverQrCode() {
           <>
             <img src={qr.qrCodeImage} alt="Driver booking QR code" style={{ width: 260, height: 260, margin: '12px auto' }} />
             <p className="muted" style={{ wordBreak: 'break-all' }}>{qr.qrCodeUrl}</p>
-            <button className="btn" onClick={() => window.print()}>Print A6 card</button>
+            <button className="btn" onClick={printPage}>Print A6 card</button>
           </>
         )}
         {!qr && !error && <p className="muted">Loading...</p>}
