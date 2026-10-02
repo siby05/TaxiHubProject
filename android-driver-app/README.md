@@ -14,12 +14,23 @@ What the app adds on top of the website:
 - Printing (QR card, expenses report) and saving the expenses CSV
 - Android back button goes back a page
 - "No connection" screen with a retry button
+- Background service (DriverService.java), from version 1.1: while the app
+  is closed or the screen is off it
+  - shows a notification for each new ride request and when a passenger
+    cancels an accepted trip (checks every 20 seconds)
+  - records trip GPS and sends it every 15 seconds while a trip is on the go
+  It uses the same API endpoints as the website, with the driver's own
+  login. While the app is on screen the website does this itself, so nothing
+  is sent twice. It runs while the driver is online or has a trip on the go
+  (with an "EasyRide Driver is running" notification) and stops otherwise.
 
-Not supported in the app (same limits as any app WebView):
+Not supported in the app:
 - "Sign in with Google" - Google blocks it inside apps, so the app hides the
   button; drivers sign in with email and password
-- Pop-up notifications while the app is closed
-- Recording trip GPS while the app is in the background or the screen is off
+
+Some phones (Samsung, Xiaomi, Oppo...) stop background apps to save battery.
+If alerts stop arriving with the screen off, set EasyRide Driver's battery
+usage to "Unrestricted" in the phone's settings.
 
 ## Building
 
@@ -28,6 +39,9 @@ from Ubuntu's package archive:
 
     apt-get install aapt apksigner zipalign dalvik-exchange android-sdk-platform-23
     KEYSTORE=/path/to/release.keystore KEYSTORE_PASS=... ./build.sh
+
+build.sh downloads the Android 14 framework jar (Robolectric's android-all,
+from Maven Central, checksum-checked) on first run.
     # -> build/EasyRide-Driver.apk
 
 For each new release, raise `android:versionCode` (and `versionName`) in

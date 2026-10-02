@@ -4,9 +4,11 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -19,10 +21,13 @@ import android.webkit.GeolocationPermissions;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
+
+import org.json.JSONArray;
 
 import java.io.OutputStream;
 import java.nio.charset.Charset;
@@ -39,12 +44,22 @@ import java.nio.charset.Charset;
  * code, and to hide "Sign in with Google" (Google blocks it in WebViews).
  * Pop-up windows (the expenses report) are printed natively, and
  * new-tab links go to the matching app or browser.
+ *
+ * Background: DriverService keeps watching for ride requests and records
+ * trip GPS while the app is closed. This activity hands it the driver's
+ * login (read from the site's localStorage) and the API address (seen in
+ * the site's own requests), so the website needs no changes for it.
  */
 public class MainActivity extends Activity {
     private static final String START_URL = "https://easyridenz.com/driver";
     private static final int REQ_FILE = 1;
     private static final int REQ_SAVE = 2;
     private static final int REQ_LOCATION = 3;
+    private static final int REQ_STARTUP = 4;
+
+    // The signed-in driver's token, or '' if nobody (or not a driver) is signed in.
+    private static final String TOKEN_SCRIPT = "(function(){try{var u=JSON.parse(localStorage.getItem('easyride_user')||'null');"
+            + "return u&&u.role==='driver'?(localStorage.getItem('easyride_token')||''):'';}catch(e){return '';}})()";
 
     private WebView web;
     private ValueCallback<Uri[]> fileCallback;
@@ -114,6 +129,74 @@ public class MainActivity extends Activity {
 
         if (savedInstanceState != null) web.restoreState(savedInstanceState);
         else web.loadUrl(START_URL);
+
+        DriverService.createChannels(this);
+        askStartupPermissions();
+    }
+
+    // Location (trip GPS, also in the background) and, on Android 13+,
+    // notifications (ride request alerts). Asked once at start.
+    private void askStartupPermissions() {
+        java.util.List<String> wanted = new java.util.ArrayList<>();
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            wanted.add(Manifest.permission.ACCESS_FINE_LOCATION);
+            wanted.add(Manifest.permission.ACCESS_COARSE_LOCATION);
+        }
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            wanted.add(Manifest.permission.POST_NOTIFICATIONS);
+        }
+        if (!wanted.isEmpty()) requestPermissions(wanted.toArray(new String[0]), REQ_STARTUP);
+    }
+
+    // The site signs in/out without reloading the page, so the login is
+    // re-checked every few seconds while the app is on screen.
+    private final Runnable loginCheck = new Runnable() {
+        @Override
+        public void run() {
+            syncLogin(true);
+            handler.postDelayed(this, 5000);
+        }
+    };
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        DriverService.appVisible = true;
+        web.onResume();
+        handler.removeCallbacks(loginCheck);
+        handler.post(loginCheck);
+    }
+
+    @Override
+    protected void onPause() {
+        DriverService.appVisible = false;
+        handler.removeCallbacks(loginCheck);
+        syncLogin(false);
+        web.onPause(); // the background service takes over alerts and GPS
+        super.onPause();
+    }
+
+    // Copies the site's login to the background service and (re)starts it
+    // while the app is on screen - Android only lets a location service
+    // start from the foreground.
+    private void syncLogin(final boolean startService) {
+        web.evaluateJavascript(TOKEN_SCRIPT, new ValueCallback<String>() {
+            @Override
+            public void onReceiveValue(String value) {
+                String token = "";
+                try {
+                    token = new JSONArray("[" + value + "]").optString(0, "");
+                } catch (Exception ignored) {
+                }
+                SharedPreferences.Editor prefs = getSharedPreferences(DriverService.PREFS, MODE_PRIVATE).edit();
+                if (token.isEmpty() || "null".equals(token)) {
+                    prefs.remove(DriverService.PREF_TOKEN).apply();
+                    return;
+                }
+                prefs.putString(DriverService.PREF_TOKEN, token).apply();
+                if (startService && DriverService.appVisible && !DriverService.running) DriverService.start(MainActivity.this);
+            }
+        });
     }
 
     @Override
@@ -156,6 +239,21 @@ public class MainActivity extends Activity {
         @Override
         public void onPageFinished(WebView view, String url) {
             view.evaluateJavascript(PAGE_SCRIPT, null);
+        }
+
+        // Notes the API address from the site's own requests (it's set on
+        // the hosting side, not known to the app) for the background service.
+        @Override
+        public WebResourceResponse shouldInterceptRequest(WebView view, String url) {
+            int i = url.indexOf("/api/");
+            if (i > 0 && (url.startsWith("https://") || url.startsWith("http://"))) {
+                String base = url.substring(0, i + 4);
+                SharedPreferences prefs = getSharedPreferences(DriverService.PREFS, MODE_PRIVATE);
+                if (!base.equals(prefs.getString(DriverService.PREF_API, null))) {
+                    prefs.edit().putString(DriverService.PREF_API, base).apply();
+                }
+            }
+            return null;
         }
 
         @Override
@@ -266,12 +364,17 @@ public class MainActivity extends Activity {
 
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
+        if (requestCode == REQ_STARTUP) {
+            syncLogin(true); // location may now be allowed - start the background service
+            return;
+        }
         if (requestCode != REQ_LOCATION || geoCallback == null) return;
         boolean granted = false;
         for (int r : results) granted |= r == PackageManager.PERMISSION_GRANTED;
         geoCallback.invoke(geoOrigin, granted, false);
         geoCallback = null;
         geoOrigin = null;
+        if (granted) syncLogin(true);
     }
 
     @Override
