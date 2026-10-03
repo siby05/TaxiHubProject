@@ -260,7 +260,7 @@ export default function DriverDashboard() {
         <div className="grid cols-4">
           <div className="card stat"><div className="value">{earnings.totalTrips}</div><div className="label">Trips</div></div>
           <div className="card stat"><div className="value">${earnings.totalEarnings.toFixed(2)}</div><div className="label">Gross earnings</div></div>
-          <div className="card stat"><div className="value">${earnings.estimatedGst.toFixed(2)}</div><div className="label">Est. GST (18%)</div></div>
+          <div className="card stat"><div className="value">${earnings.estimatedGst.toFixed(2)}</div><div className="label">GST included (15%)</div></div>
           <div className="card stat"><div className="value">${earnings.netEarnings.toFixed(2)}</div><div className="label">Net earnings</div></div>
         </div>
       )}

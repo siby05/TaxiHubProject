@@ -487,7 +487,9 @@ router.get('/earnings', auth, roleMiddleware(['driver']), async (req, res) => {
 
   const trips = await Booking.find({ driverId: driver._id, status: 'completed' });
   const totalEarnings = trips.reduce((sum, t) => sum + (t.actualFare || 0), 0);
-  const gst = Math.round(totalEarnings * 0.18 * 100) / 100; // 18% GST, matches prior tax-tracking spec
+  // NZ GST is 15% and fares are GST-inclusive, so the GST inside them is
+  // 3/23 of the total (same as routes/expenses.js gstPortion()).
+  const gst = Math.round(((totalEarnings * 3) / 23) * 100) / 100;
 
   res.json({
     totalTrips: trips.length,
