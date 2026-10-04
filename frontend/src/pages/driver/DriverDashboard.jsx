@@ -297,7 +297,7 @@ export default function DriverDashboard() {
             )}
 
             {b.status === 'pending' && (
-              <div className="booking-actions">
+              <div className="booking-actions trip-actions">
                 <button className="btn" onClick={() => accept(b._id)}>Accept</button>
                 <button className="btn secondary" onClick={() => decline(b._id)}>Decline</button>
                 {waLink(b.passengerId?.mobile, driverPendingMessage(b, b.passengerId?.name)) && (
@@ -307,7 +307,7 @@ export default function DriverDashboard() {
               </div>
             )}
             {(b.status === 'accepted' || b.status === 'in-progress') && (
-              <div className="booking-actions">
+              <div className="booking-actions trip-actions">
                 <a className="btn secondary" target="_blank" rel="noreferrer" href={directionsLink(b)}>📍 Directions</a>
                 {/* Call is only offered while the trip is live (accepted / in
                     progress) - e.g. the passenger can't be found at pickup.
@@ -319,19 +319,22 @@ export default function DriverDashboard() {
                   <>
                     <button className="btn secondary" onClick={() => markArrived(b._id)}>I've arrived</button>
                     {waLink(b.passengerId?.mobile, driverConfirmedMessage(b, profile?.userId?.name, vehicleLabel(profile))) && (
-                      <a className="btn whatsapp" target="_blank" rel="noreferrer"
-                        href={waLink(b.passengerId?.mobile, driverConfirmedMessage(b, profile?.userId?.name, vehicleLabel(profile)))}><WhatsAppIcon /> Message passenger: trip confirmed</a>
+                      <a className="btn whatsapp" target="_blank" rel="noreferrer" title="Message passenger on WhatsApp: trip confirmed"
+                        href={waLink(b.passengerId?.mobile, driverConfirmedMessage(b, profile?.userId?.name, vehicleLabel(profile)))}><WhatsAppIcon /> Trip confirmed</a>
                     )}
                   </>
                 )}
-                <input style={{ width: 90 }} type="number" step="0.01" placeholder="Actual $"
+              </div>
+            )}
+            {(b.status === 'accepted' || b.status === 'in-progress') && (
+              <div className="booking-actions trip-actions">
+                <input type="number" inputMode="decimal" step="0.01" placeholder="Actual fare $" aria-label="Actual fare"
                   value={fareInputs[b._id] || ''} onChange={(e) => setFareInputs((f) => ({ ...f, [b._id]: e.target.value }))} />
                 <button className="btn" onClick={() => complete(b._id)}>Complete</button>
-                <button className="btn danger" onClick={() => cancelTrip(b._id)}>Cancel trip</button>
               </div>
             )}
             {b.status === 'completed' && receiptUrl(b) && (
-              <div className="booking-actions">
+              <div className="booking-actions trip-actions">
                 <a className="btn secondary" target="_blank" rel="noreferrer" href={receiptUrl(b)}>View receipt</a>
                 {b.passengerHasEmail && (
                   <button className="btn secondary" disabled={!!receiptSent[b._id]} onClick={() => emailReceipt(b._id)}>
@@ -346,16 +349,21 @@ export default function DriverDashboard() {
               </div>
             )}
             {b.paymentMethod === 'card' && b.paymentStatus !== 'paid' && ['accepted', 'in-progress', 'completed'].includes(b.status) && (
-              <div className="booking-actions">
+              <div className="booking-actions trip-actions">
                 {waLink(b.passengerId?.mobile, paymentReminderMessage(b, profile?.userId?.name, `${window.location.origin}/pay/${b._id}`)) && (
-                  <a className="btn whatsapp" target="_blank" rel="noreferrer"
-                    href={waLink(b.passengerId?.mobile, paymentReminderMessage(b, profile?.userId?.name, `${window.location.origin}/pay/${b._id}`))}><WhatsAppIcon /> Message passenger: payment reminder</a>
+                  <a className="btn whatsapp" target="_blank" rel="noreferrer" title="Message passenger on WhatsApp: payment reminder"
+                    href={waLink(b.passengerId?.mobile, paymentReminderMessage(b, profile?.userId?.name, `${window.location.origin}/pay/${b._id}`))}><WhatsAppIcon /> Remind to pay</a>
                 )}
                 <button className="btn secondary" onClick={() => markPaid(b._id)}>Mark as paid</button>
               </div>
             )}
+            {(b.status === 'accepted' || b.status === 'in-progress') && (
+              <div className="booking-actions trip-actions">
+                <button className="btn danger-outline full" onClick={() => cancelTrip(b._id)}>Cancel trip</button>
+              </div>
+            )}
             {b.status === 'cancelled' && cancelWaLinks[b._id] && (
-              <div className="booking-actions">
+              <div className="booking-actions trip-actions">
                 <a className="btn whatsapp" target="_blank" rel="noreferrer" href={cancelWaLinks[b._id]}><WhatsAppIcon /> Message passenger: trip cancelled</a>
               </div>
             )}

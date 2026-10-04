@@ -317,6 +317,42 @@ th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--bor
 .btn.call { background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%); color: #fff; }
 .btn.call:hover { background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%); color: #fff; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3); }
 .btn.call:focus-visible { box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35); }
+/* Outlined red - for a destructive action that sits under the main ones
+   (Cancel trip) without competing with them. */
+.btn.danger-outline { background: #fff; color: var(--danger); border-color: #fca5a5; box-shadow: none; }
+.btn.danger-outline:hover { background: #fef2f2; color: #b91c1c; border-color: var(--danger); box-shadow: none; }
+
+/* Driver trip actions (DriverDashboard.jsx): an even two-column grid so
+   every button in a row is the same size. A button on its own in the last
+   row (or marked .full) spans both columns. */
+.booking-row .trip-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: 46px;
+  gap: 8px;
+  margin-top: 12px;
+  max-width: 560px;
+}
+.booking-row .trip-actions + .trip-actions { margin-top: 8px; }
+.trip-actions > * { width: 100%; min-width: 0; margin: 0; }
+.trip-actions > .btn {
+  min-height: 0;
+  height: 100%;
+  padding: 0 10px;
+  gap: 6px;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.trip-actions > .btn svg { flex-shrink: 0; }
+@media (max-width: 370px) {
+  .trip-actions > .btn { font-size: 0.8rem; padding: 0 6px; }
+}
+.trip-actions > .full,
+.trip-actions > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+.trip-actions > input { height: 100%; box-sizing: border-box; border-radius: 8px; font-size: 0.95rem; }
+.trip-actions > .muted { grid-column: 1 / -1; font-size: 0.85rem; align-self: center; }
 .auth-shell { max-width: 380px; margin: 60px auto; }
 .tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
 .tabs button {
