@@ -178,13 +178,18 @@ export default function DriverDashboard() {
 
   // Asks for the fare (and, for cash, whether it's been paid) instead of a
   // fare box on every trip - see the fare dialog at the bottom.
+  // The fare box opens filled in (the estimate when completing, the fare
+  // charged when editing) as e.g. "26.80", so the driver only types if it
+  // differs - the amount is selected on open, so typing replaces it.
+  const fareText = (n) => (n == null || n === '' ? '' : Number(n).toFixed(2));
+
   function openComplete(b) {
-    setFareDialog({ mode: 'complete', booking: b, fare: String(b.estimatedFare ?? ''), paymentPending: false, error: '' });
+    setFareDialog({ mode: 'complete', booking: b, fare: fareText(b.estimatedFare), paymentPending: false, error: '' });
   }
 
   function openEdit(b) {
     setFareDialog({
-      mode: 'edit', booking: b, fare: String(b.actualFare ?? b.estimatedFare ?? ''),
+      mode: 'edit', booking: b, fare: fareText(b.actualFare ?? b.estimatedFare),
       paymentPending: b.paymentStatus !== 'paid', error: '',
     });
   }
@@ -427,6 +432,7 @@ export default function DriverDashboard() {
             <p className="muted" style={{ marginTop: 0 }}>{fb.bookingId}<br />{fb.pickupAddress} → {fb.dropAddress}</p>
             <label>Fare charged (NZD)</label>
             <input type="number" inputMode="decimal" min="0.01" step="0.01" autoFocus value={fare} disabled={cardPaid}
+              onFocus={(e) => e.target.select()}
               onChange={(e) => set({ fare: e.target.value })} />
             <p className="muted" style={{ margin: '4px 0 12px', fontSize: '0.85rem' }}>
               Estimate was ${fb.estimatedFare}.{cardPaid ? ' Already paid online, so the fare can\'t be changed.' : ''}
