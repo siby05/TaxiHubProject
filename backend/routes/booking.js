@@ -1239,10 +1239,24 @@ router.put('/:id/start', auth, roleMiddleware(['driver']), async (req, res) => {
   res.json(updated);
 });
 
-// PUT /api/booking/:id/complete - driver enters the actual fare charged
+// A fare the driver typed: a positive amount, rounded to cents, or null if
+// none was given. Returns { error } for anything else.
+function parseFare(value) {
+  if (value == null || value === '') return { fare: null };
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return { error: 'Enter a fare greater than $0' };
+  if (n > 10000) return { error: 'That fare looks too large - check it and try again' };
+  return { fare: Math.round(n * 100) / 100 };
+}
+
+// PUT /api/booking/:id/complete - driver enters the actual fare charged.
+// paymentPending: true leaves a cash trip unpaid (the passenger pays
+// later - "Mark as paid" once they do); otherwise cash is marked paid.
 router.put('/:id/complete', auth, roleMiddleware(['driver']), async (req, res) => {
   try {
-    const { actualFare } = req.body;
+    const { error: fareError, fare: actualFare } = parseFare(req.body.actualFare);
+    if (fareError) return res.status(400).json({ error: fareError });
+    const paymentPending = req.body.paymentPending === true;
     const booking = await Booking.findById(req.params.id);
     if (!booking) return res.status(404).json({ error: 'Booking not found' });
     // Guards against double-incrementing the driver's totalTrips/
@@ -1253,9 +1267,10 @@ router.put('/:id/complete', auth, roleMiddleware(['driver']), async (req, res) =
       status: 'completed',
       actualFare: actualFare || booking.estimatedFare,
       completedAt: new Date(),
-      // Cash is collected in person at trip end; card bookings only become
-      // "paid" once the passenger actually pays via /api/payment.
-      ...(booking.paymentMethod !== 'card' && { paymentStatus: 'paid' }),
+      // Cash is collected in person at trip end (unless the driver says
+      // payment is pending); card bookings only become "paid" once the
+      // passenger actually pays via /api/payment.
+      ...(booking.paymentMethod !== 'card' && !paymentPending && { paymentStatus: 'paid' }),
     });
 
     // The trip is complete as soon as that write lands - answer the driver
@@ -1495,6 +1510,43 @@ router.put('/:id/payment-method', auth, roleMiddleware(['passenger']), async (re
       }
     }
 
+    res.json(updated);
+  } catch (err) {
+    serverError(res, err, req);
+  }
+});
+
+// PUT /api/booking/:id/fare { actualFare, paymentPending? } - driver
+// corrects a completed trip afterwards: the fare, and for cash trips
+// whether payment is still pending. A card fare already paid online can't
+// change (the passenger was charged that amount). The driver's running
+// earnings total is adjusted by the difference.
+router.put('/:id/fare', auth, roleMiddleware(['driver']), async (req, res) => {
+  try {
+    const booking = await Booking.findById(req.params.id);
+    if (!booking) return res.status(404).json({ error: 'Booking not found' });
+    const driver = await Driver.findOne({ userId: req.user.id });
+    if (!driver || String(booking.driverId) !== String(driver._id)) return res.status(403).json({ error: 'Not your trip' });
+    if (booking.status !== 'completed') return res.status(400).json({ error: 'Only a completed trip can be edited here' });
+
+    const { error: fareError, fare } = parseFare(req.body.actualFare);
+    if (fareError) return res.status(400).json({ error: fareError });
+    if (fare == null) return res.status(400).json({ error: 'Enter the fare' });
+    const oldFare = booking.actualFare || booking.estimatedFare || 0;
+    if (booking.paymentMethod === 'card' && booking.paymentStatus === 'paid' && fare !== oldFare) {
+      return res.status(400).json({ error: 'This fare was already paid online, so it can\'t be changed' });
+    }
+
+    const update = { actualFare: fare };
+    if (booking.paymentMethod !== 'card' && typeof req.body.paymentPending === 'boolean') {
+      update.paymentStatus = req.body.paymentPending ? 'unpaid' : 'paid';
+    }
+    const updated = await Booking.findByIdAndUpdate(booking._id, update);
+    if (fare !== oldFare) {
+      await Driver.findByIdAndUpdate(driver._id, {
+        totalEarnings: Math.round(((driver.totalEarnings || 0) + fare - oldFare) * 100) / 100,
+      });
+    }
     res.json(updated);
   } catch (err) {
     serverError(res, err, req);

@@ -10,6 +10,7 @@ import { directionsLink } from '../../utils/maps';
 import { telLink } from '../../utils/phone';
 import { useTripGpsTracking } from '../../hooks/useTripGpsTracking';
 import WhatsAppIcon from '../../components/WhatsAppIcon';
+import Modal from '../../components/Modal';
 
 // Same rule as the backend's POST /api/booking/driver/location: a trip is
 // "on the go" (so its GPS route is recorded) once it's in progress, or
@@ -26,7 +27,9 @@ export default function DriverDashboard() {
   const { bookings, fetchDriverBookings } = useBookingStore();
   const [profile, setProfile] = useState(null);
   const [earnings, setEarnings] = useState(null);
-  const [fareInputs, setFareInputs] = useState({});
+  // The "Complete trip" / "Edit trip" dialog: { mode: 'complete' | 'edit',
+  // booking, fare, paymentPending, error, saving } or null when closed.
+  const [fareDialog, setFareDialog] = useState(null);
   const [alert, setAlert] = useState('');
   const [availError, setAvailError] = useState('');
   const [showAllTrips, setShowAllTrips] = useState(false);
@@ -173,13 +176,51 @@ export default function DriverDashboard() {
     }
   }
 
-  async function complete(id) {
+  // Asks for the fare (and, for cash, whether it's been paid) instead of a
+  // fare box on every trip - see the fare dialog at the bottom.
+  function openComplete(b) {
+    setFareDialog({ mode: 'complete', booking: b, fare: String(b.estimatedFare ?? ''), paymentPending: false, error: '' });
+  }
+
+  function openEdit(b) {
+    setFareDialog({
+      mode: 'edit', booking: b, fare: String(b.actualFare ?? b.estimatedFare ?? ''),
+      paymentPending: b.paymentStatus !== 'paid', error: '',
+    });
+  }
+
+  async function saveFareDialog() {
+    const { mode, booking, fare, paymentPending } = fareDialog;
+    const amount = Number(fare);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setFareDialog((d) => ({ ...d, error: 'Enter the fare charged' }));
+      return;
+    }
+    if (mode === 'complete') {
+      setFareDialog(null);
+      await complete(booking._id, amount, booking.paymentMethod !== 'card' && paymentPending);
+      return;
+    }
+    setFareDialog((d) => ({ ...d, saving: true, error: '' }));
+    try {
+      await client.put(`/booking/${booking._id}/fare`, {
+        actualFare: amount,
+        ...(booking.paymentMethod !== 'card' && { paymentPending }),
+      });
+      setFareDialog(null);
+      load();
+    } catch (err) {
+      setFareDialog((d) => ({ ...d, saving: false, error: err.response?.data?.error || 'Could not save the changes' }));
+    }
+  }
+
+  async function complete(id, actualFare, paymentPending) {
     const booking = bookings.find((b) => b._id === id);
-    const actualFare = Number(fareInputs[id]) || undefined;
     if (booking) {
       const finalBooking = { ...booking, actualFare: actualFare || booking.estimatedFare };
-      const owing = booking.paymentMethod === 'card' && booking.paymentStatus !== 'paid';
-      const payLink = owing ? `${window.location.origin}/pay/${id}` : null;
+      const cardOwing = booking.paymentMethod === 'card' && booking.paymentStatus !== 'paid';
+      const owing = cardOwing || paymentPending;
+      const payLink = cardOwing ? `${window.location.origin}/pay/${id}` : null;
       const receipt = receiptLink(booking);
       // Opened before the API call so it counts as part of the tap (popup
       // blockers reject a window opened after an await). One message: the
@@ -196,7 +237,7 @@ export default function DriverDashboard() {
     }
 
     try {
-      await client.put(`/booking/${id}/complete`, { actualFare });
+      await client.put(`/booking/${id}/complete`, { actualFare, paymentPending });
     } catch (err) {
       setAlert(err.response?.data?.error || 'Could not complete this trip');
     }
@@ -281,7 +322,7 @@ export default function DriverDashboard() {
                 </div>
                 <div>{b.pickupAddress}{b.stops?.map((s, i) => <span key={i}> → {s.address}</span>)} → {b.dropAddress}</div>
                 <div className="muted">
-                  {b.passengerId?.name}{b.passengerRatingAvg ? ` (⭐${b.passengerRatingAvg})` : ''} · {b.distanceKm} km · est. ${b.estimatedFare} · {b.paymentMethod === 'card' ? (b.paymentStatus === 'paid' ? 'paid online' : 'awaiting online payment') : 'cash'}
+                  {b.passengerId?.name}{b.passengerRatingAvg ? ` (⭐${b.passengerRatingAvg})` : ''} · {b.distanceKm} km · est. ${b.estimatedFare} · {b.paymentMethod === 'card' ? (b.paymentStatus === 'paid' ? 'paid online' : 'awaiting online payment') : (b.status === 'completed' && b.paymentStatus !== 'paid' ? 'cash · payment pending' : 'cash')}
                 </div>
                 <div className="muted">
                   {b.scheduledFor ? `Scheduled: ${formatNzDateTime(b.scheduledFor)}` : `Requested: ${formatNzDateTime(b.requestedAt || b.createdAt)}`}
@@ -306,62 +347,67 @@ export default function DriverDashboard() {
                 )}
               </div>
             )}
-            {(b.status === 'accepted' || b.status === 'in-progress') && (
-              <div className="booking-actions trip-actions">
-                <a className="btn secondary" target="_blank" rel="noreferrer" href={directionsLink(b)}>📍 Directions</a>
-                {/* Call is only offered while the trip is live (accepted / in
-                    progress) - e.g. the passenger can't be found at pickup.
-                    It disappears once the trip is completed or cancelled. */}
-                {telLink(b.passengerId?.mobile) && (
-                  <a className="btn call" href={telLink(b.passengerId?.mobile)}>📞 Call passenger</a>
-                )}
-                {b.status === 'accepted' && !b.arrivedAt && (
-                  <>
-                    <button className="btn secondary" onClick={() => markArrived(b._id)}>I've arrived</button>
-                    {waLink(b.passengerId?.mobile, driverConfirmedMessage(b, profile?.userId?.name, vehicleLabel(profile))) && (
+            {(b.status === 'accepted' || b.status === 'in-progress') && (() => {
+              const cardOwing = b.paymentMethod === 'card' && b.paymentStatus !== 'paid';
+              const payLink = `${window.location.origin}/pay/${b._id}`;
+              const confirmLink = waLink(b.passengerId?.mobile, driverConfirmedMessage(b, profile?.userId?.name, vehicleLabel(profile)));
+              const remindLink = cardOwing && waLink(b.passengerId?.mobile, paymentReminderMessage(b, profile?.userId?.name, payLink));
+              return (
+                <>
+                  <div className="booking-actions trip-actions">
+                    {b.status === 'accepted' && !b.arrivedAt && confirmLink && (
                       <a className="btn whatsapp" target="_blank" rel="noreferrer" title="Message passenger on WhatsApp: trip confirmed"
-                        href={waLink(b.passengerId?.mobile, driverConfirmedMessage(b, profile?.userId?.name, vehicleLabel(profile)))}><WhatsAppIcon /> Trip confirmed</a>
+                        href={confirmLink}><WhatsAppIcon /> Trip confirmed</a>
                     )}
-                  </>
-                )}
-              </div>
-            )}
-            {(b.status === 'accepted' || b.status === 'in-progress') && (
-              <div className="booking-actions trip-actions">
-                <input type="number" inputMode="decimal" step="0.01" placeholder="Actual fare $" aria-label="Actual fare"
-                  value={fareInputs[b._id] || ''} onChange={(e) => setFareInputs((f) => ({ ...f, [b._id]: e.target.value }))} />
-                <button className="btn" onClick={() => complete(b._id)}>Complete</button>
-              </div>
-            )}
-            {b.status === 'completed' && receiptUrl(b) && (
-              <div className="booking-actions trip-actions">
-                <a className="btn secondary" target="_blank" rel="noreferrer" href={receiptUrl(b)}>View receipt</a>
-                {b.passengerHasEmail && (
-                  <button className="btn secondary" disabled={!!receiptSent[b._id]} onClick={() => emailReceipt(b._id)}>
-                    {receiptSent[b._id] === 'sent' ? 'Receipt emailed' : receiptSent[b._id] === 'sending' ? 'Sending...' : 'Email receipt'}
-                  </button>
-                )}
-                {waLink(b.passengerId?.mobile) && (
-                  <a className="btn whatsapp" target="_blank" rel="noreferrer"
-                    href={waLink(b.passengerId?.mobile, receiptMessage(b, profile?.userId?.name, receiptUrl(b), b.paymentMethod === 'card' && b.paymentStatus !== 'paid' ? `${window.location.origin}/pay/${b._id}` : null))}><WhatsAppIcon /> Send receipt on WhatsApp</a>
-                )}
-                {!b.passengerHasEmail && <span className="muted">No email on file for this passenger</span>}
-              </div>
-            )}
-            {b.paymentMethod === 'card' && b.paymentStatus !== 'paid' && ['accepted', 'in-progress', 'completed'].includes(b.status) && (
-              <div className="booking-actions trip-actions">
-                {waLink(b.passengerId?.mobile, paymentReminderMessage(b, profile?.userId?.name, `${window.location.origin}/pay/${b._id}`)) && (
-                  <a className="btn whatsapp" target="_blank" rel="noreferrer" title="Message passenger on WhatsApp: payment reminder"
-                    href={waLink(b.passengerId?.mobile, paymentReminderMessage(b, profile?.userId?.name, `${window.location.origin}/pay/${b._id}`))}><WhatsAppIcon /> Remind to pay</a>
-                )}
-                <button className="btn secondary" onClick={() => markPaid(b._id)}>Mark as paid</button>
-              </div>
-            )}
-            {(b.status === 'accepted' || b.status === 'in-progress') && (
-              <div className="booking-actions trip-actions">
-                <button className="btn danger-outline full" onClick={() => cancelTrip(b._id)}>Cancel trip</button>
-              </div>
-            )}
+                    {b.status === 'accepted' && !b.arrivedAt && (
+                      <button className="btn secondary" onClick={() => markArrived(b._id)}>I've arrived</button>
+                    )}
+                    {/* Call is only offered while the trip is live (accepted / in
+                        progress) - e.g. the passenger can't be found at pickup.
+                        It disappears once the trip is completed or cancelled. */}
+                    {telLink(b.passengerId?.mobile) && (
+                      <a className="btn call" href={telLink(b.passengerId?.mobile)}>📞 Call passenger</a>
+                    )}
+                    <a className="btn secondary" target="_blank" rel="noreferrer" href={directionsLink(b)}>📍 Directions</a>
+                    <button className="btn" onClick={() => openComplete(b)}>Complete</button>
+                    {remindLink && (
+                      <a className="btn whatsapp" target="_blank" rel="noreferrer" title="Message passenger on WhatsApp: payment reminder"
+                        href={remindLink}><WhatsAppIcon /> Remind to pay</a>
+                    )}
+                    {cardOwing && <button className="btn secondary" onClick={() => markPaid(b._id)}>Mark as paid</button>}
+                  </div>
+                  <div className="booking-actions trip-actions">
+                    <button className="btn danger-outline full" onClick={() => cancelTrip(b._id)}>Cancel trip</button>
+                  </div>
+                </>
+              );
+            })()}
+            {b.status === 'completed' && (() => {
+              const unpaid = b.paymentStatus !== 'paid';
+              const payLink = b.paymentMethod === 'card' ? `${window.location.origin}/pay/${b._id}` : null;
+              const remindLink = unpaid && waLink(b.passengerId?.mobile, paymentReminderMessage(b, profile?.userId?.name, payLink));
+              const receiptWa = receiptUrl(b) && waLink(b.passengerId?.mobile, receiptMessage(b, profile?.userId?.name, receiptUrl(b), unpaid ? payLink : null));
+              return (
+                <div className="booking-actions trip-actions">
+                  {remindLink && (
+                    <a className="btn whatsapp" target="_blank" rel="noreferrer" title="Message passenger on WhatsApp: payment reminder"
+                      href={remindLink}><WhatsAppIcon /> Remind to pay</a>
+                  )}
+                  {unpaid && <button className="btn secondary" onClick={() => markPaid(b._id)}>Mark as paid</button>}
+                  {receiptUrl(b) && <a className="btn secondary" target="_blank" rel="noreferrer" href={receiptUrl(b)}>View receipt</a>}
+                  {receiptUrl(b) && b.passengerHasEmail && (
+                    <button className="btn secondary" disabled={!!receiptSent[b._id]} onClick={() => emailReceipt(b._id)}>
+                      {receiptSent[b._id] === 'sent' ? 'Receipt emailed' : receiptSent[b._id] === 'sending' ? 'Sending...' : 'Email receipt'}
+                    </button>
+                  )}
+                  {receiptWa && (
+                    <a className="btn whatsapp" target="_blank" rel="noreferrer" title="Send receipt on WhatsApp" href={receiptWa}><WhatsAppIcon /> Send receipt</a>
+                  )}
+                  <button className="btn secondary" onClick={() => openEdit(b)}>✏️ Edit trip</button>
+                  {receiptUrl(b) && !b.passengerHasEmail && <span className="muted">No email on file for this passenger</span>}
+                </div>
+              );
+            })()}
             {b.status === 'cancelled' && cancelWaLinks[b._id] && (
               <div className="booking-actions trip-actions">
                 <a className="btn whatsapp" target="_blank" rel="noreferrer" href={cancelWaLinks[b._id]}><WhatsAppIcon /> Message passenger: trip cancelled</a>
@@ -370,6 +416,49 @@ export default function DriverDashboard() {
           </div>
         ))}
       </div>
+
+      {fareDialog && (() => {
+        const { mode, booking: fb, fare, paymentPending, error, saving } = fareDialog;
+        const isCash = fb.paymentMethod !== 'card';
+        const cardPaid = !isCash && fb.paymentStatus === 'paid';
+        const set = (patch) => setFareDialog((d) => ({ ...d, ...patch, error: '' }));
+        return (
+          <Modal title={mode === 'complete' ? 'Complete trip' : 'Edit trip'} onClose={() => setFareDialog(null)}>
+            <p className="muted" style={{ marginTop: 0 }}>{fb.bookingId}<br />{fb.pickupAddress} → {fb.dropAddress}</p>
+            <label>Fare charged (NZD)</label>
+            <input type="number" inputMode="decimal" min="0.01" step="0.01" autoFocus value={fare} disabled={cardPaid}
+              onChange={(e) => set({ fare: e.target.value })} />
+            <p className="muted" style={{ margin: '4px 0 12px', fontSize: '0.85rem' }}>
+              Estimate was ${fb.estimatedFare}.{cardPaid ? ' Already paid online, so the fare can\'t be changed.' : ''}
+            </p>
+            {isCash ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 'normal' }}>
+                  <input type="radio" name="fare-paid" checked={!paymentPending} style={{ width: 'auto' }} onChange={() => set({ paymentPending: false })} />
+                  Paid (cash received)
+                </label>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 'normal' }}>
+                  <input type="radio" name="fare-paid" checked={paymentPending} style={{ width: 'auto' }} onChange={() => set({ paymentPending: true })} />
+                  Payment pending - passenger will pay later
+                </label>
+              </div>
+            ) : (
+              <p className="muted" style={{ margin: 0 }}>
+                {cardPaid ? 'Paid online by card.' : 'Card trip - the passenger pays online. Use "Remind to pay" to send them the payment link.'}
+              </p>
+            )}
+            {error && <p className="error-text">{error}</p>}
+            <div className="booking-row" style={{ border: 'none', paddingBottom: 0 }}>
+              <div className="booking-actions trip-actions">
+                <button className="btn secondary" onClick={() => setFareDialog(null)}>Cancel</button>
+                <button className="btn" disabled={saving || (cardPaid && mode === 'edit')} onClick={saveFareDialog}>
+                  {mode === 'complete' ? 'Complete trip' : saving ? 'Saving...' : 'Save changes'}
+                </button>
+              </div>
+            </div>
+          </Modal>
+        );
+      })()}
     </div>
   );
 }
