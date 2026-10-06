@@ -567,8 +567,7 @@ router.put('/settings', async (req, res) => {
       ...(promoDiscount && {
         promoDiscount: { ...promoDiscount, percent: Number(promoDiscount.percent), startDate: promoDiscount.startDate || null, endDate: promoDiscount.endDate || null },
       }),
-      ...(returnTripDiscount && { returnTripDiscount: { ...returnTripDiscount, percent: Number(returnTripDiscount.percent) } }),
-    });
+      ...(returnTripDiscount && { returnTripDiscount: { ...returnTripDiscount, percent: Number(returnTripDiscount.percent) } }),    });
     // Turning the return-trip discount on/off or changing its percent
     // re-prices already-booked pairs (and tells those passengers).
     if (returnTripDiscount) runInBackground('return-trip discount repricing', () => repriceUpcomingReturnTrips(req.app.get('io')));

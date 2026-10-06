@@ -189,6 +189,15 @@ function dealDate(key) {
   return new Date(`${key}T12:00:00`).toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
+// ISO instant -> NZ clock time, e.g. "3:30 pm", rounded to a quarter hour
+// on the side that still qualifies: up for "pickup from", down for
+// "leaving by".
+function dealTime(iso, roundDown = false) {
+  const q = 15 * 60 * 1000;
+  const t = new Date(Math[roundDown ? 'floor' : 'ceil'](new Date(iso).getTime() / q) * q);
+  return t.toLocaleTimeString('en-NZ', { timeZone: 'Pacific/Auckland', hour: 'numeric', minute: '2-digit', hour12: true });
+}
+
 const DIRECTION_LABEL = { 'to-akl': 'New Plymouth → Auckland', 'to-np': 'Auckland → New Plymouth' };
 
 // Admin-set discounts (see backend utils/discounts.js): the date-range
@@ -229,14 +238,18 @@ function Deals() {
             <div>
               <h3>Travelling between New Plymouth and Auckland?</h3>
               <p>
-                When a driver is already making the trip one way, the ride back the same day is {returnTrip.percent}% off - for
-                you and for the passenger going the other way.
+                Our drivers are based in New Plymouth. When one is already heading to Auckland, the trip back with them later
+                that day is {returnTrip.percent}% off - and so is the trip up, for whoever books it.
               </p>
               {returnTrip.openings.length > 0 ? (
                 <ul className="hm-deal-list">
                   {returnTrip.openings.map((o) => (
                     <li key={`${o.date}-${o.direction}`}>
-                      <span><strong>{dealDate(o.date)}</strong> · {DIRECTION_LABEL[o.direction]}</span>
+                      <span>
+                        <strong>{dealDate(o.date)}</strong> · {DIRECTION_LABEL[o.direction]}
+                        {o.after && <> · pickup from {dealTime(o.after)}</>}
+                        {o.before && <> · leaving by {dealTime(o.before, true)}</>}
+                      </span>
                       <Link to={`/book/${o.driverId}`}>Book {returnTrip.percent}% off</Link>
                     </li>
                   ))}

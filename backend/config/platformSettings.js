@@ -112,12 +112,13 @@ let settings = {
   // See utils/discounts.js.
   promoDiscount: { enabled: false, percent: 10, startDate: null, endDate: null },
   // Separate, always-on-when-enabled discount: when one driver has a New
-  // Plymouth -> Auckland trip and an Auckland -> New Plymouth trip on the
-  // same NZ day, both trips get this percent off - including trips booked
+  // Plymouth -> Auckland trip and then, the same NZ day, an Auckland -> New
+  // Plymouth trip picking up at least minGapHours after the first one
+  // finishes, both trips get this percent off - including trips booked
   // before the pair existed, with the passenger notified of the new fare.
   // Doesn't stack with promoDiscount; a trip gets whichever is bigger.
-  // See utils/discounts.js reconcileReturnTripDiscounts().
-  returnTripDiscount: { enabled: false, percent: 10 },
+  // See utils/discounts.js pairedTripIds().
+  returnTripDiscount: { enabled: false, percent: 10, minGapHours: 1 },
 };
 
 let settingsDocId = null;
@@ -186,7 +187,9 @@ function updateSettings(patch) {
   if (patch.returnTripDiscount) {
     const r = patch.returnTripDiscount;
     if (r.enabled && !validPercent(r.percent)) throw new Error('Return-trip discount must be a percent between 0 and 100');
-    patch = { ...patch, returnTripDiscount: { enabled: !!r.enabled, percent: r.percent } };
+    const minGapHours = r.minGapHours == null || r.minGapHours === '' ? 1 : Number(r.minGapHours);
+    if (!(minGapHours >= 0 && minGapHours <= 12)) throw new Error('Gap before the return trip must be between 0 and 12 hours');
+    patch = { ...patch, returnTripDiscount: { enabled: !!r.enabled, percent: r.percent, minGapHours } };
   }
   settings = { ...settings, ...patch };
   // Fire-and-forget: callers of updateSettings() expect a synchronous

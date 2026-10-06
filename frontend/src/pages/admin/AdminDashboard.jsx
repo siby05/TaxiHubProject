@@ -828,8 +828,9 @@ export default function AdminDashboard() {
                 Same-day Auckland return-trip discount
               </label>
               <p className="muted" style={{ marginTop: 4 }}>
-                When one driver has a New Plymouth → Auckland trip and an Auckland → New Plymouth trip on the same day,
-                both trips get this discount - including one already booked. Passengers are notified of the new fare
+                When one driver has a New Plymouth → Auckland trip and then, later the same day, an Auckland → New
+                Plymouth trip picking up at least the gap below after the first trip finishes, both trips get this
+                discount - including one already booked. Passengers are notified of the new fare
                 straight away, and again if the pair falls through (e.g. one trip is cancelled). Days where a driver still
                 needs the other leg are advertised on the home page.
               </p>
@@ -838,6 +839,13 @@ export default function AdminDashboard() {
                   value={settings.returnTripDiscount?.percent ?? ''}
                   onChange={(e) => setSettings((s) => ({ ...s, returnTripDiscount: { ...s.returnTripDiscount, percent: e.target.value } }))} />
                 <span className="muted">% off both trips</span>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginTop: 8 }}>
+                <span className="muted">Return pickup at least</span>
+                <input type="number" step="0.5" min="0" max="12" style={{ maxWidth: 80 }} aria-label="Gap before the return trip (hours)"
+                  value={settings.returnTripDiscount?.minGapHours ?? 1}
+                  onChange={(e) => setSettings((s) => ({ ...s, returnTripDiscount: { ...s.returnTripDiscount, minGapHours: e.target.value } }))} />
+                <span className="muted">hours after the Auckland trip finishes</span>
               </div>
             </div>
 

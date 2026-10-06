@@ -460,15 +460,17 @@ router.post('/bookings', auth, roleMiddleware(['driver']), async (req, res) => {
       fareSetByDriver: hasCustomFare,
     });
 
-    if (passenger.emailVerified) {
-      runInBackground('email sendBookingConfirmation', () => emailService.sendBookingConfirmation(passenger.email, booking, driver, req.user.name));
-      notifyUser(passenger._id, {
-        type: 'booking-accepted',
-        title: 'A driver booked a ride for you',
-        message: `${booking.pickupAddress} → ${booking.dropAddress} - $${booking.estimatedFare}`,
-        link: '/passenger',
-      });
-    }
+    // Always tell the passenger - emailVerified is false for anyone a driver
+    // or the QR flow registered, even with a real address, and gating on it
+    // meant those passengers never heard about their booking. send() itself
+    // skips placeholder (no-email) addresses.
+    runInBackground('email sendBookingConfirmation', () => emailService.sendBookingConfirmation(passenger.email, booking, driver, req.user.name));
+    notifyUser(passenger._id, {
+      type: 'booking-accepted',
+      title: 'A driver booked a ride for you',
+      message: `${booking.pickupAddress} → ${booking.dropAddress} - $${booking.estimatedFare}`,
+      link: '/passenger',
+    });
 
     refreshReturnTripInBackground(req, null, booking);
 

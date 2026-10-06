@@ -87,15 +87,52 @@ function emitTo(io, userId, event, payload) {
   if (io && userId) io.to(String(userId)).emit(event, payload);
 }
 
-function tellPassengerOfNewFare(io, booking, oldFare, reason) {
-  const cheaper = booking.estimatedFare < oldFare;
-  const route = `${booking.pickupAddress} → ${booking.dropAddress}`;
-  const day = formatNzDate(booking.scheduledFor || booking.requestedAt);
-  const message = `${booking.bookingId} (${route}, ${day}): fare ${cheaper ? 'reduced' : 'changed'} from $${oldFare.toFixed(2)} to $${booking.estimatedFare.toFixed(2)} - ${reason}.`;
+// Why a trip's return-trip discount changed - picks the wording the
+// passenger sees (in-app and by email).
+//   'applied'      - a same-day return trip now pairs with theirs
+//   'pair-ended'   - the trip it was paired with was cancelled (or moved
+//                    to another day/driver), so it's back to standard fare
+//   'unpaired'     - their own trip lost its driver, so it can't pair
+//   'setting'      - the admin turned the discount off or changed its %
+function fareChangeWording(kind, b, oldFare, oldPercent, newPercent) {
+  const trip = `${b.bookingId} (${b.pickupAddress} → ${b.dropAddress}, ${formatNzDate(b.scheduledFor || b.requestedAt)})`;
+  const was = `$${oldFare.toFixed(2)}`;
+  const now = `$${b.estimatedFare.toFixed(2)}`;
+  switch (kind) {
+    case 'applied':
+      return {
+        title: `Good news - ${newPercent}% off your trip`,
+        subject: `${newPercent}% return-trip discount on ${b.bookingId} - your fare is now ${now}`,
+        message: `Your driver has a same-day return trip, so a ${newPercent}% return-trip discount now applies to ${trip}. Your fare is now ${now} (was ${was}).`,
+      };
+    case 'pair-ended':
+      return {
+        title: 'Return trip cancelled - fare back to standard',
+        subject: `Return trip cancelled - ${b.bookingId} is back to the standard fare of ${now}`,
+        message: `The same-day return trip paired with ${trip} has been cancelled or changed, so the ${oldPercent}% return-trip discount no longer applies. Your fare is back to the standard ${now} (was ${was}). Your booking itself is unchanged.`,
+      };
+    case 'unpaired':
+      return {
+        title: 'Return-trip discount removed',
+        subject: `${b.bookingId} is back to the standard fare of ${now}`,
+        message: `${trip} is no longer paired with a same-day return trip, so the ${oldPercent}% return-trip discount no longer applies. Your fare is now ${now} (was ${was}).`,
+      };
+    default:
+      return {
+        title: 'Your fare has changed',
+        subject: `Fare update for ${b.bookingId} - now ${now}`,
+        message: newPercent
+          ? `The return-trip discount is now ${newPercent}%, so your fare for ${trip} is now ${now} (was ${was}).`
+          : `The return-trip discount has ended, so ${trip} is back to the standard fare of ${now} (was ${was}).`,
+      };
+  }
+}
+
+function tellPassengerOfNewFare(io, booking, oldFare, wording) {
   notifyUser(booking.passengerId, {
     type: 'fare-changed',
-    title: cheaper ? 'Good news - your fare went down' : 'Your fare has changed',
-    message,
+    title: wording.title,
+    message: wording.message,
     link: '/passenger',
   });
   emitTo(io, booking.passengerId, 'booking:updated', { bookingId: booking._id });
@@ -104,16 +141,51 @@ function tellPassengerOfNewFare(io, booking, oldFare, reason) {
     // loaded by routes that emailService's own helpers don't need.
     const { emailService } = require('../services/emailService');
     const passenger = await User.findById(booking.passengerId);
-    if (passenger) await emailService.sendFareChanged(passenger.email, booking, oldFare, reason);
+    if (!passenger) return;
+    const result = await emailService.sendFareChanged(passenger.email, wording.subject, wording.message);
+    if (!result?.ok) console.warn(`[discounts] fare-change email for ${booking.bookingId} not sent: ${result?.error || 'unknown error'}`);
   });
 }
 
-// Re-checks every trip of one driver on one NZ day: if they have both an
-// NP -> Auckland and an Auckland -> NP trip, all those trips get the
-// return-trip discount, otherwise none do. Any adjustable, unpaid trip
-// whose price changes is updated and its passenger notified. Completed
-// trips still count towards making the pair (the driver did drive that
-// leg) but their fare is never touched.
+// Highway average for the NP <-> Auckland run, applied to the straight-
+// line distance (~255 km -> ~4.6 h, close to the real 4.5-5 h drive).
+// utils/driverAvailability.js's 35 km/h is a town-driving figure and would
+// make every Auckland trip look 7+ hours long.
+const INTERCITY_KMH = 55;
+const HOUR = 3600e3;
+
+const startMs = (b) => new Date(b.scheduledFor || b.startedAt || b.requestedAt || b.createdAt).getTime();
+const driveMs = (b) => ((b.distanceKm || haversineKm(b.pickupLat, b.pickupLng, b.dropLat, b.dropLng)) / INTERCITY_KMH) * HOUR;
+function endMs(b) {
+  if (b.completedAt) return new Date(b.completedAt).getTime();
+  return (b.startedAt ? new Date(b.startedAt).getTime() : startMs(b)) + driveMs(b);
+}
+const gapMs = (rt) => (rt?.minGapHours ?? 1) * HOUR;
+
+// The driver is based in New Plymouth, so a pair is NP -> Auckland first,
+// then Auckland -> NP picking up at least minGapHours after the first trip
+// finishes (completedAt once done, else its estimated arrival). Returns
+// the ids of every trip that is part of at least one such pair.
+function pairedTripIds(trips, rt) {
+  const outs = trips.filter((t) => t.dir === 'to-akl').map((t) => t.b);
+  const ins = trips.filter((t) => t.dir === 'to-np').map((t) => t.b);
+  const ids = new Set();
+  for (const o of outs) {
+    for (const i of ins) {
+      if (startMs(i) >= endMs(o) + gapMs(rt)) {
+        ids.add(String(o._id));
+        ids.add(String(i._id));
+      }
+    }
+  }
+  return ids;
+}
+
+// Re-checks every trip of one driver on one NZ day: trips that form a
+// valid pair (see pairedTripIds) get the return-trip discount, the rest
+// don't. Any adjustable, unpaid trip whose price changes is updated and its
+// passenger notified. Completed trips still count towards making a pair
+// (the driver did drive that leg) but their fare is never touched.
 async function reconcileReturnTripDiscounts(io, driverId, dateKey) {
   if (!driverId || !dateKey) return;
   const settings = getSettings();
@@ -123,15 +195,18 @@ async function reconcileReturnTripDiscounts(io, driverId, dateKey) {
     .filter((b) => b.status !== 'cancelled' && b.status !== 'expired' && tripDateKey(b) === dateKey)
     .map((b) => ({ b, dir: tripDirection(b) }))
     .filter((t) => t.dir);
-  const paired = trips.some((t) => t.dir === 'to-akl') && trips.some((t) => t.dir === 'to-np');
-  const percent = rt?.enabled && paired ? rt.percent : 0;
+  const pairedIds = pairedTripIds(trips, rt);
 
   for (const { b } of trips) {
     if (!ADJUSTABLE.includes(b.status) || b.paymentStatus === 'paid') continue;
-    if ((b.returnTripDiscountPercent || 0) === percent) continue;
-    await applyReturnTripPercent(io, b, percent, percent
-      ? `a ${percent}% same-day return-trip discount now applies`
-      : 'the same-day return trip it was paired with is no longer going ahead, so the return-trip discount no longer applies');
+    const paired = pairedIds.has(String(b._id));
+    const percent = rt?.enabled && paired ? rt.percent : 0;
+    const oldPercent = b.returnTripDiscountPercent || 0;
+    if (oldPercent === percent) continue;
+    let kind = 'setting';
+    if (rt?.enabled && !oldPercent) kind = 'applied';
+    else if (rt?.enabled && !paired) kind = 'pair-ended';
+    await applyReturnTripPercent(io, b, percent, kind);
   }
 
   // Let the driver's dashboard pick up the new fares.
@@ -141,14 +216,17 @@ async function reconcileReturnTripDiscounts(io, driverId, dateKey) {
   }
 }
 
-async function applyReturnTripPercent(io, b, percent, reason) {
+async function applyReturnTripPercent(io, b, percent, kind) {
   const oldFare = b.estimatedFare;
+  const oldPercent = b.returnTripDiscountPercent || 0;
   const fare = discountedFare(baseFareOf(b), b.promoDiscountPercent || 0, percent);
   const updated = await Booking.findByIdAndUpdate(b._id, {
     ...fare,
     cardSurchargeAmount: b.paymentMethod === 'card' ? calculateCardSurcharge(fare.estimatedFare) : 0,
   });
-  if (updated.estimatedFare !== oldFare) tellPassengerOfNewFare(io, updated, oldFare, reason);
+  if (updated.estimatedFare !== oldFare) {
+    tellPassengerOfNewFare(io, updated, oldFare, fareChangeWording(kind, updated, oldFare, oldPercent, percent));
+  }
   return updated;
 }
 
@@ -167,7 +245,7 @@ async function refreshReturnTrip(io, before, after) {
     await reconcileReturnTripDiscounts(io, driverId, dateKey);
   }
   if (after && !after.driverId && after.returnTripDiscountPercent && ADJUSTABLE.includes(after.status) && after.paymentStatus !== 'paid') {
-    await applyReturnTripPercent(io, after, 0, 'it is no longer paired with a same-day return trip');
+    await applyReturnTripPercent(io, after, 0, 'unpaired');
   }
 }
 
@@ -207,7 +285,7 @@ async function publicPromotions() {
   let returnTrip = null;
   const rt = settings.returnTripDiscount;
   if (rt?.enabled) {
-    const legs = new Map(); // `${driverId}|${date}` -> Set of directions
+    const legs = new Map(); // `${driverId}|${date}` -> [{ b, dir }]
     const live = await Booking.find({ status: { $in: ['pending', 'accepted', 'in-progress', 'completed'] } });
     for (const b of live) {
       if (!b.driverId) continue;
@@ -216,21 +294,42 @@ async function publicPromotions() {
       const dir = tripDirection(b);
       if (!dir) continue;
       const key = `${b.driverId}|${date}`;
-      if (!legs.has(key)) legs.set(key, new Set());
-      legs.get(key).add(dir);
+      if (!legs.has(key)) legs.set(key, []);
+      legs.get(key).push({ b, dir });
     }
+    const now = Date.now();
     const openings = new Map();
+    // One line per day and direction: keep the widest window - the
+    // earliest return pickup, or the latest Auckland-bound departure.
+    const offer = (o) => {
+      const key = `${o.date}|${o.direction}`;
+      const cur = openings.get(key);
+      if (!cur || (o.after && o.after < cur.after) || (o.before && o.before > cur.before)) openings.set(key, o);
+    };
     // driverId goes with each opening so the home page can link straight
     // to that driver's booking page (/book/:driverId - the same public
     // page their QR code opens): booking the other leg with *them* is what
-    // makes the pair, a general broadcast could go to anyone.
-    for (const [key, dirs] of legs) {
-      if (dirs.size !== 1) continue; // already paired
+    // makes the pair, a general broadcast could go to anyone. Each opening
+    // carries the time window that would actually qualify (see
+    // pairedTripIds): a return pickup from `after`, or an Auckland run
+    // leaving New Plymouth by `before`.
+    for (const [key, trips] of legs) {
       const [driverId, date] = key.split('|');
       const driver = await Driver.findById(driverId);
       if (driver?.status !== 'approved') continue;
-      const needed = dirs.has('to-akl') ? 'to-np' : 'to-akl';
-      if (!openings.has(`${date}|${needed}`)) openings.set(`${date}|${needed}`, { date, direction: needed, driverId });
+      const pairedIds = pairedTripIds(trips, rt);
+      for (const { b, dir } of trips) {
+        if (pairedIds.has(String(b._id))) continue;
+        if (dir === 'to-akl') {
+          const after = endMs(b) + gapMs(rt);
+          if (nzDateKey(new Date(after)) === date) offer({ date, direction: 'to-np', driverId, after: new Date(after).toISOString() });
+        } else {
+          // Latest NP departure that still arrives gap-before this pickup
+          // (the Auckland run is the same distance as this trip).
+          const before = startMs(b) - gapMs(rt) - driveMs(b);
+          if (before > now && nzDateKey(new Date(before)) === date) offer({ date, direction: 'to-akl', driverId, before: new Date(before).toISOString() });
+        }
+      }
     }
     returnTrip = {
       percent: rt.percent,
