@@ -183,6 +183,75 @@ function EnquiryForm() {
   );
 }
 
+// "YYYY-MM-DD" (an NZ calendar date from the API) -> "Thu 8 Oct". Noon
+// keeps it on the same day whatever the viewer's own timezone.
+function dealDate(key) {
+  return new Date(`${key}T12:00:00`).toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
+const DIRECTION_LABEL = { 'to-akl': 'New Plymouth → Auckland', 'to-np': 'Auckland → New Plymouth' };
+
+// Admin-set discounts (see backend utils/discounts.js): the date-range
+// promotion, and same-day Auckland return trips - each open day links to
+// the driver who already has the other leg, since booking with them is
+// what earns the discount. Renders nothing when neither is on.
+function Deals() {
+  const [deals, setDeals] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    client.get('/booking/promotions').then((r) => { if (!cancelled) setDeals(r.data); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  const { promo, returnTrip } = deals || {};
+  if (!promo && !returnTrip) return null;
+
+  return (
+    <section className="hm-deals">
+      <div className="container hm-deals-grid">
+        {promo && (
+          <div className="hm-deal">
+            <div className="hm-deal-pct">{promo.percent}%<small>off</small></div>
+            <div>
+              <h3>{promo.active ? 'On now' : 'Coming up'}: {promo.percent}% off every ride</h3>
+              <p>
+                {promo.startDate === promo.endDate
+                  ? <>For trips on {dealDate(promo.startDate)}.</>
+                  : <>For trips from {dealDate(promo.startDate)} to {dealDate(promo.endDate)}.</>}
+                {' '}Applied automatically - the discounted fare is what you see when you book.
+              </p>
+              <Link className="btn hm-deal-btn" to="/register">Book a ride</Link>
+            </div>
+          </div>
+        )}
+        {returnTrip && (
+          <div className="hm-deal">
+            <div className="hm-deal-pct">{returnTrip.percent}%<small>off</small></div>
+            <div>
+              <h3>Travelling between New Plymouth and Auckland?</h3>
+              <p>
+                When a driver is already making the trip one way, the ride back the same day is {returnTrip.percent}% off - for
+                you and for the passenger going the other way.
+              </p>
+              {returnTrip.openings.length > 0 ? (
+                <ul className="hm-deal-list">
+                  {returnTrip.openings.map((o) => (
+                    <li key={`${o.date}-${o.direction}`}>
+                      <span><strong>{dealDate(o.date)}</strong> · {DIRECTION_LABEL[o.direction]}</span>
+                      <Link to={`/book/${o.driverId}`}>Book {returnTrip.percent}% off</Link>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="hm-deal-note">No return seats open right now - check back, new ones appear as trips are booked.</p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 // Adds .is-in to every .hm-reveal element as it scrolls into view (the
 // CSS does the actual fade/slide). Elements already on screen at mount
 // get it immediately, so nothing is ever stuck invisible.
@@ -255,6 +324,8 @@ export default function Home() {
         </div>
         <div className="hm-road" aria-hidden="true"><CarSide /></div>
       </section>
+
+      <Deals />
 
       <section className="hm-section">
         <div className="container">

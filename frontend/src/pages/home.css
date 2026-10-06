@@ -73,6 +73,24 @@
 .hm-road .hm-wheel { transform-box: fill-box; transform-origin: center; animation: hm-spin 0.6s linear infinite; }
 @keyframes hm-spin { to { transform: rotate(360deg); } }
 
+/* ---------- Deals (admin discounts) ---------- */
+.hm-deals { padding: 32px 0; background: linear-gradient(135deg, #fef3c7, #fde68a); }
+.hm-deals-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+.hm-deal { display: flex; gap: 18px; align-items: flex-start; background: #fff; border-radius: 18px; padding: 22px; box-shadow: 0 12px 30px rgba(146, 64, 14, 0.12); color: #1f2937; }
+.hm-deal h3 { margin: 0 0 6px; font-size: 1.15rem; }
+.hm-deal p { margin: 0 0 12px; color: #4b5563; }
+.hm-deal-pct { flex: none; width: 76px; height: 76px; border-radius: 50%; background: #f59e0b; color: #fff; font-weight: 800; font-size: 1.5rem; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; }
+.hm-deal-pct small { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 3px; }
+.hm .btn.hm-deal-btn { background: #b45309; }
+.hm-deal-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.hm-deal-list li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; padding: 10px 12px; border: 1px solid #fde68a; border-radius: 10px; background: #fffbeb; }
+.hm-deal-list a { font-weight: 700; color: #b45309; white-space: nowrap; }
+.hm-deal-note { font-size: 0.9rem; font-style: italic; }
+@media (max-width: 480px) {
+  .hm-deal { flex-direction: column; padding: 18px; }
+  .hm-deal-pct { width: 64px; height: 64px; font-size: 1.25rem; }
+}
+
 /* ---------- Sections ---------- */
 .hm-section { padding: 72px 0; }
 .hm-section.alt { background: #f1f5f9; }

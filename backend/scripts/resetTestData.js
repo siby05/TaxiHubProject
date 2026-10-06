@@ -2,8 +2,8 @@
  * One-off maintenance script: wipes trip-related test data while leaving
  * Driver and User accounts (drivers, admins, passengers) untouched.
  *
- * Deletes: all Bookings, Complaints, Notifications, WeeklyPayments,
- * Feedback, Enquiries.
+ * Deletes: all Bookings, the earnings archive, Complaints, Notifications,
+ * WeeklyPayments, Feedback, Enquiries.
  * Resets: each Driver's rating/totalTrips/totalEarnings back to zero (the
  * driver profile itself - vehicle, status, rate, documents, etc. - is left
  * alone).
@@ -28,6 +28,7 @@ const TripLocation = require('../models/TripLocation');
 const WeeklyPayment = require('../models/WeeklyPayment');
 const Feedback = require('../models/Feedback');
 const Enquiry = require('../models/Enquiry');
+const EarningsArchive = require('../models/EarningsArchive');
 const Driver = require('../models/Driver');
 
 async function main() {
@@ -40,7 +41,7 @@ async function main() {
   const mode = process.env.DB_MODE || 'memory';
   console.log(`[reset] DB_MODE=${mode}${mode === 'mongo' ? ` (database "${mongoose.connection.name}")` : ' - nothing persists here, this is a no-op'}`);
 
-  const [bookings, complaints, notifications, tripLocations, weeklyPayments, feedback, enquiries] = await Promise.all([
+  const [bookings, complaints, notifications, tripLocations, weeklyPayments, feedback, enquiries, earningsArchive] = await Promise.all([
     Booking.deleteMany({}),
     Complaint.deleteMany({}),
     Notification.deleteMany({}),
@@ -48,8 +49,9 @@ async function main() {
     WeeklyPayment.deleteMany({}),
     Feedback.deleteMany({}),
     Enquiry.deleteMany({}),
+    EarningsArchive.deleteMany({}),
   ]);
-  console.log(`[reset] deleted bookings=${bookings.deletedCount} complaints=${complaints.deletedCount} notifications=${notifications.deletedCount} tripLocations=${tripLocations.deletedCount} weeklyPayments=${weeklyPayments.deletedCount} feedback=${feedback.deletedCount} enquiries=${enquiries.deletedCount}`);
+  console.log(`[reset] deleted bookings=${bookings.deletedCount} complaints=${complaints.deletedCount} notifications=${notifications.deletedCount} tripLocations=${tripLocations.deletedCount} weeklyPayments=${weeklyPayments.deletedCount} feedback=${feedback.deletedCount} enquiries=${enquiries.deletedCount} earningsArchive=${earningsArchive.deletedCount}`);
 
   const drivers = await Driver.find({});
   for (const d of drivers) {

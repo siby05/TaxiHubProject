@@ -8,6 +8,7 @@ import PhoneField from '../../components/PhoneField';
 import { makeStopHandlers, stopsPayload } from '../../utils/stops';
 import ContactAdmin from '../../components/ContactAdmin';
 import { formatNzDateTime } from '../../utils/nzTime';
+import { discountNote } from '../../utils/fare';
 
 export default function BookDriver() {
   const { driverId } = useParams();
@@ -239,7 +240,7 @@ export default function BookDriver() {
           <div className="card" style={{ maxWidth: 460, margin: '40px auto', background: '#dcfce7' }}>
             <h2 style={{ marginTop: 0 }}>Ride confirmed!</h2>
             <p>{guestSuccess.bookingId} · {guestSuccess.pickupAddress} → {guestSuccess.dropAddress}</p>
-            <p><strong>Estimated fare: ${guestSuccess.estimatedFare}</strong></p>
+            <p><strong>Estimated fare: ${guestSuccess.estimatedFare}</strong>{discountNote(guestSuccess)}</p>
             <p className="muted">
               {preview?.name || 'The driver'} has been notified and is on the way. We've saved your details
               under {guestMobile} - next time you scan a car's QR code, just enter the same number and your details
@@ -319,7 +320,7 @@ export default function BookDriver() {
                   {guestQuote.requestedOffSchedule && (
                     <p className="muted" style={{ color: '#b45309' }}>⚠️ {guestQuote.requestedName || 'This driver'} isn't scheduled to work at that time - matching you with another driver who is.</p>
                   )}
-                  <strong>Estimated fare: ${guestQuote.estimatedFare.toFixed(2)}</strong>
+                  <strong>Estimated fare: ${guestQuote.estimatedFare.toFixed(2)}</strong>{discountNote(guestQuote)}
                   <div className="muted">{guestQuote.distanceKm} km{guestStops.length > 0 && ` · via ${guestStops.length} stop${guestStops.length > 1 ? 's' : ''}`}{guestScheduledFor && ` · scheduled for ${formatNzDateTime(guestScheduledFor)}`}</div>
                   {guestError && <p className="error-text">{guestError}</p>}
                   {guestMissing.length > 0 && <p className="muted">Still needed: {guestMissing.join(', ')}.</p>}
@@ -441,7 +442,7 @@ export default function BookDriver() {
               {quote.requestedOffSchedule && (
                 <p className="muted" style={{ color: '#b45309' }}>⚠️ {quote.requestedName || 'This driver'} isn't scheduled to work at that time - matching you with another driver who is.</p>
               )}
-              <strong>Estimated fare: ${quote.estimatedFare.toFixed(2)}</strong>
+              <strong>Estimated fare: ${quote.estimatedFare.toFixed(2)}</strong>{discountNote(quote)}
               {quote.cardSurchargeAmount > 0 && (
                 <div className="muted">+ ${quote.cardSurchargeAmount.toFixed(2)} card processing fee (Stripe, NZ cards) = <strong>${quote.total.toFixed(2)} total</strong> - overseas cards cost a little more, shown before you pay</div>
               )}

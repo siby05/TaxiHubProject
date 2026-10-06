@@ -30,4 +30,12 @@ function nzDateStamp(value = new Date()) {
   return `${parts.year}${parts.month}${parts.day}`;
 }
 
-module.exports = { formatNzDateTime, formatNzDate, nzDateStamp };
+// NZ calendar date as "YYYY-MM-DD" - the same shape as an <input
+// type="date"> value, so admin-entered date ranges (see utils/discounts.js)
+// compare as plain strings.
+function nzDateKey(value = new Date()) {
+  const s = nzDateStamp(value);
+  return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
+}
+
+module.exports = { formatNzDateTime, formatNzDate, nzDateStamp, nzDateKey };

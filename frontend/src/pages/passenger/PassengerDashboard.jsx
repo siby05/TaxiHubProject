@@ -14,6 +14,7 @@ import { newStopId, makeStopHandlers, stopsPayload } from '../../utils/stops';
 import ContactAdmin from '../../components/ContactAdmin';
 import InstallPrompt from '../../components/InstallPrompt';
 import { formatNzDateTime } from '../../utils/nzTime';
+import { discountNote } from '../../utils/fare';
 
 // Friendlier wording for the raw booking status - the CSS class (badge
 // pending/accepted/...) still keys off the raw status, just the visible
@@ -340,7 +341,7 @@ export default function PassengerDashboard() {
                 {quote.requestedCashOnly && (
                   <p className="muted" style={{ color: '#b45309' }}>⚠️ {quote.requestedName || 'That driver'} is cash-only - matching you with another driver for online payment.</p>
                 )}
-                <strong>Estimated fare: ${quote.estimatedFare.toFixed(2)}</strong>
+                <strong>Estimated fare: ${quote.estimatedFare.toFixed(2)}</strong>{discountNote(quote)}
                 {quote.cardSurchargeAmount > 0 && (
                   <div className="muted">+ ${quote.cardSurchargeAmount.toFixed(2)} card processing fee (Stripe, NZ cards) = <strong>${quote.total.toFixed(2)} total</strong> - overseas cards cost a little more, shown before you pay</div>
                 )}
@@ -376,7 +377,7 @@ export default function PassengerDashboard() {
                   <div className="muted">{b.bookingId}</div>
                   <div>{b.pickupAddress}{b.stops?.map((s, i) => <span key={i}> → {s.address}</span>)} → {b.dropAddress}</div>
                   <div className="muted">
-                    {b.distanceKm} km · ${b.actualFare ?? b.estimatedFare} · {b.paymentMethod === 'card' ? (b.paymentStatus === 'paid' ? 'paid online' : 'unpaid (online)') : 'cash'}
+                    {b.distanceKm} km · ${b.actualFare ?? b.estimatedFare}{b.actualFare == null && discountNote(b)} · {b.paymentMethod === 'card' ? (b.paymentStatus === 'paid' ? 'paid online' : 'unpaid (online)') : 'cash'}
                   </div>
                   {b.scheduledFor && <div className="muted">Scheduled: {formatNzDateTime(b.scheduledFor)}</div>}
                   {b.arrivedAt && b.status === 'accepted' && (
@@ -484,7 +485,7 @@ export default function PassengerDashboard() {
             {editQuoteLoading && <p className="muted">Recalculating fare...</p>}
             {editQuote && !editQuoteLoading && (
               <div className="card fare-confirm">
-                <strong>Estimated fare: ${editQuote.estimatedFare.toFixed(2)}</strong>
+                <strong>Estimated fare: ${editQuote.estimatedFare.toFixed(2)}</strong>{discountNote(editQuote)}
                 {editQuote.cardSurchargeAmount > 0 && (
                   <div className="muted">+ ${editQuote.cardSurchargeAmount.toFixed(2)} card processing fee (Stripe, NZ cards) = <strong>${editQuote.total.toFixed(2)} total</strong> - overseas cards cost a little more, shown before you pay</div>
                 )}

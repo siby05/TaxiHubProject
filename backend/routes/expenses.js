@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const Driver = require('../models/Driver');
-const Booking = require('../models/Booking');
 const Expense = require('../models/Expense');
+const { driverEarnings, tripCountOf } = require('../utils/earnings');
 const { auth, roleMiddleware } = require('../middleware/auth');
 const { EXPENSE_CATEGORIES, isValidExpenseCategory } = require('../config/expenseCategories');
 
@@ -184,7 +184,8 @@ router.get('/', driverOnly, async (req, res) => {
     await addDueRepeats(driver._id, await Expense.find({ driverId: driver._id }));
     const [allExpenses, completedTrips] = await Promise.all([
       Expense.find({ driverId: driver._id }),
-      Booking.find({ driverId: driver._id, status: 'completed' }),
+      // Includes earnings archived from deleted trips (utils/earnings.js).
+      driverEarnings(driver._id),
     ]);
 
     // Every year the driver has records in, plus the current one, so the
@@ -219,7 +220,7 @@ router.get('/', driverOnly, async (req, res) => {
       const monthTrips = tripsInYear.filter((t) => nzDateOf(t.completedAt || t.updatedAt || t.createdAt).startsWith(month));
       const income = round2(monthTrips.reduce((s, t) => s + (t.actualFare || 0), 0));
       const spent = round2(monthExpenses.reduce((s, e) => s + e.amount, 0));
-      return { month, tripCount: monthTrips.length, income, expenses: spent, net: round2(income - spent) };
+      return { month, tripCount: tripCountOf(monthTrips), income, expenses: spent, net: round2(income - spent) };
     });
 
     // Every active repeating expense, whatever tax year it started in, for
@@ -250,7 +251,7 @@ router.get('/', driverOnly, async (req, res) => {
         gstClaimable: round2(expenses.reduce((s, e) => s + e.gst, 0)),
         byCategory,
         byMonth,
-        tripCount: tripsInYear.length,
+        tripCount: tripCountOf(tripsInYear),
         tripIncome,
         netIncome: round2(tripIncome - totalExpenses),
       },

@@ -1,6 +1,6 @@
-const Booking = require('../models/Booking');
 const WeeklyPayment = require('../models/WeeklyPayment');
 const { getSettings } = require('../config/platformSettings');
+const { driverEarnings } = require('./earnings');
 
 function getWeekStart(date) {
   const d = new Date(date);
@@ -39,14 +39,16 @@ async function getDriverBilling(driver) {
   // merge over the platform default so a partial override (e.g. just a
   // different commissionPercent) still gets a valid commissionType/fee.
   const settings = driver.feeOverride ? { ...getSettings(), ...driver.feeOverride } : getSettings();
-  const trips = await Booking.find({ driverId: driver._id, status: 'completed' });
+  // Includes archived earnings, so deleting old trips never wipes what a
+  // driver owed or paid for those weeks (see utils/earnings.js).
+  const trips = await driverEarnings(driver._id);
   const payments = await WeeklyPayment.find({ driverId: driver._id });
 
   const byWeek = new Map();
   for (const t of trips) {
     const key = getWeekStart(t.completedAt || t.createdAt).toISOString();
     const bucket = byWeek.get(key) || { tripsCount: 0, tripsRevenue: 0 };
-    bucket.tripsCount += 1;
+    bucket.tripsCount += t.tripCount ?? 1;
     bucket.tripsRevenue += t.actualFare || 0;
     byWeek.set(key, bucket);
   }

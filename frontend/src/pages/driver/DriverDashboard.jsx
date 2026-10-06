@@ -8,6 +8,7 @@ import { waLink, openWhatsApp, driverPendingMessage, driverConfirmedMessage, dri
 import { formatNzDateTime, formatNzTime } from '../../utils/nzTime';
 import { directionsLink } from '../../utils/maps';
 import { telLink } from '../../utils/phone';
+import { discountNote } from '../../utils/fare';
 import { useTripGpsTracking } from '../../hooks/useTripGpsTracking';
 import WhatsAppIcon from '../../components/WhatsAppIcon';
 import Modal from '../../components/Modal';
@@ -327,7 +328,7 @@ export default function DriverDashboard() {
                 </div>
                 <div>{b.pickupAddress}{b.stops?.map((s, i) => <span key={i}> → {s.address}</span>)} → {b.dropAddress}</div>
                 <div className="muted">
-                  {b.passengerId?.name}{b.passengerRatingAvg ? ` (⭐${b.passengerRatingAvg})` : ''} · {b.distanceKm} km · est. ${b.estimatedFare} · {b.paymentMethod === 'card' ? (b.paymentStatus === 'paid' ? 'paid online' : 'awaiting online payment') : (b.status === 'completed' && b.paymentStatus !== 'paid' ? 'cash · payment pending' : 'cash')}
+                  {b.passengerId?.name}{b.passengerRatingAvg ? ` (⭐${b.passengerRatingAvg})` : ''} · {b.distanceKm} km · est. ${b.estimatedFare}{discountNote(b)} · {b.paymentMethod === 'card' ? (b.paymentStatus === 'paid' ? 'paid online' : 'awaiting online payment') : (b.status === 'completed' && b.paymentStatus !== 'paid' ? 'cash · payment pending' : 'cash')}
                 </div>
                 <div className="muted">
                   {b.scheduledFor ? `Scheduled: ${formatNzDateTime(b.scheduledFor)}` : `Requested: ${formatNzDateTime(b.requestedAt || b.createdAt)}`}

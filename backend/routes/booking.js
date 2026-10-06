@@ -28,6 +28,7 @@ const { notifyUser, notifyAdmins } = require('../utils/notify');
 const { getPassengerRatingAvg } = require('../utils/ratings');
 const { placeholderEmail, hasRealEmail } = require('../utils/users');
 const { rateLimit } = require('../middleware/rateLimit');
+const { priceWithPromo, refreshReturnTripInBackground, publicPromotions } = require('../utils/discounts');
 
 // The guest (QR-scan, no login) endpoints are the only unauthenticated
 // way to create data or look people up.
@@ -355,15 +356,29 @@ router.get('/driver-info/:id', auth, roleMiddleware(['passenger']), async (req, 
 // Shared by POST /quote and POST /guest-quote: distance + the same
 // three-way fare floor (per-km / minimum / range price) as an actual
 // booking would get, plus the card surcharge when relevant.
-function buildQuote(distanceKm, ratePerKm, paymentMethod) {
+// The admin's date-range promotion is included (see utils/discounts.js);
+// the same-day return-trip discount isn't known until a driver has the
+// trip, so it's applied - and the passenger told - after booking.
+function buildQuote(distanceKm, ratePerKm, paymentMethod, scheduledFor) {
   const settings = getSettings();
-  const estimatedFare = calculateTripFare(distanceKm, ratePerKm, settings);
-  const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(estimatedFare) : 0;
+  const fare = priceWithPromo(calculateTripFare(distanceKm, ratePerKm, settings), scheduledFor ? new Date(scheduledFor) : new Date());
+  const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(fare.estimatedFare) : 0;
   return {
-    distanceKm, estimatedFare, cardSurchargeAmount,
-    total: Math.round((estimatedFare + cardSurchargeAmount) * 100) / 100,
+    distanceKm, ...fare, cardSurchargeAmount,
+    total: Math.round((fare.estimatedFare + cardSurchargeAmount) * 100) / 100,
   };
 }
+
+// GET /api/booking/promotions - public (the home page shows it before
+// login): the admin's current/upcoming promotion, and open same-day
+// return-trip discount days. See utils/discounts.js publicPromotions().
+router.get('/promotions', async (req, res) => {
+  try {
+    res.json(await publicPromotions());
+  } catch (err) {
+    serverError(res, err, req);
+  }
+});
 
 // POST /api/booking/guest-quote - public counterpart to /quote below, for
 // the QR-scan guest checkout (see POST /guest) which has no logged-in user
@@ -387,7 +402,7 @@ router.post('/guest-quote', guestLimiter, async (req, res) => {
     }
     const distanceKm = routeDistanceKm({ lat: pickupLat, lng: pickupLng }, { lat: dropLat, lng: dropLng }, stops);
     res.json({
-      ...buildQuote(distanceKm, resolved.driver.ratePerKm, paymentMethod),
+      ...buildQuote(distanceKm, resolved.driver.ratePerKm, paymentMethod, scheduledFor),
       usedFallback: resolved.usedFallback, requestedUnavailable: resolved.requestedUnavailable,
       requestedCashOnly: resolved.requestedCashOnly, requestedName: resolved.requestedName,
       requestedOffSchedule: resolved.requestedOffSchedule,
@@ -443,13 +458,9 @@ router.post('/quote', auth, roleMiddleware(['passenger', 'driver']), async (req,
     }
 
     const distanceKm = routeDistanceKm({ lat: pickupLat, lng: pickupLng }, { lat: dropLat, lng: dropLng }, stops);
-    const settings = getSettings();
-    const estimatedFare = calculateTripFare(distanceKm, driver.ratePerKm, settings);
-    const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(estimatedFare) : 0;
     res.json({
-      distanceKm, estimatedFare, usedFallback, requestedUnavailable, requestedCashOnly, requestedName, requestedOffSchedule,
-      cardSurchargeAmount,
-      total: Math.round((estimatedFare + cardSurchargeAmount) * 100) / 100,
+      ...buildQuote(distanceKm, driver.ratePerKm, paymentMethod, scheduledFor),
+      usedFallback, requestedUnavailable, requestedCashOnly, requestedName, requestedOffSchedule,
     });
   } catch (err) {
     serverError(res, err, req);
@@ -530,8 +541,8 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
     }
 
     const bookingSettings = getSettings();
-    const estimatedFare = calculateTripFare(distanceKm, ratePerKmForEstimate, bookingSettings);
-    const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(estimatedFare) : 0;
+    const fare = priceWithPromo(calculateTripFare(distanceKm, ratePerKmForEstimate, bookingSettings), requestedTime);
+    const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(fare.estimatedFare) : 0;
 
     // A QR-scan direct hail (see frontend/src/pages/passenger/BookDriver.jsx,
     // the only caller that sends viaQr) skips the accept/decline step
@@ -554,7 +565,7 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
       dropLng,
       stops: cleanStops(stops),
       distanceKm,
-      estimatedFare,
+      ...fare,
       cardSurchargeAmount,
       requestedVehicleType: vehicleType || null,
       status: autoAccept ? 'accepted' : 'pending',
@@ -583,6 +594,9 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
     // many drivers doesn't hold up the passenger's booking response.
     const alert = autoAccept ? notifyDriverOfAutoAcceptedTrip : alertDriverOfBooking;
     await Promise.all(notifyDriverIds.map((driverUserId) => alert(req, driverUserId, booking, passenger.name, passengerRatingAvg)));
+    // A direct hail already has its driver - check it for a same-day
+    // return-trip pair (a broadcast is checked when someone accepts it).
+    if (targetDriverId) refreshReturnTripInBackground(req, null, booking);
 
     res.status(201).json({ ...booking, usedFallback, requestedUnavailable, requestedCashOnly, requestedName, broadcast: !targetDriverId });
   } catch (err) {
@@ -677,8 +691,8 @@ router.post('/guest', guestLimiter, async (req, res) => {
     }
 
     const bookingSettings = getSettings();
-    const estimatedFare = calculateTripFare(distanceKm, resolved.driver.ratePerKm, bookingSettings);
-    const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(estimatedFare) : 0;
+    const fare = priceWithPromo(calculateTripFare(distanceKm, resolved.driver.ratePerKm, bookingSettings), scheduledFor ? new Date(scheduledFor) : new Date());
+    const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(fare.estimatedFare) : 0;
 
     const booking = await Booking.create({
       passengerId: passenger._id,
@@ -691,7 +705,7 @@ router.post('/guest', guestLimiter, async (req, res) => {
       dropLng,
       stops: cleanStops(stops),
       distanceKm,
-      estimatedFare,
+      ...fare,
       cardSurchargeAmount,
       requestedVehicleType: vehicleType || null,
       // Guest checkout only ever exists behind a QR scan - always a
@@ -709,6 +723,7 @@ router.post('/guest', guestLimiter, async (req, res) => {
     const assignedDriver = await Driver.findById(resolved.driver._id).populate('userId', 'name');
     runInBackground('email sendBookingConfirmedDirect', () => emailService.sendBookingConfirmedDirect(passenger.email, booking, assignedDriver, assignedDriver?.userId?.name));
     await notifyDriverOfAutoAcceptedTrip(req, resolved.driver.userId, booking, passenger.name, passengerRatingAvg);
+    refreshReturnTripInBackground(req, null, booking);
 
     // A guest who chose to pay online has no other way back into the app
     // to pay once accepted - no account/login was ever set up for them
@@ -819,8 +834,10 @@ router.put('/:id/edit', auth, roleMiddleware(['passenger']), async (req, res) =>
       ratePerKmForEstimate = newEligible.reduce((sum, d) => sum + d.ratePerKm, 0) / newEligible.length;
     }
 
-    const estimatedFare = calculateTripFare(distanceKm, ratePerKmForEstimate, bookingSettings);
-    const cardSurchargeAmount = nextPaymentMethod === 'card' ? calculateCardSurcharge(estimatedFare) : 0;
+    // The return-trip discount is dropped here and re-applied by
+    // refreshReturnTripInBackground() below if the edited trip still pairs.
+    const fare = priceWithPromo(calculateTripFare(distanceKm, ratePerKmForEstimate, bookingSettings), nextRequestedTime);
+    const cardSurchargeAmount = nextPaymentMethod === 'card' ? calculateCardSurcharge(fare.estimatedFare) : 0;
 
     const updated = await Booking.findByIdAndUpdate(booking._id, {
       pickupAddress: nextPickupAddress,
@@ -834,9 +851,10 @@ router.put('/:id/edit', auth, roleMiddleware(['passenger']), async (req, res) =>
       paymentMethod: nextPaymentMethod,
       requestedVehicleType: nextVehicleType,
       distanceKm,
-      estimatedFare,
+      ...fare,
       cardSurchargeAmount,
     });
+    refreshReturnTripInBackground(req, booking, updated);
 
     // Let whoever could see this trip know it changed - a full reload is
     // enough since GET /driver always re-filters live against the current
@@ -1081,6 +1099,7 @@ async function acceptBooking(req, booking, driver, driverName) {
     link: '/admin',
   });
 
+  refreshReturnTripInBackground(req, booking, updated);
   return { updated };
 }
 
@@ -1133,6 +1152,7 @@ async function declineBooking(req, booking, driver) {
       link: '/passenger',
     });
     emitToUser(req, booking.passengerId, 'booking:declined', updated);
+    refreshReturnTripInBackground(req, booking, updated);
   }
 
   return { updated };
@@ -1335,6 +1355,9 @@ router.put('/:id/cancel', auth, roleMiddleware(['passenger', 'driver']), async (
       cancelledAt: new Date(),
       cancelReason: reason || 'No reason given',
     });
+    // Cancelling one leg of a same-day return pair takes the discount off
+    // the other leg - its passenger is told the new fare.
+    refreshReturnTripInBackground(req, booking, updated);
 
     if (req.user.role === 'passenger' && booking.driverId == null) {
       // Still an unclaimed broadcast request - withdraw it from every

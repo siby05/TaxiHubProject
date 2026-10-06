@@ -24,7 +24,9 @@ const Feedback = require('../models/Feedback');
 const Enquiry = require('../models/Enquiry');
 const { notifyUser } = require('../utils/notify');
 const { runBackup } = require('../utils/backup');
-const { TRIP_LOCATION_RETENTION_DAYS } = require('../utils/retention');
+const { TRIP_LOCATION_RETENTION_DAYS, getStorageUsage } = require('../utils/retention');
+const { repriceUpcomingReturnTrips } = require('../utils/discounts');
+const { driverEarnings, tripCountOf, faresOf } = require('../utils/earnings');
 
 function withCompliance(driver) {
   return { ...driver, compliance: checkDriverCompliance(driver) };
@@ -44,22 +46,22 @@ async function isLicenseTaken(licenseNumber, excludeDriverId) {
 
 // GET /api/admin/stats - dashboard summary
 router.get('/stats', async (req, res) => {
-  const [users, drivers, bookings, complaints] = await Promise.all([
+  const [users, drivers, bookings, complaints, earnings] = await Promise.all([
     User.find({}),
     Driver.find({}),
     Booking.find({}),
     Complaint.find({}),
+    driverEarnings(), // live + archived from deleted trips (utils/earnings.js)
   ]);
-  const completed = bookings.filter((b) => b.status === 'completed');
   res.json({
     totalPassengers: users.filter((u) => u.role === 'passenger').length,
     totalDrivers: drivers.length,
     pendingDriverApprovals: drivers.filter((d) => d.status === 'pending').length,
     totalBookings: bookings.length,
-    completedTrips: completed.length,
+    completedTrips: tripCountOf(earnings),
     pendingTrips: bookings.filter((b) => b.status === 'pending').length,
     openTrips: bookings.filter((b) => ['accepted', 'in-progress'].includes(b.status)).length,
-    totalRevenue: completed.reduce((sum, b) => sum + (b.actualFare || 0), 0),
+    totalRevenue: faresOf(earnings),
     openComplaints: complaints.filter((c) => ['open', 'investigating'].includes(c.status)).length,
     seriousComplaints: complaints.filter((c) => c.isSerious).length,
   });
@@ -536,6 +538,7 @@ router.put('/settings', async (req, res) => {
   const {
     commissionType, commissionPercent, weeklyFlatFee, outstandingFeeLimit, minimumFare, fareRanges,
     longDistanceThresholdKm, longDistanceRatePerKm, driverSignupEnabled, vehicleSelectionEnabled, tempPasswordVisible, adminEmail, adminMobile, backupFrequency, tripRetentionDays,
+    promoDiscount, returnTripDiscount, dbStorageLimitMb, dbCleanupAtPercent,
   } = req.body;
   try {
     if (adminEmail != null && adminEmail && !/^\S+@\S+\.\S+$/.test(adminEmail)) {
@@ -559,7 +562,16 @@ router.put('/settings', async (req, res) => {
       ...(adminMobile !== undefined && { adminMobile: adminMobile || null }),
       ...(backupFrequency && { backupFrequency }),
       ...(tripRetentionDays !== undefined && { tripRetentionDays: tripRetentionDays === '' || tripRetentionDays == null ? null : Number(tripRetentionDays) }),
+      ...(dbStorageLimitMb != null && dbStorageLimitMb !== '' && { dbStorageLimitMb: Number(dbStorageLimitMb) }),
+      ...(dbCleanupAtPercent != null && dbCleanupAtPercent !== '' && { dbCleanupAtPercent: Number(dbCleanupAtPercent) }),
+      ...(promoDiscount && {
+        promoDiscount: { ...promoDiscount, percent: Number(promoDiscount.percent), startDate: promoDiscount.startDate || null, endDate: promoDiscount.endDate || null },
+      }),
+      ...(returnTripDiscount && { returnTripDiscount: { ...returnTripDiscount, percent: Number(returnTripDiscount.percent) } }),
     });
+    // Turning the return-trip discount on/off or changing its percent
+    // re-prices already-booked pairs (and tells those passengers).
+    if (returnTripDiscount) runInBackground('return-trip discount repricing', () => repriceUpcomingReturnTrips(req.app.get('io')));
     res.json(updated);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -572,6 +584,13 @@ router.put('/settings', async (req, res) => {
 // "Run backup now" button, and handy for confirming the whole pipeline
 // (including real SMTP, once configured) actually works before waiting
 // for the schedule.
+// GET /api/admin/storage - how full the database is against the admin's
+// storage limit, for the trip-retention card. usage is null when it can't
+// be measured (memory mode).
+router.get('/storage', async (req, res) => {
+  res.json({ usage: await getStorageUsage() });
+});
+
 router.post('/backup/run', async (req, res) => {
   try {
     const counts = await runBackup();

@@ -98,6 +98,26 @@ let settings = {
   // retentionExpiryDate) - not admin-configurable, since that's a
   // compliance floor rather than a housekeeping choice.
   tripRetentionDays: null,
+  // ...but only once the database is actually short of space: trips are
+  // deleted only while it's at or over dbCleanupAtPercent of
+  // dbStorageLimitMb (512 MB = a free MongoDB Atlas cluster). Below that
+  // everything is kept. Deleted trips' earnings are archived first. See
+  // utils/retention.js cleanupOldTrips() / getStorageUsage().
+  dbStorageLimitMb: 512,
+  dbCleanupAtPercent: 80,
+  // Admin-run promotion: percent off every trip whose date (scheduledFor,
+  // else when it was booked) falls on an NZ calendar date between
+  // startDate and endDate inclusive ("YYYY-MM-DD"). Advertised on the home
+  // page while it's running or coming up (GET /api/booking/promotions).
+  // See utils/discounts.js.
+  promoDiscount: { enabled: false, percent: 10, startDate: null, endDate: null },
+  // Separate, always-on-when-enabled discount: when one driver has a New
+  // Plymouth -> Auckland trip and an Auckland -> New Plymouth trip on the
+  // same NZ day, both trips get this percent off - including trips booked
+  // before the pair existed, with the passenger notified of the new fare.
+  // Doesn't stack with promoDiscount; a trip gets whichever is bigger.
+  // See utils/discounts.js reconcileReturnTripDiscounts().
+  returnTripDiscount: { enabled: false, percent: 10 },
 };
 
 let settingsDocId = null;
@@ -133,6 +153,12 @@ function updateSettings(patch) {
   if (patch.tripRetentionDays != null && (!Number.isInteger(patch.tripRetentionDays) || patch.tripRetentionDays < 0)) {
     throw new Error('tripRetentionDays must be a positive whole number of days, or 0/null to disable');
   }
+  if (patch.dbStorageLimitMb !== undefined && !(patch.dbStorageLimitMb > 0)) {
+    throw new Error('Database storage limit must be above 0 MB');
+  }
+  if (patch.dbCleanupAtPercent !== undefined && !(patch.dbCleanupAtPercent >= 10 && patch.dbCleanupAtPercent <= 100)) {
+    throw new Error('Clean-up threshold must be between 10% and 100%');
+  }
   if (patch.longDistanceThresholdKm !== undefined && !(patch.longDistanceThresholdKm > 0)) {
     throw new Error('longDistanceThresholdKm must be a distance above 0 km');
   }
@@ -144,6 +170,23 @@ function updateSettings(patch) {
       throw new Error('fareRanges must be an array of {maxKm, price} with maxKm > 0 and price >= 0');
     }
     patch = { ...patch, fareRanges: [...patch.fareRanges].sort((a, b) => a.maxKm - b.maxKm) };
+  }
+  const validPercent = (p) => typeof p === 'number' && p > 0 && p < 100;
+  const validDate = (d) => d == null || /^\d{4}-\d{2}-\d{2}$/.test(d);
+  if (patch.promoDiscount) {
+    const p = patch.promoDiscount;
+    // Every settings form saves the whole settings object, so a switched-
+    // off discount with a half-typed percent mustn't block saving others.
+    if (p.enabled && !validPercent(p.percent)) throw new Error('Promotion discount must be a percent between 0 and 100');
+    if (!validDate(p.startDate) || !validDate(p.endDate)) throw new Error('Promotion dates must be YYYY-MM-DD');
+    if (p.enabled && (!p.startDate || !p.endDate)) throw new Error('Pick a start and end date for the promotion');
+    if (p.startDate && p.endDate && p.startDate > p.endDate) throw new Error('Promotion end date must be on or after its start date');
+    patch = { ...patch, promoDiscount: { enabled: !!p.enabled, percent: p.percent, startDate: p.startDate || null, endDate: p.endDate || null } };
+  }
+  if (patch.returnTripDiscount) {
+    const r = patch.returnTripDiscount;
+    if (r.enabled && !validPercent(r.percent)) throw new Error('Return-trip discount must be a percent between 0 and 100');
+    patch = { ...patch, returnTripDiscount: { enabled: !!r.enabled, percent: r.percent } };
   }
   settings = { ...settings, ...patch };
   // Fire-and-forget: callers of updateSettings() expect a synchronous

@@ -589,6 +589,14 @@ You'll get another email as soon as a driver accepts. Track it here: ${appUrl('/
       buildInvoiceHtml(booking, passenger, driver, driverName),
     ),
 
+  // Sent ahead of the trip when a same-day return-trip discount starts or
+  // stops applying to an already-booked trip (see utils/discounts.js).
+  sendFareChanged: (to, booking, oldFare, reason) =>
+    send(to, `Fare update for trip ${booking.bookingId}`,
+      `Your trip from ${booking.pickupAddress} to ${booking.dropAddress} on ${formatNzDate(booking.scheduledFor || booking.requestedAt)}` +
+      ` is now $${booking.estimatedFare.toFixed(2)} (was $${oldFare.toFixed(2)}) - ${reason}.` +
+      `\nNothing else about your booking has changed.\nOpen the app: ${appUrl('/passenger')}`),
+
   sendBookingCancelledByDriver: (to, booking, reason) =>
     send(to, `Your driver cancelled trip ${booking.bookingId}`,
       `Your trip from ${booking.pickupAddress} to ${booking.dropAddress} was cancelled by the driver.` +

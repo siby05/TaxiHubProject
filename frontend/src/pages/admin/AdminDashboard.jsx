@@ -58,6 +58,8 @@ export default function AdminDashboard() {
   const [tripTracks, setTripTracks] = useState({});
   const [feedback, setFeedback] = useState([]);
   const [enquiries, setEnquiries] = useState([]);
+  // undefined while loading, null when it can't be measured (memory mode).
+  const [storage, setStorage] = useState(undefined);
   const [vehicleTypes, setVehicleTypes] = useState([]);
   const [vehicleDocuments, setVehicleDocuments] = useState([]);
   const [docError, setDocError] = useState('');
@@ -69,6 +71,7 @@ export default function AdminDashboard() {
     client.get('/admin/stats').then((r) => setStats(r.data));
     client.get('/admin/drivers').then((r) => setDrivers(r.data));
     client.get('/admin/settings').then((r) => setSettings(r.data));
+    client.get('/admin/storage').then((r) => setStorage(r.data.usage)).catch(() => setStorage(null));
     client.get('/admin/passengers').then((r) => setPassengers(r.data));
     client.get('/admin/feedback').then((r) => setFeedback(r.data));
     client.get('/admin/enquiries').then((r) => setEnquiries(r.data)).catch(() => {});
@@ -789,6 +792,63 @@ export default function AdminDashboard() {
 
       {tab === 'settings' && settings && (
         <div className="card" style={{ maxWidth: 480 }}>
+          <h3>Discounts</h3>
+          <p className="muted">
+            Two separate discounts. A trip never gets both - if both apply, the bigger one is used.
+          </p>
+          <form onSubmit={saveSettings}>
+            <div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input type="checkbox" style={{ width: 'auto' }} checked={!!settings.promoDiscount?.enabled}
+                  onChange={(e) => setSettings((s) => ({ ...s, promoDiscount: { ...s.promoDiscount, enabled: e.target.checked } }))} />
+                Promotion: % off every trip between two dates
+              </label>
+              <p className="muted" style={{ marginTop: 4 }}>
+                Applies to trips dated inside the range (the pickup date for a scheduled trip). Shown on the home page while it's running or coming up.
+              </p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                <input type="number" step="1" min="1" max="99" style={{ maxWidth: 80 }} aria-label="Promotion discount (%)"
+                  value={settings.promoDiscount?.percent ?? ''}
+                  onChange={(e) => setSettings((s) => ({ ...s, promoDiscount: { ...s.promoDiscount, percent: e.target.value } }))} />
+                <span className="muted">% off from</span>
+                <input type="date" style={{ maxWidth: 160 }} aria-label="Promotion start date"
+                  value={settings.promoDiscount?.startDate || ''}
+                  onChange={(e) => setSettings((s) => ({ ...s, promoDiscount: { ...s.promoDiscount, startDate: e.target.value } }))} />
+                <span className="muted">to</span>
+                <input type="date" style={{ maxWidth: 160 }} aria-label="Promotion end date"
+                  value={settings.promoDiscount?.endDate || ''}
+                  onChange={(e) => setSettings((s) => ({ ...s, promoDiscount: { ...s.promoDiscount, endDate: e.target.value } }))} />
+              </div>
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input type="checkbox" style={{ width: 'auto' }} checked={!!settings.returnTripDiscount?.enabled}
+                  onChange={(e) => setSettings((s) => ({ ...s, returnTripDiscount: { ...s.returnTripDiscount, enabled: e.target.checked } }))} />
+                Same-day Auckland return-trip discount
+              </label>
+              <p className="muted" style={{ marginTop: 4 }}>
+                When one driver has a New Plymouth → Auckland trip and an Auckland → New Plymouth trip on the same day,
+                both trips get this discount - including one already booked. Passengers are notified of the new fare
+                straight away, and again if the pair falls through (e.g. one trip is cancelled). Days where a driver still
+                needs the other leg are advertised on the home page.
+              </p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                <input type="number" step="1" min="1" max="99" style={{ maxWidth: 80 }} aria-label="Return-trip discount (%)"
+                  value={settings.returnTripDiscount?.percent ?? ''}
+                  onChange={(e) => setSettings((s) => ({ ...s, returnTripDiscount: { ...s.returnTripDiscount, percent: e.target.value } }))} />
+                <span className="muted">% off both trips</span>
+              </div>
+            </div>
+
+            {settingsMsg && <p className="muted">{settingsMsg}</p>}
+            <button className="btn" style={{ marginTop: 12 }}>Save</button>
+          </form>
+        </div>
+      )}
+
+      {tab === 'settings' && settings && (
+        <div className="card" style={{ maxWidth: 480 }}>
           <h3>Driver sign-up</h3>
           <p className="muted">Turn off to hide "Drive with us" from the site and stop new applications - existing drivers are unaffected.</p>
           <form onSubmit={saveSettings}>
@@ -899,16 +959,33 @@ export default function AdminDashboard() {
           <h3>Data retention</h3>
           <p className="muted">
             Complaints are always kept for 2 years (NZ Transport Agency requirement) and removed automatically
-            after that - not configurable here. Completed/cancelled trip records have no such requirement; set a
-            limit below only if you need to manage database space. A trip still referenced by a complaint is never
-            deleted early, regardless of this setting.
+            after that - not configurable here. Trip records are kept forever unless the database runs short of
+            space: old finished trips are only deleted while storage is over the clean-up level below. Earnings are
+            never lost - driver earnings, weekly fees, tax reports and revenue totals are kept in a summary before
+            any trip is deleted. Trips with a complaint or an unpaid fare are never deleted.
+          </p>
+          <p className="muted">
+            {storage === undefined ? 'Checking database size...'
+              : storage ? <>Database size: <strong>{storage.usedMb} MB of {storage.limitMb} MB ({storage.percent}%)</strong></>
+                : 'Database size can\'t be measured in this mode - trips are never deleted.'}
           </p>
           <form onSubmit={saveSettings}>
             <div>
-              <label>Delete finished trips older than (days)</label>
+              <label>Old trips can be deleted after (days)</label>
               <input type="number" step="1" min="0" placeholder="Leave blank to keep forever"
                 value={settings.tripRetentionDays ?? ''}
                 onChange={(e) => setSettings((s) => ({ ...s, tripRetentionDays: e.target.value === '' ? null : Number(e.target.value) }))} />
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginTop: 8 }}>
+              <span className="muted">Only when the database is over</span>
+              <input type="number" step="1" min="10" max="100" style={{ maxWidth: 80 }} aria-label="Clean-up threshold (%)"
+                value={settings.dbCleanupAtPercent ?? 80}
+                onChange={(e) => setSettings((s) => ({ ...s, dbCleanupAtPercent: e.target.value }))} />
+              <span className="muted">% of</span>
+              <input type="number" step="1" min="1" style={{ maxWidth: 100 }} aria-label="Database storage limit (MB)"
+                value={settings.dbStorageLimitMb ?? 512}
+                onChange={(e) => setSettings((s) => ({ ...s, dbStorageLimitMb: e.target.value }))} />
+              <span className="muted">MB</span>
             </div>
             {settingsMsg && <p className="muted">{settingsMsg}</p>}
             <button className="btn" style={{ marginTop: 12 }}>Save</button>

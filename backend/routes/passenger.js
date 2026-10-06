@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 const Booking = require('../models/Booking');
+const { passengerSpending, tripCountOf, faresOf } = require('../utils/earnings');
 const { auth, roleMiddleware } = require('../middleware/auth');
 
 // GET /api/passenger/profile
@@ -22,10 +23,12 @@ router.put('/profile', auth, roleMiddleware(['passenger']), async (req, res) => 
 // GET /api/passenger/stats - quick summary for the dashboard
 router.get('/stats', auth, roleMiddleware(['passenger']), async (req, res) => {
   const bookings = await Booking.find({ passengerId: req.user.id });
+  // Includes spending archived from deleted trips (utils/earnings.js).
+  const spent = await passengerSpending(req.user.id);
   res.json({
-    totalTrips: bookings.filter((b) => b.status === 'completed').length,
+    totalTrips: tripCountOf(spent),
     activeBookings: bookings.filter((b) => ['pending', 'accepted', 'in-progress'].includes(b.status)).length,
-    totalSpent: bookings.filter((b) => b.status === 'completed').reduce((sum, b) => sum + (b.actualFare || 0), 0),
+    totalSpent: faresOf(spent),
   });
 });
 

@@ -33,7 +33,10 @@ const { nzDateStamp } = require('../utils/nzTime');
 // hidePassengerRating() in routes/booking.js), bookedByDriver (true when a
 // driver created this on a passenger's behalf - see routes/driver.js POST
 // /bookings), reminderDayEmailSent/reminderHourEmailSent (scheduled-trip
-// reminder flags - see utils/reminders.js).
+// reminder flags - see utils/reminders.js), fareBeforeDiscount (the
+// undiscounted price; estimatedFare is after discount), promoDiscountPercent
+// / returnTripDiscountPercent (each discount that applies - only the bigger
+// one is taken), discountPercent, discountAmount - see utils/discounts.js.
 const Booking = createModel('Booking', {
   passengerId: 'User',
   driverId: 'Driver',

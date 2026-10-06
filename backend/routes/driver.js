@@ -13,6 +13,8 @@ const { emailService } = require('../services/emailService');
 const { runInBackground } = require('../utils/background');
 const { placeholderEmail } = require('../utils/users');
 const { notifyUser, notifyAdmins } = require('../utils/notify');
+const { priceWithPromo, discountedFare, refreshReturnTripInBackground } = require('../utils/discounts');
+const { driverEarnings, tripCountOf, faresOf } = require('../utils/earnings');
 const { checkDriverCompliance } = require('../utils/compliance');
 const { isWithinSchedule, nzDayAndTime } = require('../utils/schedule');
 const { checkWeeklyPattern, checkSchedule } = require('../utils/workTime');
@@ -426,10 +428,13 @@ router.post('/bookings', auth, roleMiddleware(['driver']), async (req, res) => {
 
     const distanceKm = routeDistanceKm({ lat: pickupLat, lng: pickupLng }, { lat: dropLat, lng: dropLng }, stops);
     const driverBookingSettings = getSettings();
-    const estimatedFare = hasCustomFare
-      ? customFareValue
-      : calculateTripFare(distanceKm, driver.ratePerKm, driverBookingSettings);
-    const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(estimatedFare) : 0;
+    // A price the driver agreed with the passenger isn't cut further by
+    // the promotion - but it still gets the same-day return-trip discount
+    // (applied after saving, like every other booking).
+    const fare = hasCustomFare
+      ? discountedFare(customFareValue)
+      : priceWithPromo(calculateTripFare(distanceKm, driver.ratePerKm, driverBookingSettings), scheduledFor ? new Date(scheduledFor) : new Date());
+    const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(fare.estimatedFare) : 0;
 
     const booking = await Booking.create({
       passengerId: passenger._id,
@@ -442,7 +447,7 @@ router.post('/bookings', auth, roleMiddleware(['driver']), async (req, res) => {
       dropLng,
       stops: cleanStops(stops),
       distanceKm,
-      estimatedFare,
+      ...fare,
       cardSurchargeAmount,
       status: 'accepted',
       paymentMethod: paymentMethod || 'cash',
@@ -465,6 +470,8 @@ router.post('/bookings', auth, roleMiddleware(['driver']), async (req, res) => {
       });
     }
 
+    refreshReturnTripInBackground(req, null, booking);
+
     const driverUser = await User.findById(req.user.id);
 
     notifyAdmins({
@@ -485,14 +492,15 @@ router.get('/earnings', auth, roleMiddleware(['driver']), async (req, res) => {
   const driver = await Driver.findOne({ userId: req.user.id });
   if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
 
-  const trips = await Booking.find({ driverId: driver._id, status: 'completed' });
-  const totalEarnings = trips.reduce((sum, t) => sum + (t.actualFare || 0), 0);
+  // Live trips plus earnings archived from deleted ones (utils/earnings.js).
+  const trips = await driverEarnings(driver._id);
+  const totalEarnings = faresOf(trips);
   // NZ GST is 15% and fares are GST-inclusive, so the GST inside them is
   // 3/23 of the total (same as routes/expenses.js gstPortion()).
   const gst = Math.round(((totalEarnings * 3) / 23) * 100) / 100;
 
   res.json({
-    totalTrips: trips.length,
+    totalTrips: tripCountOf(trips),
     totalEarnings,
     estimatedGst: gst,
     netEarnings: Math.round((totalEarnings - gst) * 100) / 100,

@@ -8,6 +8,7 @@ import { waLink } from '../../utils/whatsapp';
 import { makeStopHandlers, stopsPayload } from '../../utils/stops';
 import ContactAdmin from '../../components/ContactAdmin';
 import { formatNzDateTime } from '../../utils/nzTime';
+import { discountNote } from '../../utils/fare';
 
 export default function DriverBookForPassenger() {
   const navigate = useNavigate();
@@ -187,7 +188,7 @@ export default function DriverBookForPassenger() {
               <strong>
                 {customFareNumber !== null && !customFareInvalid
                   ? <>Trip price: ${customFareNumber.toFixed(2)} <span className="muted" style={{ fontWeight: 400 }}>(set by you - calculated fare ${quote.estimatedFare.toFixed(2)})</span></>
-                  : <>Estimated fare: ${quote.estimatedFare.toFixed(2)}</>}
+                  : <>Estimated fare: ${quote.estimatedFare.toFixed(2)}{discountNote(quote)}</>}
               </strong>
               {customFareNumber === null && quote.cardSurchargeAmount > 0 && (
                 <div className="muted">+ ${quote.cardSurchargeAmount.toFixed(2)} card processing fee (Stripe, NZ cards) = <strong>${quote.total.toFixed(2)} total</strong> - overseas cards cost a little more</div>
