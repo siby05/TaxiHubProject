@@ -189,6 +189,14 @@ function dealDate(key) {
   return new Date(`${key}T12:00:00`).toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
+// "YYYY-MM-DD" -> { weekday: 'Thu', day: '15', month: 'Oct' } for the
+// date tile on each return-trip opening.
+function dealDateParts(key) {
+  const d = new Date(`${key}T12:00:00`);
+  const part = (opts) => d.toLocaleDateString('en-NZ', opts);
+  return { weekday: part({ weekday: 'short' }), day: part({ day: 'numeric' }), month: part({ month: 'short' }) };
+}
+
 // ISO instant -> NZ clock time, e.g. "3:30 pm", rounded to a quarter hour
 // on the side that still qualifies: up for "pickup from", down for
 // "leaving by".
@@ -248,16 +256,23 @@ function Deals() {
               </p>
               {returnTrip.openings.length > 0 ? (
                 <ul className="hm-deal-list">
-                  {returnTrip.openings.map((o) => (
-                    <li key={`${o.date}-${o.direction}`}>
-                      <span>
-                        <strong>{dealDate(o.date)}</strong> · {DIRECTION_LABEL[o.direction]}
-                        {o.after && <> · pickup from {dealTime(o.after)}</>}
-                        {o.before && <> · leaving by {dealTime(o.before, true)}</>}
-                      </span>
-                      <Link to={`/book/${o.driverId}`}>Book {returnTrip.percent}% off</Link>
-                    </li>
-                  ))}
+                  {returnTrip.openings.map((o) => {
+                    const d = dealDateParts(o.date);
+                    return (
+                      <li key={`${o.date}-${o.direction}`}>
+                        <div className="hm-deal-date" aria-label={dealDate(o.date)}>
+                          <span>{d.weekday}</span><strong>{d.day}</strong><span>{d.month}</span>
+                        </div>
+                        <div className="hm-deal-info">
+                          <strong>{DIRECTION_LABEL[o.direction]}</strong>
+                          <span className="hm-deal-time">
+                            🕒 {o.after ? <>Pickup from <b>{dealTime(o.after)}</b></> : <>Pickup by <b>{dealTime(o.before, true)}</b></>}
+                          </span>
+                        </div>
+                        <Link to={`/book/${o.driverId}`}>Book {returnTrip.percent}% off</Link>
+                      </li>
+                    );
+                  })}
                 </ul>
               ) : (
                 <p className="hm-deal-note">No return seats open right now - check back, new ones appear as trips are booked.</p>
