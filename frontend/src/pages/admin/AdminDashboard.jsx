@@ -825,12 +825,13 @@ export default function AdminDashboard() {
               <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <input type="checkbox" style={{ width: 'auto' }} checked={!!settings.returnTripDiscount?.enabled}
                   onChange={(e) => setSettings((s) => ({ ...s, returnTripDiscount: { ...s.returnTripDiscount, enabled: e.target.checked } }))} />
-                Same-day Auckland return-trip discount
+                Same-day return-trip discount (Auckland and Palmerston North)
               </label>
               <p className="muted" style={{ marginTop: 4 }}>
                 When one driver has a New Plymouth → Auckland trip and then, later the same day, an Auckland → New
                 Plymouth trip picking up at least the gap below after the first trip finishes, both trips get this
-                discount - including one already booked. Passengers are notified of the new fare
+                discount. The same applies to New Plymouth → Palmerston North and back (both trips must be to and from
+                the same city), including trips already booked. Passengers are notified of the new fare
                 straight away, and again if the pair falls through (e.g. one trip is cancelled). Days where a driver still
                 needs the other leg are advertised on the home page.
               </p>
@@ -845,7 +846,7 @@ export default function AdminDashboard() {
                 <input type="number" step="0.5" min="0" max="12" style={{ maxWidth: 80 }} aria-label="Gap before the return trip (hours)"
                   value={settings.returnTripDiscount?.minGapHours ?? 1}
                   onChange={(e) => setSettings((s) => ({ ...s, returnTripDiscount: { ...s.returnTripDiscount, minGapHours: e.target.value } }))} />
-                <span className="muted">hours after the Auckland trip finishes</span>
+                <span className="muted">hours after the first trip finishes</span>
               </div>
             </div>
 

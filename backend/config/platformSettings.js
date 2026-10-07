@@ -112,7 +112,8 @@ let settings = {
   // See utils/discounts.js.
   promoDiscount: { enabled: false, percent: 10, startDate: null, endDate: null },
   // Separate, always-on-when-enabled discount: when one driver has a New
-  // Plymouth -> Auckland trip and then, the same NZ day, an Auckland -> New
+  // Plymouth -> Auckland (or Palmerston North) trip and then, the same NZ
+  // day, a trip back from that same city to New
   // Plymouth trip picking up at least minGapHours after the first one
   // finishes, both trips get this percent off - including trips booked
   // before the pair existed, with the passenger notified of the new fare.

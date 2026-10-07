@@ -198,10 +198,15 @@ function dealTime(iso, roundDown = false) {
   return t.toLocaleTimeString('en-NZ', { timeZone: 'Pacific/Auckland', hour: 'numeric', minute: '2-digit', hour12: true });
 }
 
-const DIRECTION_LABEL = { 'to-akl': 'New Plymouth → Auckland', 'to-np': 'Auckland → New Plymouth' };
+const DIRECTION_LABEL = {
+  'np-akl': 'New Plymouth → Auckland',
+  'akl-np': 'Auckland → New Plymouth',
+  'np-pmr': 'New Plymouth → Palmerston North',
+  'pmr-np': 'Palmerston North → New Plymouth',
+};
 
 // Admin-set discounts (see backend utils/discounts.js): the date-range
-// promotion, and same-day Auckland return trips - each open day links to
+// promotion, and same-day Auckland / Palmerston North return trips - each open day links to
 // the driver who already has the other leg, since booking with them is
 // what earns the discount. Renders nothing when neither is on.
 function Deals() {
@@ -236,10 +241,10 @@ function Deals() {
           <div className="hm-deal">
             <div className="hm-deal-pct">{returnTrip.percent}%<small>off</small></div>
             <div>
-              <h3>Travelling between New Plymouth and Auckland?</h3>
+              <h3>Travelling between New Plymouth and Auckland or Palmerston North?</h3>
               <p>
-                Our drivers are based in New Plymouth. When one is already heading to Auckland, the trip back with them later
-                that day is {returnTrip.percent}% off - and so is the trip up, for whoever books it.
+                Our drivers are based in New Plymouth. When one is already heading to Auckland or Palmerston North, the trip
+                back with them later that day is {returnTrip.percent}% off - and so is the trip there, for whoever books it.
               </p>
               {returnTrip.openings.length > 0 ? (
                 <ul className="hm-deal-list">

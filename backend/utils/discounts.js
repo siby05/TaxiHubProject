@@ -6,7 +6,8 @@
  *
  * returnTripDiscount - percent off both legs when one driver has a New
  *   Plymouth -> Auckland trip and an Auckland -> New Plymouth trip on the
- *   same NZ day. Depends on the driver's other bookings, so it's
+ *   same NZ day - or the same with Palmerston North (see DESTINATIONS).
+ *   Both legs must be to/from the same city. Depends on the driver's other bookings, so it's
  *   re-checked (reconcileReturnTripDiscounts) whenever a trip gains or
  *   loses a driver, moves date, or is cancelled - and an already-booked
  *   passenger whose fare changes because of it is told straight away.
@@ -26,9 +27,15 @@ const { runInBackground } = require('./background');
 
 // Centre + radius rather than matching address text - typed and
 // geocoded addresses vary too much ("Auckland Airport", "Māngere", a
-// suburb). Auckland's radius takes in the airport and outer suburbs.
-const AUCKLAND = { lat: -36.8485, lng: 174.7633, radiusKm: 45 };
+// suburb). Auckland's radius takes in the airport and outer suburbs;
+// Palmerston North's takes in its airport, Massey and Feilding.
 const NEW_PLYMOUTH = { lat: -39.0556, lng: 174.0752, radiusKm: 25 };
+// Cities the return-trip discount covers, keyed by the short code used
+// in direction keys ('np-akl', 'akl-np', ...).
+const DESTINATIONS = {
+  akl: { name: 'Auckland', lat: -36.8485, lng: 174.7633, radiusKm: 45 },
+  pmr: { name: 'Palmerston North', lat: -40.3523, lng: 175.6082, radiusKm: 20 },
+};
 
 // Trips still able to change price. A completed trip's fare is final, and
 // an already-paid one was charged that amount.
@@ -40,12 +47,17 @@ function within(city, lat, lng) {
   return lat != null && lng != null && haversineKm(city.lat, city.lng, lat, lng) <= city.radiusKm;
 }
 
-// 'to-akl' | 'to-np' | null
+// { city: 'akl' | 'pmr', leg: 'out' (from New Plymouth) | 'back' (to it) }, or null.
 function tripDirection(b) {
-  if (within(NEW_PLYMOUTH, b.pickupLat, b.pickupLng) && within(AUCKLAND, b.dropLat, b.dropLng)) return 'to-akl';
-  if (within(AUCKLAND, b.pickupLat, b.pickupLng) && within(NEW_PLYMOUTH, b.dropLat, b.dropLng)) return 'to-np';
+  for (const [city, c] of Object.entries(DESTINATIONS)) {
+    if (within(NEW_PLYMOUTH, b.pickupLat, b.pickupLng) && within(c, b.dropLat, b.dropLng)) return { city, leg: 'out' };
+    if (within(c, b.pickupLat, b.pickupLng) && within(NEW_PLYMOUTH, b.dropLat, b.dropLng)) return { city, leg: 'back' };
+  }
   return null;
 }
+
+// 'np-akl', 'akl-np', 'np-pmr', 'pmr-np' - labelled on the home page.
+const directionKey = (city, leg) => (leg === 'out' ? `np-${city}` : `${city}-np`);
 
 function tripDateKey(b) {
   return nzDateKey(b.scheduledFor || b.requestedAt || b.createdAt || new Date());
@@ -147,8 +159,9 @@ function tellPassengerOfNewFare(io, booking, oldFare, wording) {
   });
 }
 
-// Highway average for the NP <-> Auckland run, applied to the straight-
-// line distance (~255 km -> ~4.6 h, close to the real 4.5-5 h drive).
+// Highway average for the intercity runs, applied to the straight-line
+// distance: NP <-> Auckland ~255 km -> ~4.6 h (real drive 4.5-5 h),
+// NP <-> Palmerston North ~195 km -> ~3.5 h (real drive about 3.5 h).
 // utils/driverAvailability.js's 35 km/h is a town-driving figure and would
 // make every Auckland trip look 7+ hours long.
 const INTERCITY_KMH = 55;
@@ -162,17 +175,17 @@ function endMs(b) {
 }
 const gapMs = (rt) => (rt?.minGapHours ?? 1) * HOUR;
 
-// The driver is based in New Plymouth, so a pair is NP -> Auckland first,
-// then Auckland -> NP picking up at least minGapHours after the first trip
-// finishes (completedAt once done, else its estimated arrival). Returns
-// the ids of every trip that is part of at least one such pair.
+// The driver is based in New Plymouth, so a pair is NP -> city first,
+// then the same city -> NP picking up at least minGapHours after the first
+// trip finishes (completedAt once done, else its estimated arrival).
+// Returns the ids of every trip that is part of at least one such pair.
 function pairedTripIds(trips, rt) {
-  const outs = trips.filter((t) => t.dir === 'to-akl').map((t) => t.b);
-  const ins = trips.filter((t) => t.dir === 'to-np').map((t) => t.b);
+  const outs = trips.filter((t) => t.dir.leg === 'out');
+  const ins = trips.filter((t) => t.dir.leg === 'back');
   const ids = new Set();
-  for (const o of outs) {
-    for (const i of ins) {
-      if (startMs(i) >= endMs(o) + gapMs(rt)) {
+  for (const { b: o, dir: od } of outs) {
+    for (const { b: i, dir: id } of ins) {
+      if (od.city === id.city && startMs(i) >= endMs(o) + gapMs(rt)) {
         ids.add(String(o._id));
         ids.add(String(i._id));
       }
@@ -320,14 +333,14 @@ async function publicPromotions() {
       const pairedIds = pairedTripIds(trips, rt);
       for (const { b, dir } of trips) {
         if (pairedIds.has(String(b._id))) continue;
-        if (dir === 'to-akl') {
+        if (dir.leg === 'out') {
           const after = endMs(b) + gapMs(rt);
-          if (nzDateKey(new Date(after)) === date) offer({ date, direction: 'to-np', driverId, after: new Date(after).toISOString() });
+          if (nzDateKey(new Date(after)) === date) offer({ date, direction: directionKey(dir.city, 'back'), driverId, after: new Date(after).toISOString() });
         } else {
           // Latest NP departure that still arrives gap-before this pickup
-          // (the Auckland run is the same distance as this trip).
+          // (the run there is the same distance as this trip).
           const before = startMs(b) - gapMs(rt) - driveMs(b);
-          if (before > now && nzDateKey(new Date(before)) === date) offer({ date, direction: 'to-akl', driverId, before: new Date(before).toISOString() });
+          if (before > now && nzDateKey(new Date(before)) === date) offer({ date, direction: directionKey(dir.city, 'out'), driverId, before: new Date(before).toISOString() });
         }
       }
     }
