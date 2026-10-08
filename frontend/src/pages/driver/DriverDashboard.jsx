@@ -191,12 +191,12 @@ export default function DriverDashboard() {
   function openEdit(b) {
     setFareDialog({
       mode: 'edit', booking: b, fare: fareText(b.actualFare ?? b.estimatedFare),
-      paymentPending: b.paymentStatus !== 'paid', error: '',
+      paymentMethod: b.paymentMethod, paymentPending: b.paymentStatus !== 'paid', error: '',
     });
   }
 
   async function saveFareDialog() {
-    const { mode, booking, fare, paymentPending } = fareDialog;
+    const { mode, booking, fare, paymentMethod, paymentPending } = fareDialog;
     const amount = Number(fare);
     if (!Number.isFinite(amount) || amount <= 0) {
       setFareDialog((d) => ({ ...d, error: 'Enter the fare charged' }));
@@ -211,7 +211,8 @@ export default function DriverDashboard() {
     try {
       await client.put(`/booking/${booking._id}/fare`, {
         actualFare: amount,
-        ...(booking.paymentMethod !== 'card' && { paymentPending }),
+        paymentMethod,
+        ...(paymentMethod !== 'card' && { paymentPending }),
       });
       setFareDialog(null);
       load();
@@ -425,8 +426,11 @@ export default function DriverDashboard() {
 
       {fareDialog && (() => {
         const { mode, booking: fb, fare, paymentPending, error, saving } = fareDialog;
-        const isCash = fb.paymentMethod !== 'card';
-        const cardPaid = !isCash && fb.paymentStatus === 'paid';
+        // Editing can switch the payment type; completing keeps the booked one.
+        const method = (mode === 'edit' && fareDialog.paymentMethod) || fb.paymentMethod;
+        const isCash = method !== 'card';
+        const cardPaid = fb.paymentMethod === 'card' && fb.paymentStatus === 'paid';
+        const canSwitchMethod = mode === 'edit' && !cardPaid;
         const set = (patch) => setFareDialog((d) => ({ ...d, ...patch, error: '' }));
         return (
           <Modal title={mode === 'complete' ? 'Complete trip' : 'Edit trip'} onClose={() => setFareDialog(null)}>
@@ -438,6 +442,22 @@ export default function DriverDashboard() {
             <p className="muted" style={{ margin: '4px 0 12px', fontSize: '0.85rem' }}>
               Estimate was ${fb.estimatedFare}.{cardPaid ? ' Already paid online, so the fare can\'t be changed.' : ''}
             </p>
+            {canSwitchMethod && (
+              <>
+                <label>Payment type</label>
+                <div style={{ display: 'flex', gap: 16, marginBottom: 12 }}>
+                  <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 'normal' }}>
+                    <input type="radio" name="fare-method" checked={isCash} style={{ width: 'auto' }} onChange={() => set({ paymentMethod: 'cash' })} />
+                    Cash
+                  </label>
+                  <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 'normal', opacity: profile?.acceptsOnlinePayment === false ? 0.5 : 1 }}>
+                    <input type="radio" name="fare-method" checked={!isCash} style={{ width: 'auto' }} disabled={profile?.acceptsOnlinePayment === false}
+                      onChange={() => set({ paymentMethod: 'card' })} />
+                    Card (online)
+                  </label>
+                </div>
+              </>
+            )}
             {isCash ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 'normal' }}>

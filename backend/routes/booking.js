@@ -1539,11 +1539,13 @@ router.put('/:id/payment-method', auth, roleMiddleware(['passenger']), async (re
   }
 });
 
-// PUT /api/booking/:id/fare { actualFare, paymentPending? } - driver
-// corrects a completed trip afterwards: the fare, and for cash trips
-// whether payment is still pending. A card fare already paid online can't
-// change (the passenger was charged that amount). The driver's running
-// earnings total is adjusted by the difference.
+// PUT /api/booking/:id/fare { actualFare, paymentMethod?, paymentPending? } -
+// driver corrects a completed trip afterwards: the fare, the payment type
+// (cash/card), and for cash trips whether payment is still pending. A card
+// fare already paid online can't change (the passenger was charged that
+// amount), nor can its payment type. Switching to card leaves the trip
+// unpaid for the passenger to pay online. The driver's running earnings
+// total is adjusted by the difference.
 router.put('/:id/fare', auth, roleMiddleware(['driver']), async (req, res) => {
   try {
     const booking = await Booking.findById(req.params.id);
@@ -1560,8 +1562,25 @@ router.put('/:id/fare', auth, roleMiddleware(['driver']), async (req, res) => {
       return res.status(400).json({ error: 'This fare was already paid online, so it can\'t be changed' });
     }
 
+    const cardPaid = booking.paymentMethod === 'card' && booking.paymentStatus === 'paid';
+    const paymentMethod = req.body.paymentMethod ?? booking.paymentMethod;
+    if (!['cash', 'card'].includes(paymentMethod)) return res.status(400).json({ error: 'paymentMethod must be "cash" or "card"' });
+    if (paymentMethod !== booking.paymentMethod) {
+      if (cardPaid) return res.status(400).json({ error: 'This trip was already paid online, so the payment type can\'t be changed' });
+      if (paymentMethod === 'card' && driver.acceptsOnlinePayment === false) {
+        return res.status(400).json({ error: 'You only accept cash, so this trip can\'t be switched to online payment' });
+      }
+    }
+
     const update = { actualFare: fare };
-    if (booking.paymentMethod !== 'card' && typeof req.body.paymentPending === 'boolean') {
+    if (paymentMethod !== booking.paymentMethod) {
+      update.paymentMethod = paymentMethod;
+      update.cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(fare) : 0;
+      // Card means the passenger still pays online; cash defaults to paid
+      // unless the driver says it's pending (below).
+      update.paymentStatus = paymentMethod === 'card' ? 'unpaid' : 'paid';
+    }
+    if (paymentMethod !== 'card' && typeof req.body.paymentPending === 'boolean') {
       update.paymentStatus = req.body.paymentPending ? 'unpaid' : 'paid';
     }
     const updated = await Booking.findByIdAndUpdate(booking._id, update);
@@ -1570,6 +1589,7 @@ router.put('/:id/fare', auth, roleMiddleware(['driver']), async (req, res) => {
         totalEarnings: Math.round(((driver.totalEarnings || 0) + fare - oldFare) * 100) / 100,
       });
     }
+    if (update.paymentMethod) emitToUser(req, booking.passengerId, 'booking:updated', { bookingId: booking._id });
     res.json(updated);
   } catch (err) {
     serverError(res, err, req);
