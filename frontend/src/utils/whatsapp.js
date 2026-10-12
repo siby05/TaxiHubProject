@@ -127,7 +127,7 @@ export function passengerToDriverMessage(driverName) {
 // fare is still owing, so it's one message rather than two.
 export function receiptMessage(booking, driverName, receiptLink, payLink) {
   return `Hi, this is ${driverName || 'your EasyRide driver'} - your trip (${booking.bookingId}) is complete.\n` +
-    `Fare: $${booking.actualFare}\n` +
+    `Fare: $${Number(booking.actualFare).toFixed(2)}\n` +
     `Your receipt (view or download as PDF): ${receiptLink}` +
     `${payLink ? `\n\nPlease complete your online payment here: ${payLink}` : ''}`;
 }
@@ -135,6 +135,6 @@ export function receiptMessage(booking, driverName, receiptLink, payLink) {
 // payLink is null for a cash trip left as "payment pending".
 export function paymentReminderMessage(booking, driverName, payLink) {
   return `Hi, this is ${driverName || 'your EasyRide driver'} - your trip (${booking.bookingId}) is complete.\n` +
-    `Fare: $${booking.actualFare ?? booking.estimatedFare}\n` +
+    `Fare: $${Number(booking.actualFare ?? booking.estimatedFare).toFixed(2)}\n` +
     (payLink ? `Please complete your online payment here: ${payLink}` : 'Payment is still pending - please pay at your convenience. Thank you!');
 }

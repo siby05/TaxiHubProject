@@ -160,12 +160,6 @@ export default function DriverDashboard() {
     return b.receiptToken ? `${API_URL}/booking/${b._id}/receipt?t=${b.receiptToken}` : null;
   }
 
-  // Only a passenger with no real email needs the link handed over at
-  // completion - the backend emails everyone else their receipt then.
-  function receiptLink(b) {
-    return b.passengerHasEmail ? null : receiptUrl(b);
-  }
-
   async function emailReceipt(id) {
     setReceiptSent((s) => ({ ...s, [id]: 'sending' }));
     try {
@@ -185,7 +179,7 @@ export default function DriverDashboard() {
   const fareText = (n) => (n == null || n === '' ? '' : Number(n).toFixed(2));
 
   function openComplete(b) {
-    setFareDialog({ mode: 'complete', booking: b, fare: fareText(b.estimatedFare), paymentPending: false, error: '' });
+    setFareDialog({ mode: 'complete', booking: b, fare: fareText(b.estimatedFare), paymentPending: false, sendWhatsApp: false, error: '' });
   }
 
   function openEdit(b) {
@@ -196,7 +190,7 @@ export default function DriverDashboard() {
   }
 
   async function saveFareDialog() {
-    const { mode, booking, fare, paymentMethod, paymentPending } = fareDialog;
+    const { mode, booking, fare, paymentMethod, paymentPending, sendWhatsApp } = fareDialog;
     const amount = Number(fare);
     if (!Number.isFinite(amount) || amount <= 0) {
       setFareDialog((d) => ({ ...d, error: 'Enter the fare charged' }));
@@ -204,7 +198,7 @@ export default function DriverDashboard() {
     }
     if (mode === 'complete') {
       setFareDialog(null);
-      await complete(booking._id, amount, booking.paymentMethod !== 'card' && paymentPending);
+      await complete(booking._id, amount, booking.paymentMethod !== 'card' && paymentPending, sendWhatsApp);
       return;
     }
     setFareDialog((d) => ({ ...d, saving: true, error: '' }));
@@ -221,26 +215,26 @@ export default function DriverDashboard() {
     }
   }
 
-  async function complete(id, actualFare, paymentPending) {
+  // WhatsApp only opens when the driver ticked "Send receipt on WhatsApp"
+  // in the Complete trip box - it's not needed for every trip (passengers
+  // with an email get the receipt emailed anyway).
+  async function complete(id, actualFare, paymentPending, sendWhatsApp) {
     const booking = bookings.find((b) => b._id === id);
-    if (booking) {
+    if (booking && sendWhatsApp) {
       const finalBooking = { ...booking, actualFare: actualFare || booking.estimatedFare };
       const cardOwing = booking.paymentMethod === 'card' && booking.paymentStatus !== 'paid';
-      const owing = cardOwing || paymentPending;
       const payLink = cardOwing ? `${window.location.origin}/pay/${id}` : null;
-      const receipt = receiptLink(booking);
+      const receipt = receiptUrl(booking);
       // Opened before the API call so it counts as part of the tap (popup
       // blockers reject a window opened after an await). One message: the
-      // receipt link for a no-email passenger (with the pay link folded in
-      // if a card fare is owing), otherwise just the payment reminder for
-      // an unpaid card trip - a paid/cash trip with an emailed receipt has
-      // nothing to say here.
-      const text = receipt ? receiptMessage(finalBooking, profile?.userId?.name, receipt, payLink)
-        : owing ? paymentReminderMessage(finalBooking, profile?.userId?.name, payLink) : null;
-      const link = text && waLink(booking.passengerId?.mobile, text);
-      if (link) {
-        openWhatsApp(link);
-      }
+      // receipt link, with the pay link folded in if a card fare is owing,
+      // or a note if a cash fare is left pending.
+      const text = receipt
+        ? receiptMessage(finalBooking, profile?.userId?.name, receipt, payLink)
+          + (paymentPending ? '\n\nPayment is still pending - please pay at your convenience. Thank you!' : '')
+        : paymentReminderMessage(finalBooking, profile?.userId?.name, payLink);
+      const link = waLink(booking.passengerId?.mobile, text);
+      if (link) openWhatsApp(link);
     }
 
     try {
@@ -473,6 +467,21 @@ export default function DriverDashboard() {
               <p className="muted" style={{ margin: 0 }}>
                 {cardPaid ? 'Paid online by card.' : 'Card trip - the passenger pays online. Use "Remind to pay" to send them the payment link.'}
               </p>
+            )}
+            {mode === 'complete' && waLink(fb.passengerId?.mobile) && (
+              <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 'normal' }}>
+                  <input type="checkbox" checked={!!fareDialog.sendWhatsApp} style={{ width: 'auto' }}
+                    onChange={(e) => set({ sendWhatsApp: e.target.checked })} />
+                  <span><WhatsAppIcon /> Send receipt on WhatsApp</span>
+                </label>
+                <p className="muted" style={{ margin: '4px 0 0 26px', fontSize: '0.85rem' }}>
+                  {fb.passengerHasEmail
+                    ? 'Optional - the passenger is emailed their receipt anyway.'
+                    : 'No email on file for this passenger, so WhatsApp is the only way they get a receipt.'}
+                  {!isCash && fb.paymentStatus !== 'paid' ? ' Includes the online payment link.' : ''}
+                </p>
+              </div>
             )}
             {error && <p className="error-text">{error}</p>}
             <div className="booking-row" style={{ border: 'none', paddingBottom: 0 }}>
