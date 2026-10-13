@@ -1124,34 +1124,69 @@ router.put('/:id/accept', auth, roleMiddleware(['driver']), async (req, res) => 
 // back around as a broadcast either). A request that was assigned directly
 // to them is released back to the pool as a broadcast, so the passenger
 // still gets a ride from whoever else is eligible rather than being stuck.
+// After a decline, one of three things happens:
+//  - other drivers can still take it, and it was sent to this driver
+//    directly: it goes to them, and the passenger is told (in-app + email)
+//  - other drivers can still take it, and it was an open request: nothing
+//    for the passenger to know yet
+//  - no other driver can take it (e.g. a one-driver platform): rather than
+//    leaving it open with nobody to accept it, the request is closed as
+//    cancelled and the passenger is told to rebook (in-app + email)
 async function declineBooking(req, booking, driver) {
   if (booking.status !== 'pending') return { status: 400, error: `Booking already ${booking.status}` };
 
   const wasAssignedToMe = booking.driverId != null && String(booking.driverId) === String(driver._id);
-  const updated = await Booking.findByIdAndUpdate(booking._id, {
+  let updated = await Booking.findByIdAndUpdate(booking._id, {
     $push: { declinedBy: driver._id },
     ...(wasAssignedToMe && { driverId: null }),
   });
 
-  if (wasAssignedToMe) {
-    const passenger = await User.findById(booking.passengerId);
-    const passengerRatingAvg = await getPassengerRatingAvg(passenger._id);
-    const others = (await findEligibleCandidates(booking.paymentMethod, booking.requestedVehicleType))
-      .filter((d) => !(updated.declinedBy || []).some((id) => String(id) === String(d._id)));
+  const requestedTime = booking.scheduledFor ? new Date(booking.scheduledFor) : undefined;
+  const others = (await findEligibleCandidates(booking.paymentMethod, booking.requestedVehicleType, requestedTime))
+    .filter((d) => !(updated.declinedBy || []).some((id) => String(id) === String(d._id)));
+  const passenger = await User.findById(booking.passengerId);
 
+  if (others.length === 0) {
+    updated = await Booking.findByIdAndUpdate(booking._id, {
+      status: 'cancelled',
+      cancelledAt: new Date(),
+      cancelReason: 'No driver available - the driver couldn\'t take this trip',
+      driverId: null,
+    });
+    notifyUser(booking.passengerId, {
+      type: 'booking-declined',
+      title: 'No driver available',
+      message: `${booking.pickupAddress} → ${booking.dropAddress} - sorry, your driver can't take this trip and no other driver is available, so the request has been closed. Please book again for a different time.`,
+      link: '/passenger',
+    });
+    emitToUser(req, booking.passengerId, 'booking:cancelled', updated);
+    if (passenger) runInBackground('email sendBookingDeclined', () => emailService.sendBookingDeclined(passenger.email, updated, false));
+    const driverUser = await User.findById(driver.userId);
+    notifyAdmins({
+      type: 'driver-action',
+      title: 'Trip request declined - no driver left',
+      message: `${driverUser?.name || 'A driver'} declined ${updated.bookingId} (${booking.pickupAddress} → ${booking.dropAddress}) and no other driver was available, so it was closed.`
+        + (booking.paymentStatus === 'paid' ? ' The passenger had already paid - a refund is needed.' : ''),
+      link: '/admin',
+    });
+    refreshReturnTripInBackground(req, booking, updated);
+    return { updated };
+  }
+
+  if (wasAssignedToMe) {
+    const passengerRatingAvg = await getPassengerRatingAvg(passenger._id);
     for (const d of others) {
       await alertDriverOfBooking(req, d.userId, updated, passenger.name, passengerRatingAvg);
     }
 
     notifyUser(booking.passengerId, {
       type: 'booking-declined',
-      title: others.length ? 'Finding you another driver' : 'No driver available yet',
-      message: others.length
-        ? `${booking.pickupAddress} → ${booking.dropAddress} - your first driver couldn't take it, so we've sent it to other available drivers.`
-        : `${booking.pickupAddress} → ${booking.dropAddress} - no drivers are free right now. We'll keep the request open.`,
+      title: 'Finding you another driver',
+      message: `${booking.pickupAddress} → ${booking.dropAddress} - your first driver couldn't take it, so we've sent it to other available drivers.`,
       link: '/passenger',
     });
     emitToUser(req, booking.passengerId, 'booking:declined', updated);
+    runInBackground('email sendBookingDeclined', () => emailService.sendBookingDeclined(passenger.email, updated, true));
     refreshReturnTripInBackground(req, booking, updated);
   }
 

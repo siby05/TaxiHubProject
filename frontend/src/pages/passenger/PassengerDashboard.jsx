@@ -93,7 +93,12 @@ export default function PassengerDashboard() {
     'booking:arrived': () => { setNotice('Your driver has arrived at the pickup point.'); refresh(); },
     'booking:started': () => { setNotice('Your trip has started.'); refresh(); },
     'booking:completed': () => { setNotice('Your trip is complete.'); refresh(); },
-    'booking:cancelled': () => { setNotice('A booking was cancelled.'); refresh(); },
+    'booking:cancelled': (b) => {
+      setNotice(b?.cancelReason?.startsWith('No driver available')
+        ? 'Sorry - no driver is available for your trip, so the request was closed. Please book again for a different time.'
+        : 'A booking was cancelled.');
+      refresh();
+    },
     'booking:declined': () => { setNotice('Your driver couldn\'t take the trip - finding you another one.'); refresh(); },
   });
 

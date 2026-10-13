@@ -595,6 +595,16 @@ You'll get another email as soon as a driver accepts. Track it here: ${appUrl('/
   sendFareChanged: (to, subject, message) =>
     send(to, subject, `${message}\nOpen the app: ${appUrl('/passenger')}`),
 
+  // A driver turned a trip request down (see routes/booking.js
+  // declineBooking). Either it's gone to other drivers, or no other driver
+  // can take it and the request has been closed.
+  sendBookingDeclined: (to, booking, passedOn) =>
+    send(to,
+      passedOn ? `Finding you another driver for ${booking.bookingId}` : `No driver available for ${booking.bookingId}`,
+      passedOn
+        ? `Your driver couldn't take your trip from ${booking.pickupAddress} to ${booking.dropAddress}, so we've sent it to other available drivers. We'll let you know when one accepts.\nOpen the app: ${appUrl('/passenger')}`
+        : `Sorry - your driver can't take your trip from ${booking.pickupAddress} to ${booking.dropAddress}${booking.scheduledFor ? ` on ${formatNzDateTime(booking.scheduledFor)}` : ''}, and no other driver is available, so the request has been closed.${booking.paymentStatus === 'paid' ? ' We\'ll arrange a refund of what you paid.' : ' You haven\'t been charged.'}\nPlease book again for a different time: ${appUrl('/passenger')}`),
+
   sendBookingCancelledByDriver: (to, booking, reason) =>
     send(to, `Your driver cancelled trip ${booking.bookingId}`,
       `Your trip from ${booking.pickupAddress} to ${booking.dropAddress} was cancelled by the driver.` +
