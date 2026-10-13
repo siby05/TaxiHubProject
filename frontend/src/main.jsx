@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 import { wakeServer } from './api/client';
+import { startAutoUpdate } from './utils/autoUpdate';
 import './index.css';
 
 // Required for Chrome/Android to consider the app installable (see
@@ -24,6 +25,9 @@ window.addEventListener('pageshow', (e) => {
 
 // Start a sleeping backend booting as early as possible (see api/client.js).
 wakeServer();
+
+// Pick up new deploys in a home-screen app that's left open (see utils/autoUpdate.js).
+startAutoUpdate();
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

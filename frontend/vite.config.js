@@ -82,10 +82,24 @@ function seo(siteUrl) {
   };
 }
 
+// Each build gets an id, baked into the app (__BUILD_ID__) and written to
+// /version.json. The running app compares the two (src/utils/autoUpdate.js)
+// so a home-screen app left open picks up a new deploy by itself.
+const BUILD_ID = String(Date.now());
+function buildVersion() {
+  return {
+    name: 'easyride-build-version',
+    generateBundle() {
+      this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ build: BUILD_ID }) });
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   return {
-    plugins: [react(), seo(env.VITE_SITE_URL)],
+    plugins: [react(), seo(env.VITE_SITE_URL), buildVersion()],
+    define: { __BUILD_ID__: JSON.stringify(BUILD_ID) },
     server: { port: 5173 },
   };
 });
