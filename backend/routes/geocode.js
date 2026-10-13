@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { haversineKm } = require('../utils/distance');
 const NOMINATIM_HEADERS = { 'User-Agent': 'EasyRide/1.0 (demo project)' };
 
 // Nominatim's display_name is the full administrative chain (e.g. "50,
@@ -41,6 +42,27 @@ const inNz = (lat, lng) => lat >= -47.4 && lat <= -34 && lng >= 165.8 && lng <= 
 // first instead of Auckland's.
 const DEFAULT_NEAR = { lat: -39.06, lng: 174.08 };
 
+// The geocoders only lean towards `near` - a stronger text match in
+// another city ("Cowling Road", "Devon Street") could still come first or
+// push the New Plymouth one off the list. So more results are fetched
+// and re-ranked here: New Plymouth / Taranaki first (where pickups almost
+// always are), then near the caller's last-picked address, then the rest,
+// each group keeping the geocoder's own order.
+const SERVICE_AREA_KM = 60;
+const NEAR_LAST_PICKED_KM = 40;
+const FETCH_LIMIT = 20;
+function rankLocalFirst(results, near) {
+  const tier = (r) => {
+    if (haversineKm(DEFAULT_NEAR.lat, DEFAULT_NEAR.lng, r.lat, r.lng) <= SERVICE_AREA_KM) return 0;
+    if (haversineKm(near.lat, near.lng, r.lat, r.lng) <= NEAR_LAST_PICKED_KM) return 1;
+    return 2;
+  };
+  return results
+    .map((r, i) => ({ r, i, t: tier(r) }))
+    .sort((a, b) => a.t - b.t || a.i - b.i)
+    .map((x) => x.r);
+}
+
 // Airport codes people type as shorthand. Photon fuzzy-matches "npl" to
 // "NPD" (the fuel company), so New Plymouth Airport never came up. The
 // airport's name is searched too and its results lead the list.
@@ -76,7 +98,7 @@ function photonLabel(p) {
 }
 
 async function photonSearch(q, near) {
-  const url = `https://photon.komoot.io/api/?limit=10&lang=en&bbox=${NZ_BBOX}&lat=${near.lat}&lon=${near.lng}&q=${encodeURIComponent(q)}`;
+  const url = `https://photon.komoot.io/api/?limit=${FETCH_LIMIT}&lang=en&bbox=${NZ_BBOX}&lat=${near.lat}&lon=${near.lng}&q=${encodeURIComponent(q)}`;
   const response = await fetch(url, { headers: NOMINATIM_HEADERS, signal: AbortSignal.timeout(6000) });
   if (!response.ok) throw new Error(`Photon responded ${response.status}`);
   const { features = [] } = await response.json();
@@ -90,7 +112,7 @@ async function nominatimSearch(q, near) {
   // A viewbox without bounded=1 prefers results around `near` without
   // excluding the rest of the country.
   const viewbox = [near.lng - 1, near.lat + 1, near.lng + 1, near.lat - 1].join(',');
-  const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=6&countrycodes=nz&viewbox=${viewbox}&q=${encodeURIComponent(q)}`;
+  const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=${FETCH_LIMIT}&countrycodes=nz&viewbox=${viewbox}&q=${encodeURIComponent(q)}`;
   const response = await fetch(url, { headers: NOMINATIM_HEADERS, signal: AbortSignal.timeout(6000) });
   if (!response.ok) throw new Error(`Nominatim responded ${response.status}`);
   const results = await response.json();
@@ -146,21 +168,22 @@ router.get('/search', async (req, res) => {
   if (cached && Date.now() - cached.at < SEARCH_CACHE_TTL_MS) return res.json(cached.results);
 
   let results = [];
+  let aliasResults = [];
   let failures = 0;
   if (alias) {
     try {
-      results = await photonSearch(alias, near);
+      aliasResults = await photonSearch(alias, near);
     } catch (err) {
       console.error(`[geocode] photon alias search failed: ${err.message}`);
     }
   }
   try {
-    results = [...results, ...(await photonSearch(q, near))];
+    results = await photonSearch(q, near);
   } catch (err) {
     failures++;
     console.error(`[geocode] photon search failed: ${err.message}`);
   }
-  if (results.length === 0) {
+  if (results.length === 0 && aliasResults.length === 0) {
     try {
       results = await nominatimSearch(alias || q, near);
     } catch (err) {
@@ -172,7 +195,9 @@ router.get('/search', async (req, res) => {
   // still asleep, and the frontend treats that as "waking up".
   if (failures === 2) return res.status(503).json({ error: 'Address lookup failed, try again' });
 
-  results = dedupeByLabel(results).slice(0, 6);
+  // An airport code's own results stay on top (the user asked for that
+  // airport); everything else is ranked New Plymouth first.
+  results = dedupeByLabel([...aliasResults, ...rankLocalFirst(results, near)]).slice(0, 6);
   if (searchCache.size >= SEARCH_CACHE_MAX) searchCache.delete(searchCache.keys().next().value);
   searchCache.set(cacheKey, { at: Date.now(), results });
   res.json(results);
