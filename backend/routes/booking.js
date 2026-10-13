@@ -885,8 +885,8 @@ router.put('/:id/edit', auth, roleMiddleware(['passenger']), async (req, res) =>
 });
 
 // PUT /api/booking/:id/driver-edit - the driver changes a trip of theirs
-// before it starts (still pending or accepted): pickup, drop-off, stops
-// and pickup time. Distance and fare are recalculated at the driver's rate
+// before it starts (still pending or accepted): pickup, drop-off, stops,
+// pickup time and payment type (cash / card). Distance and fare are recalculated at the driver's rate
 // (discounts re-applied as for the passenger's own edit above) and the
 // passenger is told by in-app notice and email. { preview: true } returns
 // the recalculated fare without saving, for the edit dialog. An
@@ -904,7 +904,12 @@ router.put('/:id/driver-edit', auth, roleMiddleware(['driver']), async (req, res
     if (!['pending', 'accepted'].includes(booking.status)) return res.status(400).json({ error: `Can't edit a trip that's already ${booking.status}` });
     if (booking.paymentStatus === 'paid') return res.status(400).json({ error: 'This trip is already paid, so its route can\'t be changed' });
 
-    const { pickupAddress, pickupLat, pickupLng, dropAddress, dropLat, dropLng, scheduledFor, stops } = req.body;
+    const { pickupAddress, pickupLat, pickupLng, dropAddress, dropLat, dropLng, scheduledFor, stops, paymentMethod } = req.body;
+    if (paymentMethod !== undefined && !['cash', 'card'].includes(paymentMethod)) return res.status(400).json({ error: 'Payment must be cash or card' });
+    const nextPaymentMethod = paymentMethod || booking.paymentMethod;
+    if (nextPaymentMethod === 'card' && booking.paymentMethod !== 'card' && driver.acceptsOnlinePayment === false) {
+      return res.status(400).json({ error: 'Online payment is turned off in your settings - turn it on to switch this trip to card' });
+    }
     const coordsOk = (lat, lng) => lat == null || (Number.isFinite(Number(lat)) && Number.isFinite(Number(lng)));
     if (!coordsOk(pickupLat, pickupLng) || !coordsOk(dropLat, dropLng)) return res.status(400).json({ error: 'Choose the addresses from the suggestions' });
     if (scheduledFor && new Date(scheduledFor) <= new Date()) return res.status(400).json({ error: 'The pickup time must be in the future' });
@@ -935,20 +940,20 @@ router.put('/:id/driver-edit', auth, roleMiddleware(['driver']), async (req, res
         fareSetByDriver = true;
       }
     }
-    const cardSurchargeAmount = booking.paymentMethod === 'card' ? calculateCardSurcharge(fare.estimatedFare) : 0;
+    const cardSurchargeAmount = nextPaymentMethod === 'card' ? calculateCardSurcharge(fare.estimatedFare) : 0;
 
     if (req.body.preview) {
       return res.json({ distanceKm, ...fare, cardSurchargeAmount, total: Math.round((fare.estimatedFare + cardSurchargeAmount) * 100) / 100 });
     }
 
-    const updated = await Booking.findByIdAndUpdate(booking._id, { ...next, distanceKm, ...fare, cardSurchargeAmount, fareSetByDriver });
+    const updated = await Booking.findByIdAndUpdate(booking._id, { ...next, paymentMethod: nextPaymentMethod, distanceKm, ...fare, cardSurchargeAmount, fareSetByDriver });
     refreshReturnTripInBackground(req, booking, updated);
 
     emitToUser(req, booking.passengerId, 'booking:updated', { bookingId: booking._id });
     notifyUser(booking.passengerId, {
       type: 'booking-updated',
       title: 'Your driver updated your trip',
-      message: `${updated.pickupAddress} → ${updated.dropAddress}${updated.scheduledFor ? ` · ${formatNzDateTime(updated.scheduledFor)}` : ''} · est. $${Number(updated.estimatedFare).toFixed(2)}`,
+      message: `${updated.pickupAddress} → ${updated.dropAddress}${updated.scheduledFor ? ` · ${formatNzDateTime(updated.scheduledFor)}` : ''} · est. $${Number(updated.estimatedFare).toFixed(2)} · ${updated.paymentMethod === 'card' ? 'pay online' : 'cash'}`,
       link: '/passenger',
     });
     const passenger = await User.findById(booking.passengerId);

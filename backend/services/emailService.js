@@ -614,6 +614,7 @@ You'll get another email as soon as a driver accepts. Track it here: ${appUrl('/
       `Drop-off: ${booking.dropAddress}\n` +
       `When: ${booking.scheduledFor ? formatNzDateTime(booking.scheduledFor) : 'Now'}\n` +
       `Estimated fare: $${Number(booking.estimatedFare).toFixed(2)}${oldFare != null && oldFare !== booking.estimatedFare ? ` (was $${Number(oldFare).toFixed(2)})` : ''}\n` +
+      `Payment: ${booking.paymentMethod === 'card' ? `pay online by card${booking.cardSurchargeAmount ? ` (+ $${Number(booking.cardSurchargeAmount).toFixed(2)} card fee)` : ''}` : 'cash to the driver'}\n` +
       `If anything looks wrong, contact your driver or reply in the app: ${appUrl('/passenger')}`),
 
   // A driver turned a trip request down (see routes/booking.js

@@ -45,6 +45,7 @@ export default function DriverDashboard() {
   // Fare box: follows the calculated fare until the driver types their own.
   const [teFare, setTeFare] = useState('');
   const [teFareCustom, setTeFareCustom] = useState(false);
+  const [tePayment, setTePayment] = useState('cash');
   const [teError, setTeError] = useState('');
   const [teSaving, setTeSaving] = useState(false);
   const teStopHandlers = makeStopHandlers(setTeStops);
@@ -58,6 +59,7 @@ export default function DriverDashboard() {
     setTePreview(null);
     setTeFare(Number(b.estimatedFare).toFixed(2));
     setTeFareCustom(!!b.fareSetByDriver);
+    setTePayment(b.paymentMethod || 'cash');
     setTeError('');
   }
 
@@ -66,6 +68,7 @@ export default function DriverDashboard() {
       pickupAddress: tePickup.label, pickupLat: tePickup.lat, pickupLng: tePickup.lng,
       dropAddress: teDrop.label, dropLat: teDrop.lat, dropLng: teDrop.lng,
       stops: stopsPayload(teStops), scheduledFor: teScheduledFor,
+      paymentMethod: tePayment,
     };
   }
 
@@ -84,7 +87,7 @@ export default function DriverDashboard() {
         .catch((err) => { if (!cancelled) { setTePreview(null); setTeError(err.response?.data?.error || 'Could not work out the fare'); } });
     }, 300);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [tripEdit, tePickup, teDrop, teStops, teScheduledFor]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tripEdit, tePickup, teDrop, teStops, teScheduledFor, tePayment]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function saveTripEdit() {
     const amount = Number(teFare);
@@ -530,6 +533,31 @@ export default function DriverDashboard() {
                 )}
                 {teFareCustom && Number(teFare) !== tePreview?.estimatedFare && ' Your own fare is kept as set - discounts won\'t change it.'}
               </p>
+            </div>
+            <div>
+              <label>Payment</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 'normal' }}>
+                  <input type="radio" name="te-payment" checked={tePayment === 'cash'} style={{ width: 'auto' }} onChange={() => setTePayment('cash')} />
+                  Cash
+                </label>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 'normal', opacity: profile?.acceptsOnlinePayment === false && tripEdit.paymentMethod !== 'card' ? 0.5 : 1 }}>
+                  <input type="radio" name="te-payment" checked={tePayment === 'card'} style={{ width: 'auto' }}
+                    disabled={profile?.acceptsOnlinePayment === false && tripEdit.paymentMethod !== 'card'}
+                    onChange={() => setTePayment('card')} />
+                  Card (online)
+                </label>
+              </div>
+              {tePayment === 'card' && Number(teFare) > 0 && tePreview && (
+                <p className="muted" style={{ margin: '4px 0 0', fontSize: '0.85rem' }}>
+                  The passenger pays online{tePreview.cardSurchargeAmount > 0 && teFare === tePreview.estimatedFare.toFixed(2)
+                    ? `: $${teFare} + $${tePreview.cardSurchargeAmount.toFixed(2)} card fee = $${tePreview.total.toFixed(2)}.`
+                    : ', plus the card processing fee.'}
+                </p>
+              )}
+              {profile?.acceptsOnlinePayment === false && tripEdit.paymentMethod !== 'card' && (
+                <p className="muted" style={{ margin: '4px 0 0', fontSize: '0.85rem' }}>Card is off - online payment is turned off in your Settings.</p>
+              )}
             </div>
             {teError && <p className="error-text" style={{ margin: 0 }}>{teError}</p>}
           </div>
