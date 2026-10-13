@@ -26,7 +26,9 @@ export const useAuthStore = create((set) => ({
   token: readStorage('easyride_token') || null,
 
   login: async (email, password) => {
-    const { data } = await client.post('/auth/login', { email, password });
+    // Safe to retry while a sleeping server boots - logging in twice
+    // changes nothing.
+    const { data } = await client.post('/auth/login', { email, password }, { wakeRetry: true });
     writeStorage('easyride_token', data.token);
     writeStorage('easyride_user', JSON.stringify(data.user));
     set({ user: data.user, token: data.token });

@@ -41,6 +41,26 @@ export function onServerWaking(fn) {
   return () => wakeListeners.delete(fn);
 }
 
+// Whether the backend is answering: 'checking' (app just opened, first
+// request not back yet), 'awake' (it has answered), or 'asleep' (no answer
+// - still booting). components/ProtectedRoute.jsx sends a signed-in user to
+// the login screen while it's asleep, instead of an empty dashboard.
+let serverStatus = 'checking';
+const statusListeners = new Set();
+function setServerStatus(value) {
+  if (serverStatus === value) return;
+  serverStatus = value;
+  statusListeners.forEach((fn) => fn(value));
+}
+export function onServerStatus(fn) {
+  statusListeners.add(fn);
+  fn(serverStatus);
+  return () => statusListeners.delete(fn);
+}
+// An awake server answers /health well inside this; a sleeping one takes
+// 30-60 s to boot.
+const CHECKING_TIMEOUT_MS = 4000;
+
 function isColdStartError(err) {
   if (!err.config || err.code === 'ERR_CANCELED') return false;
   // The device itself is offline - not something waiting on the server fixes.
@@ -57,12 +77,14 @@ function isColdStartError(err) {
 // Fired once on app start so a sleeping server starts booting while the
 // page renders, rather than only when the first data request lands.
 export function wakeServer() {
+  setTimeout(() => { if (serverStatus === 'checking') setServerStatus('asleep'); }, CHECKING_TIMEOUT_MS);
   client.get('/health').catch(() => {});
 }
 
 client.interceptors.response.use(
   (res) => {
     setWaking(false);
+    setServerStatus('awake');
     return res;
   },
   async (err) => {
@@ -71,13 +93,22 @@ client.interceptors.response.use(
       localStorage.removeItem('easyride_user');
     }
     const config = err.config;
-    if (config?.wakeRetry !== false && isColdStartError(err) && RETRYABLE_METHODS.includes((config.method || 'get').toLowerCase())) {
+    const coldStart = isColdStartError(err);
+    // Any real answer (even an error) means the server is up.
+    if (err.response && !coldStart) setServerStatus('awake');
+    // Reads are retried; a write only when the caller says it's safe to
+    // repeat (wakeRetry: true - e.g. logging in).
+    const retryable = config?.wakeRetry === true || (config?.wakeRetry !== false && RETRYABLE_METHODS.includes((config?.method || 'get').toLowerCase()));
+    if (coldStart && retryable) {
       const attempt = config.__wakeAttempt || 0;
       if (attempt < WAKE_RETRY_DELAYS_MS.length) {
         // A single failed request is often just a blip (a phone coming back
         // from the background, a flaky connection) - only say the server is
         // waking once a retry has failed too.
-        if (attempt >= 1) setWaking(true);
+        if (attempt >= 1) {
+          setWaking(true);
+          setServerStatus('asleep');
+        }
         await new Promise((resolve) => setTimeout(resolve, WAKE_RETRY_DELAYS_MS[attempt]));
         return client({ ...config, __wakeAttempt: attempt + 1 });
       }
