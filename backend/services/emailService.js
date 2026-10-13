@@ -9,6 +9,9 @@ const dns = require('dns');
 const { promisify } = require('util');
 const { getSettings } = require('../config/platformSettings');
 const { formatNzDateTime, formatNzDate } = require('../utils/nzTime');
+
+// "14 Oct 2026, 9:30 am" for a scheduled trip, else as soon as possible.
+const pickupTimeText = (b) => (b.scheduledFor ? formatNzDateTime(b.scheduledFor) : 'As soon as possible');
 const { hasRealEmail } = require('../utils/users');
 const { siteUrl, siteLabel } = require('../utils/siteUrl');
 
@@ -569,11 +572,17 @@ You'll get another email as soon as a driver accepts. Track it here: ${appUrl('/
   sendDriverTripAssigned: (to, booking) =>
     send(to, `New confirmed trip (${booking.bookingId})`, `A passenger scanned your QR code and booked you directly - already confirmed, head to ${booking.pickupAddress} for pickup.\nOpen the app: ${appUrl()}`),
 
+  // A scheduled trip says when; a "now" trip that the driver is on the way.
   sendBookingAccepted: (to, booking, driver, driverName) =>
-    send(to, `Driver accepted your ride (${booking.bookingId})`, `Your driver has accepted booking ${booking.bookingId} and is on the way.${driverLine(driver, driverName)}`),
+    send(to, `Driver accepted your ride (${booking.bookingId})`,
+      `Your driver has accepted booking ${booking.bookingId}${booking.scheduledFor ? '' : ' and is on the way'}.\n`
+      + `Pickup time: ${pickupTimeText(booking)}\n`
+      + `Pickup: ${booking.pickupAddress}\nDrop-off: ${booking.dropAddress}\n`
+      + `Estimated fare: $${Number(booking.estimatedFare).toFixed(2)}`
+      + `${driverLine(driver, driverName)}`),
 
   sendBookingConfirmedDirect: (to, booking, driver, driverName) =>
-    send(to, `Your ride is confirmed (${booking.bookingId})`, `Your ride from ${booking.pickupAddress} to ${booking.dropAddress} is confirmed - the driver has been notified. Estimated fare: $${booking.estimatedFare}.${driverLine(driver, driverName)}`),
+    send(to, `Your ride is confirmed (${booking.bookingId})`, `Your ride from ${booking.pickupAddress} to ${booking.dropAddress} is confirmed - the driver has been notified.\nPickup time: ${pickupTimeText(booking)}\nEstimated fare: $${Number(booking.estimatedFare).toFixed(2)}.${driverLine(driver, driverName)}`),
 
   // Sent automatically the moment a driver marks a trip complete (see
   // routes/booking.js PUT /:id/complete) - this is the passenger's

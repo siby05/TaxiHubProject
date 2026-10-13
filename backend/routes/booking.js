@@ -1149,7 +1149,7 @@ async function acceptBooking(req, booking, driver, driverName) {
   notifyUser(booking.passengerId, {
     type: 'booking-accepted',
     title: 'A driver accepted your ride',
-    message: `${updated.pickupAddress} → ${updated.dropAddress}`,
+    message: `${updated.pickupAddress} → ${updated.dropAddress} · pickup ${updated.scheduledFor ? formatNzDateTime(updated.scheduledFor) : 'as soon as possible'}`,
     link: '/passenger',
   });
 

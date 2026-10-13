@@ -86,10 +86,10 @@ export function driverPendingMessage(booking, passengerName) {
 // confirmation: who's coming, in what, and the fare.
 export function driverConfirmedMessage(booking, driverName, vehicleLabel) {
   return `Hi, this is ${driverName || 'your EasyRide driver'} - your ride is confirmed (${booking.bookingId}).\n` +
+    `Pickup time: ${booking.scheduledFor ? formatNzDateTime(booking.scheduledFor) : 'As soon as possible - I\'m on my way'}\n` +
     `${vehicleLabel ? `Vehicle: ${vehicleLabel}\n` : ''}` +
     `Pickup: ${booking.pickupAddress}\nDrop: ${booking.dropAddress}\n` +
-    `Estimated fare: $${booking.estimatedFare}` +
-    `${booking.scheduledFor ? `\nScheduled: ${formatNzDateTime(booking.scheduledFor)}` : ''}`;
+    `Estimated fare: $${Number(booking.estimatedFare).toFixed(2)}`;
 }
 
 // Driver -> passenger, sent once the driver has arrived at pickup.
