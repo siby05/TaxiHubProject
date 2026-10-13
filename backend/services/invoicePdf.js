@@ -91,7 +91,7 @@ function buildInvoicePdf(booking, passenger, driver, driverName) {
     row('Distance', `${booking.distanceKm} km`);
     row('Driver', driverName);
     row('Vehicle', vehicleLabel);
-    row('Payment method', booking.paymentMethod === 'card' ? 'Card (online)' : 'Cash');
+    row('Payment method', booking.paidVia === 'card-in-person' ? 'Card (EFTPOS / in person)' : booking.paymentMethod === 'card' ? 'Card (online)' : 'Cash');
     row('Payment status', booking.paymentStatus === 'paid' ? 'Paid' : 'Unpaid');
 
     // Totals

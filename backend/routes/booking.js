@@ -1390,7 +1390,9 @@ function parseFare(value) {
 // PUT /api/booking/:id/complete - driver enters the actual fare charged
 // and how it's being paid: paymentMethod 'cash' (paid now, or
 // paymentPending: true to collect later - "Mark as paid" once they do) or
-// 'card' (the passenger pays online afterwards via the pay link). Omitted,
+// 'card' - paidInPerson: true when the driver already took it by card
+// (EFTPOS / another app; paid, no online card fee), otherwise the
+// passenger pays online afterwards via the pay link. Omitted,
 // the trip keeps its booked payment type. A trip already paid online
 // keeps that.
 router.put('/:id/complete', auth, roleMiddleware(['driver']), async (req, res) => {
@@ -1409,7 +1411,8 @@ router.put('/:id/complete', auth, roleMiddleware(['driver']), async (req, res) =
 
     const alreadyPaid = booking.paymentStatus === 'paid';
     const paymentMethod = alreadyPaid ? booking.paymentMethod : (req.body.paymentMethod || booking.paymentMethod);
-    if (paymentMethod === 'card' && booking.paymentMethod !== 'card') {
+    const paidInPerson = paymentMethod === 'card' && req.body.paidInPerson === true;
+    if (paymentMethod === 'card' && !paidInPerson && booking.paymentMethod !== 'card') {
       const driver = await Driver.findById(booking.driverId);
       if (driver?.acceptsOnlinePayment === false) {
         return res.status(400).json({ error: 'Online payment is turned off in your settings - choose cash, or turn it on first' });
@@ -1426,9 +1429,11 @@ router.put('/:id/complete', auth, roleMiddleware(['driver']), async (req, res) =
         // Cash is collected in person at trip end (unless the driver says
         // payment is pending); card trips only become "paid" once the
         // passenger actually pays via /api/payment.
-        ...(paymentMethod === 'card'
-          ? { paymentStatus: 'unpaid', cardSurchargeAmount: calculateCardSurcharge(finalFare) }
-          : { paymentStatus: paymentPending ? 'unpaid' : 'paid', cardSurchargeAmount: 0 }),
+        ...(paidInPerson
+          ? { paymentStatus: 'paid', paidVia: 'card-in-person', cardSurchargeAmount: 0 }
+          : paymentMethod === 'card'
+            ? { paymentStatus: 'unpaid', paidVia: null, cardSurchargeAmount: calculateCardSurcharge(finalFare) }
+            : { paymentStatus: paymentPending ? 'unpaid' : 'paid', paidVia: paymentPending ? null : 'cash', cardSurchargeAmount: 0 }),
       }),
     });
 
@@ -1735,18 +1740,27 @@ router.put('/:id/fare', auth, roleMiddleware(['driver']), async (req, res) => {
   }
 });
 
-// PUT /api/booking/:id/mark-paid - driver manually confirms payment was
-// received outside the app (e.g. the passenger paid cash in person
-// despite booking as card, or an online payment was arranged another
-// way) - an alternative to the Stripe flow, not a replacement for it.
+// PUT /api/booking/:id/mark-paid { method?: 'cash' | 'card' } - driver
+// manually confirms payment was received outside the app: in cash, or by
+// card in person (EFTPOS / another app - recorded as paidVia
+// 'card-in-person', no online card fee). Without method the payment type
+// stays as booked. An alternative to the Stripe flow, not a replacement.
 router.put('/:id/mark-paid', auth, roleMiddleware(['driver']), async (req, res) => {
   const booking = await Booking.findById(req.params.id);
   if (!booking) return res.status(404).json({ error: 'Booking not found' });
   const driver = await Driver.findOne({ userId: req.user.id });
   if (!driver || String(booking.driverId) !== String(driver._id)) return res.status(403).json({ error: 'Not your trip' });
   if (booking.paymentStatus === 'paid') return res.status(400).json({ error: 'This trip is already marked paid' });
+  const method = req.body?.method;
+  if (method !== undefined && !['cash', 'card'].includes(method)) return res.status(400).json({ error: 'Payment must be cash or card' });
 
-  const updated = await Booking.findByIdAndUpdate(booking._id, { paymentStatus: 'paid' });
+  const paidBy = method || booking.paymentMethod;
+  const updated = await Booking.findByIdAndUpdate(booking._id, {
+    paymentStatus: 'paid',
+    paymentMethod: paidBy,
+    paidVia: paidBy === 'card' ? 'card-in-person' : 'cash',
+    cardSurchargeAmount: 0,
+  });
   res.json(updated);
 });
 

@@ -382,7 +382,7 @@ export default function PassengerDashboard() {
                   <div className="muted">{b.bookingId}</div>
                   <div>{b.pickupAddress}{b.stops?.map((s, i) => <span key={i}> → {s.address}</span>)} → {b.dropAddress}</div>
                   <div className="muted">
-                    {b.distanceKm} km · ${b.actualFare ?? b.estimatedFare}{b.actualFare == null && discountNote(b)} · {b.paymentMethod === 'card' ? (b.paymentStatus === 'paid' ? 'paid online' : 'unpaid (online)') : 'cash'}
+                    {b.distanceKm} km · ${b.actualFare ?? b.estimatedFare}{b.actualFare == null && discountNote(b)} · {b.paymentMethod === 'card' ? (b.paymentStatus === 'paid' ? (b.paidVia === 'card-in-person' ? 'paid by card' : 'paid online') : 'unpaid (online)') : 'cash'}
                   </div>
                   {b.scheduledFor && <div className="muted">Scheduled: {formatNzDateTime(b.scheduledFor)}</div>}
                   {b.arrivedAt && b.status === 'accepted' && (

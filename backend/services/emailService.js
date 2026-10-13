@@ -12,6 +12,10 @@ const { formatNzDateTime, formatNzDate } = require('../utils/nzTime');
 
 // "14 Oct 2026, 9:30 am" for a scheduled trip, else as soon as possible.
 const pickupTimeText = (b) => (b.scheduledFor ? formatNzDateTime(b.scheduledFor) : 'As soon as possible');
+
+// "Card (online)" vs a card the driver took in person (EFTPOS / another
+// app - paidVia 'card-in-person', see routes/booking.js) vs cash.
+const paymentLabel = (b) => (b.paidVia === 'card-in-person' ? 'Card (EFTPOS / in person)' : b.paymentMethod === 'card' ? 'Card (online)' : 'Cash');
 const { hasRealEmail } = require('../utils/users');
 const { siteUrl, siteLabel } = require('../utils/siteUrl');
 
@@ -379,7 +383,7 @@ function buildInvoiceHtml(booking, passenger, driver, driverName, { forPrint = f
       ${invoiceRow('Distance', `${booking.distanceKm} km`)}
       ${invoiceRow('Driver', driverName)}
       ${invoiceRow('Vehicle', vLabel)}
-      ${invoiceRow('Payment method', booking.paymentMethod === 'card' ? 'Card (online)' : 'Cash')}
+      ${invoiceRow('Payment method', paymentLabel(booking))}
       ${invoiceRow('Payment status', booking.paymentStatus === 'paid' ? 'Paid' : 'Unpaid')}
     </table>
 
@@ -425,7 +429,7 @@ function tripRows(booking) {
     ['When', booking.scheduledFor ? formatNzDateTime(booking.scheduledFor) : 'Now'],
     ['Distance', `${booking.distanceKm} km`],
     ['Fare', `${booking.estimatedFare}`],
-    ['Payment', booking.paymentMethod === 'card' ? 'Card (online)' : 'Cash'],
+    ['Payment', paymentLabel(booking)],
   ].map(([label, value]) => invoiceRow(label, value)).join('');
 }
 
@@ -523,7 +527,7 @@ function buildInvoiceText(booking, passenger, driver, driverName) {
     `${passenger?.name ? `Billed to: ${passenger.name}${passenger.address ? `, ${passenger.address}` : ''}\n` : ''}` +
     `Pickup: ${booking.pickupAddress}\nDrop-off: ${booking.dropAddress}\nDistance: ${booking.distanceKm} km\n` +
     `${driverName ? `Driver: ${driverName}\n` : ''}${vLabel ? `Vehicle: ${vLabel}\n` : ''}` +
-    `Payment: ${booking.paymentMethod === 'card' ? 'Card (online)' : 'Cash'}, ${booking.paymentStatus === 'paid' ? 'paid' : 'unpaid'}\n` +
+    `Payment: ${paymentLabel(booking)}, ${booking.paymentStatus === 'paid' ? 'paid' : 'unpaid'}\n` +
     `Fare: $${fare.toFixed(2)}${booking.cardSurchargeAmount > 0 ? `\nOnline payment surcharge: $${booking.cardSurchargeAmount.toFixed(2)}` : ''}\n` +
     `Total: $${total.toFixed(2)}\n\n` +
     `EasyRide${settings.adminEmail ? ` - ${settings.adminEmail}` : ''}${settings.adminMobile ? ` - ${settings.adminMobile}` : ''}`;

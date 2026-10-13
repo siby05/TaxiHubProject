@@ -301,15 +301,17 @@ export default function DriverDashboard() {
   // WhatsApp only opens when the driver ticked "Send receipt on WhatsApp"
   // in the Complete trip box - it's not needed for every trip (passengers
   // with an email get the receipt emailed anyway).
-  // payment: 'cash-paid' | 'cash-later' | 'card' (see the Complete trip box).
+  // payment: 'cash-paid' | 'card-paid' (EFTPOS / other app) | 'cash-later'
+  // | 'card' (pay online) - see the Complete trip box.
   async function complete(id, actualFare, payment, sendWhatsApp) {
     const booking = bookings.find((b) => b._id === id);
     const alreadyPaid = booking?.paymentStatus === 'paid';
-    const paymentMethod = payment === 'card' ? 'card' : 'cash';
+    const paymentMethod = payment === 'card' || payment === 'card-paid' ? 'card' : 'cash';
+    const paidInPerson = payment === 'card-paid';
     const paymentPending = !alreadyPaid && payment === 'cash-later';
     if (booking && sendWhatsApp) {
       const finalBooking = { ...booking, actualFare: actualFare || booking.estimatedFare };
-      const cardOwing = !alreadyPaid && paymentMethod === 'card';
+      const cardOwing = !alreadyPaid && payment === 'card';
       const payLink = cardOwing ? `${window.location.origin}/pay/${id}` : null;
       const receipt = receiptUrl(booking);
       // Opened before the API call so it counts as part of the tap (popup
@@ -325,17 +327,27 @@ export default function DriverDashboard() {
     }
 
     try {
-      await client.put(`/booking/${id}/complete`, { actualFare, paymentPending, ...(!alreadyPaid && { paymentMethod }) });
+      await client.put(`/booking/${id}/complete`, { actualFare, paymentPending, ...(!alreadyPaid && { paymentMethod, paidInPerson }) });
     } catch (err) {
       setAlert(err.response?.data?.error || 'Could not complete this trip');
     }
     load();
   }
 
-  async function markPaid(id) {
-    if (!window.confirm('Mark this trip as paid? Use this once you have received payment outside the app (e.g. cash in person).')) return;
+  // "Mark as paid" asks how it was paid: cash, or card taken in person
+  // (EFTPOS / another app). { booking, method } while open.
+  const [markPaidFor, setMarkPaidFor] = useState(null);
+
+  function markPaid(id) {
+    const b = bookings.find((x) => x._id === id);
+    if (b) setMarkPaidFor({ booking: b, method: b.paymentMethod === 'card' ? 'card' : 'cash' });
+  }
+
+  async function confirmMarkPaid() {
+    const { booking, method } = markPaidFor;
+    setMarkPaidFor(null);
     try {
-      await client.put(`/booking/${id}/mark-paid`);
+      await client.put(`/booking/${booking._id}/mark-paid`, { method });
       load();
     } catch (err) {
       setAlert(err.response?.data?.error || 'Could not mark this trip as paid');
@@ -410,7 +422,7 @@ export default function DriverDashboard() {
                 </div>
                 <div>{b.pickupAddress}{b.stops?.map((s, i) => <span key={i}> → {s.address}</span>)} → {b.dropAddress}</div>
                 <div className="muted">
-                  {b.passengerId?.name}{b.passengerRatingAvg ? ` (⭐${b.passengerRatingAvg})` : ''} · {b.distanceKm} km · est. ${b.estimatedFare}{discountNote(b)} · {b.paymentMethod === 'card' ? (b.paymentStatus === 'paid' ? 'paid online' : 'awaiting online payment') : (b.status === 'completed' && b.paymentStatus !== 'paid' ? 'cash · payment pending' : 'cash')}
+                  {b.passengerId?.name}{b.passengerRatingAvg ? ` (⭐${b.passengerRatingAvg})` : ''} · {b.distanceKm} km · est. ${b.estimatedFare}{discountNote(b)} · {b.paymentMethod === 'card' ? (b.paymentStatus === 'paid' ? (b.paidVia === 'card-in-person' ? 'paid by card (in person)' : 'paid online') : 'awaiting online payment') : (b.status === 'completed' && b.paymentStatus !== 'paid' ? 'cash · payment pending' : 'cash')}
                 </div>
                 <div className="muted">
                   {b.scheduledFor ? `Scheduled: ${formatNzDateTime(b.scheduledFor)}` : `Requested: ${formatNzDateTime(b.requestedAt || b.createdAt)}`}
@@ -507,6 +519,29 @@ export default function DriverDashboard() {
           </div>
         ))}
       </div>
+
+      {markPaidFor && (
+        <Modal title="Mark as paid" onClose={() => setMarkPaidFor(null)}>
+          <p className="muted" style={{ marginTop: 0 }}>
+            {markPaidFor.booking.bookingId} · ${Number(markPaidFor.booking.actualFare ?? markPaidFor.booking.estimatedFare).toFixed(2)}. How did the passenger pay?
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {[['cash', 'Cash'], ['card', 'Card (EFTPOS / other app)']].map(([value, label]) => (
+              <label key={value} style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 'normal' }}>
+                <input type="radio" name="mark-paid-method" checked={markPaidFor.method === value} style={{ width: 'auto' }}
+                  onChange={() => setMarkPaidFor((m) => ({ ...m, method: value }))} />
+                {label}
+              </label>
+            ))}
+          </div>
+          <div className="booking-row" style={{ border: 'none', paddingBottom: 0 }}>
+            <div className="booking-actions trip-actions">
+              <button className="btn secondary" onClick={() => setMarkPaidFor(null)}>Cancel</button>
+              <button className="btn" onClick={confirmMarkPaid}>Mark as paid</button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {tripEdit && (
         <Modal title="Edit trip" onClose={() => setTripEdit(null)}>
@@ -620,6 +655,7 @@ export default function DriverDashboard() {
                   <label style={{ marginBottom: 0 }}>Payment</label>
                   {[
                     ['cash-paid', 'Paid in cash'],
+                    ['card-paid', 'Paid by card (EFTPOS / other app)'],
                     ['cash-later', 'Cash - pay later'],
                     ['card', 'Card - pay online (passenger gets a payment link)'],
                   ].map(([value, label]) => {
