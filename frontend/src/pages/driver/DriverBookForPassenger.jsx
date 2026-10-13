@@ -100,7 +100,7 @@ export default function DriverBookForPassenger() {
         <div className="card" style={{ maxWidth: 480, background: '#dcfce7' }}>
           <h3>Booking created</h3>
           <p>For {success.passenger.name} ({success.passenger.mobile}) - ${success.booking.estimatedFare} estimated, already marked accepted.</p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <div className="btn-grid">
             <button className="btn" onClick={() => navigate('/driver')}>Back to trips</button>
             {waLink(success.passenger.mobile, `Hi ${success.passenger.name}, your EasyRide ride is booked (${success.booking.bookingId}). Pickup: ${success.booking.pickupAddress}, drop: ${success.booking.dropAddress}. Estimated fare: $${success.booking.estimatedFare}.`) && (
               <a className="btn secondary" target="_blank" rel="noreferrer"

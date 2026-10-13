@@ -313,7 +313,7 @@ export default function AdminDashboard() {
             ? <>Temporary password: <code>{resetPasswordInfo.temporaryPassword}</code></>
             : 'Temporary password generated (hidden - see admin settings to show it here).'}
           <p className="muted">{resetPasswordInfo.note}</p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <div className="btn-grid">
             {settings?.tempPasswordVisible !== false && waLink(resetPasswordInfo.mobile, `Hi ${resetPasswordInfo.name}, your EasyRide password was reset. Temporary password: ${resetPasswordInfo.temporaryPassword} - please log in and change it.`) && (
               <a className="btn whatsapp" target="_blank" rel="noreferrer"
                 href={waLink(resetPasswordInfo.mobile, `Hi ${resetPasswordInfo.name}, your EasyRide password was reset. Temporary password: ${resetPasswordInfo.temporaryPassword} - please log in and change it.`)}>
@@ -375,33 +375,34 @@ export default function AdminDashboard() {
 
           {driverView === 'list' && (
           <div className="card">
-          <table>
+          <table className="table-stack">
             <thead><tr><th>Driver</th><th>Vehicle</th><th>Rate/km</th><th>Status</th><th>Actions</th></tr></thead>
             <tbody>
               {drivers.map((d) => (
                 <Fragment key={d._id}>
                   <tr>
-                    <td>{d.userId?.name}<div className="muted">{d.userId?.email}</div></td>
-                    <td>{d.vehicleType} · {d.vehicleNumber}<div className="muted">Lic: {d.licenseNumber}</div></td>
-                    <td>
+                    <td data-label="Driver">{d.userId?.name}<div className="muted">{d.userId?.email}</div></td>
+                    <td data-label="Vehicle">{d.vehicleType} · {d.vehicleNumber}<div className="muted">Lic: {d.licenseNumber}</div></td>
+                    <td data-label="Rate/km">
                       ${d.ratePerKm}
                       {d.pendingRatePerKm != null && (
                         <div className="muted">
                           → ${d.pendingRatePerKm} requested
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                          <div className="btn-grid compact" style={{ marginTop: 4 }}>
                             <button className="btn sm" onClick={() => approveRate(d._id)}>Approve</button>
                             <button className="btn danger sm" onClick={() => rejectRate(d._id)}>Reject</button>
                           </div>
                         </div>
                       )}
                     </td>
-                    <td>
+                    <td data-label="Status">
                       <span className={`badge ${d.status}`}>{d.status}</span>
                       {d.compliance && !d.compliance.compliant && (
                         <div className="muted" title={d.compliance.issues.join('; ')}><span className="badge cancelled">NZTA: incomplete</span></div>
                       )}
                     </td>
-                    <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <td data-label="Actions">
+                      <div className="btn-grid compact" style={{ marginTop: 0 }}>
                       {d.status === 'pending' && <>
                         <button className="btn" onClick={() => approve(d._id)}>Approve</button>
                         <button className="btn danger" onClick={() => reject(d._id)}>Reject</button>
@@ -416,6 +417,7 @@ export default function AdminDashboard() {
                       )}
                       <Link className="btn secondary" to={`/admin/drivers/${d._id}/report`}>Report</Link>
                       <button className="btn danger" onClick={() => deleteDriver(d)}>Delete</button>
+                      </div>
                     </td>
                   </tr>
                   {qrFor?.id === d._id && (
@@ -598,7 +600,7 @@ export default function AdminDashboard() {
                     <div><label>Email (blank = none; receipts go via WhatsApp)</label><input type="email" value={passengerEdit.email} onChange={(e) => setPassengerEdit((f) => ({ ...f, email: e.target.value }))} /></div>
                     <AddressAutocomplete label="Home address" defaultValue={passengerEdit.address} onSelect={(r) => setPassengerEdit((f) => ({ ...f, address: r ? r.label : '' }))} />
                     {passengerError && <p className="error-text">{passengerError}</p>}
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    <div className="btn-grid">
                       <button className="btn">Save</button>
                       <button type="button" className="btn secondary" onClick={() => { setPassengerEdit(null); setPassengerError(''); }}>Cancel</button>
                     </div>
@@ -614,7 +616,7 @@ export default function AdminDashboard() {
                       {p.bookingBlocked && <span className="badge cancelled">booking blocked</span>}
                     </div>
                     <div className="muted" style={{ marginTop: 8 }}>{p.totalBookings} bookings · {p.completedTrips} completed · {p.ratingAvg ? `⭐ ${p.ratingAvg}` : 'no rating yet'}</div>
-                    <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+                    <div className="btn-grid">
                       <button className="btn secondary" onClick={() => { setPassengerError(''); setPassengerEdit({ _id: p._id, name: p.name || '', mobile: p.mobile || '', email: p.email || '', address: p.address || '' }); }}>
                         {p.hasEmail ? 'Edit' : 'Edit / add email'}
                       </button>

@@ -397,7 +397,7 @@ export default function PassengerDashboard() {
                 <StarRating label="Rate this driver" submitLabel="Rate" onSubmit={(rating, review) => rateDriver(b._id, rating, review)} />
               )}
 
-              <div className="booking-actions">
+              <div className="booking-actions trip-actions">
                 {b.status === 'pending' && (
                   <button className="btn secondary" onClick={() => openEdit(b)}>Edit ride</button>
                 )}
@@ -507,7 +507,7 @@ export default function PassengerDashboard() {
               </div>
             )}
 
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <div className="btn-grid">
               <button className="btn" onClick={saveEdit} disabled={editSaving || editQuoteLoading || !editQuote}>
                 {editSaving ? 'Saving...' : 'Save changes'}
               </button>

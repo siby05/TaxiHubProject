@@ -77,7 +77,7 @@ export default function DriverDocuments() {
             <p className="error-text" style={{ marginTop: 8 }}>Reason given: {doc.rejectionReason}</p>
           )}
 
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 10, flexWrap: 'wrap' }}>
+          <div className="btn-grid">
             {doc.url && <a className="btn secondary" href={`${fileOrigin}${doc.url}`} target="_blank" rel="noreferrer">View current file</a>}
             {doc.status !== 'verified' && (
               <label className="btn secondary" style={{ cursor: 'pointer', margin: 0 }}>

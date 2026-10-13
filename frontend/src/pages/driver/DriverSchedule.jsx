@@ -258,7 +258,7 @@ function DateShiftsDialog({ date, entry, weeklySlots, onSaved, onClose }) {
           onRemove={() => edit(draft.filter((_, j) => j !== i))} />
       ))}
 
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 16 }}>
+      <div className="btn-grid" style={{ marginTop: 16 }}>
         <button type="button" className="btn secondary"
           onClick={() => setDraft([...draft, { startTime: '', endTime: '' }])}>+ Add shift</button>
         {!isDayOff && (

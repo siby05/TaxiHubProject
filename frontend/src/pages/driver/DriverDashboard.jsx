@@ -384,7 +384,7 @@ export default function DriverDashboard() {
                 <div className="muted">Rate change to ${profile.pendingRatePerKm}/km pending admin approval</div>
               )}
             </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+            <div className="btn-grid" style={{ flex: '1 1 260px', marginTop: 0 }}>
               {notifPermission !== 'granted' && notifPermission !== 'unsupported' && (
                 <button className="btn secondary" onClick={enableNotifications}>🔔 Enable trip notifications</button>
               )}

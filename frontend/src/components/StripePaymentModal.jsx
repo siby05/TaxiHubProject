@@ -86,7 +86,7 @@ function PayForm({ bookingId, onSuccess, onClose }) {
       )}
 
       {error && <p className="error-text" style={{ marginTop: 10 }}>{error}</p>}
-      <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
+      <div className="btn-grid" style={{ marginTop: 14 }}>
         {card ? (
           <>
             <button type="button" className="btn" onClick={pay} disabled={loading}>{loading ? 'Processing...' : `Pay ${money(card.total)}`}</button>

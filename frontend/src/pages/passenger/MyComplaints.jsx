@@ -59,7 +59,7 @@ export default function MyComplaints() {
                   <div>
                     <textarea placeholder="Why are you reopening this?" value={reason} onChange={(e) => setReason(e.target.value)} />
                     {error && <p className="error-text">{error}</p>}
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                    <div className="btn-grid">
                       <button className="btn" onClick={() => submitReopen(c._id)}>Submit</button>
                       <button className="btn secondary" onClick={() => { setReopenFor(null); setError(''); }}>Cancel</button>
                     </div>

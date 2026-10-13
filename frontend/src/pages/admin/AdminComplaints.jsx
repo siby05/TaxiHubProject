@@ -88,14 +88,14 @@ export default function AdminComplaints() {
             {c.driverComments?.map((dc, i) => <p key={i} className="muted"><strong>Driver:</strong> {dc.comment}</p>)}
             {c.adminNotes?.map((n, i) => <p key={i} className="muted"><strong>Internal note ({n.noteByName}):</strong> {n.note}</p>)}
 
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+            <div className="btn-grid">
               <select defaultValue="" onChange={(e) => { if (e.target.value) setStatus(c._id, e.target.value); }}>
                 <option value="">Change status...</option>
                 {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
               {!c.isSerious && <button className="btn danger" onClick={() => escalate(c._id)}>Escalate</button>}
             </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+            <div className="btn-grid" style={{ marginTop: 8 }}>
               <input placeholder="Internal note..." value={notes[c._id] || ''} onChange={(e) => setNotes((n) => ({ ...n, [c._id]: e.target.value }))} />
               <button className="btn secondary" onClick={() => addNote(c._id)}>Add note</button>
             </div>

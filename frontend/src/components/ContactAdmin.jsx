@@ -21,10 +21,12 @@ export default function ContactAdmin({ context }) {
   const whatsappLink = waLink(contact.mobile, message);
 
   return (
-    <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+    <div style={{ marginTop: 8 }}>
       <span className="muted">Need help?</span>
-      {whatsappLink && <a className="btn whatsapp" target="_blank" rel="noreferrer" href={whatsappLink}>Contact admin on WhatsApp</a>}
-      {mailtoLink && <a className="btn secondary" href={mailtoLink}>Email admin</a>}
+      <div className="btn-grid" style={{ marginTop: 6 }}>
+        {whatsappLink && <a className="btn whatsapp" target="_blank" rel="noreferrer" href={whatsappLink}>Contact admin on WhatsApp</a>}
+        {mailtoLink && <a className="btn secondary" href={mailtoLink}>Email admin</a>}
+      </div>
     </div>
   );
 }

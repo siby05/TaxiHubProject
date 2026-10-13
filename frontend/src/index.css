@@ -322,6 +322,40 @@ th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--bor
 .btn.danger-outline { background: #fff; color: var(--danger); border-color: #fca5a5; box-shadow: none; }
 .btn.danger-outline:hover { background: #fef2f2; color: #b91c1c; border-color: var(--danger); box-shadow: none; }
 
+/* Any group of action buttons (Edit / Delete / Save / Cancel ...): equal-
+   width columns - two on a phone, more on wider screens - so buttons with
+   different label lengths still line up instead of wrapping into ragged
+   rows. A button on its own in the last row stretches across. */
+.btn-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+.btn-grid > .btn, .btn-grid > a.btn { width: 100%; min-width: 0; margin: 0; }
+.btn-grid.compact { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
+
+/* Tables marked table-stack (e.g. admin driver list) show each row as a
+   card on phones - label above value - instead of a table too wide to read. */
+td.num-cell { text-align: right; white-space: nowrap; }
+@media (max-width: 640px) {
+  table.table-stack { display: block; white-space: normal; overflow: visible; }
+  table.table-stack thead { display: none; }
+  table.table-stack tbody, table.table-stack tr, table.table-stack td { display: block; width: 100%; }
+  table.table-stack tr { border-bottom: 1px solid var(--border); padding: 10px 0; }
+  table.table-stack td { border: none; padding: 4px 0; }
+  table.table-stack td.num-cell { text-align: left; }
+  table.table-stack .btn-grid { min-width: 0 !important; }
+  table.table-stack td[data-label]::before {
+    content: attr(data-label); display: block; font-size: 0.75rem; font-weight: 600; color: var(--muted, #64748b);
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+}
+@media (max-width: 480px) {
+  .btn-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .btn-grid > .btn:last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
+
 /* Driver trip actions (DriverDashboard.jsx): an even two-column grid so
    every button in a row is the same size. A button on its own in the last
    row (or marked .full) spans both columns. */

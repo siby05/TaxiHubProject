@@ -173,12 +173,12 @@ export default function DriverSettings() {
       <div className="card" style={{ maxWidth: 400 }}>
         <h3 style={{ marginTop: 0 }}>Rate</h3>
         <p className="muted">Currently ${profile.ratePerKm}/km.{profile.pendingRatePerKm != null && ` Change to $${profile.pendingRatePerKm}/km pending admin approval.`}</p>
-        <form onSubmit={requestRate} style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <div style={{ maxWidth: 160 }}>
-            <label>Request new rate ($/km)</label>
+        <form onSubmit={requestRate}>
+          <label>Request new rate ($/km)</label>
+          <div className="btn-grid" style={{ marginTop: 0 }}>
             <input type="number" step="0.1" min="0.1" value={newRate} onChange={(e) => setNewRate(e.target.value)} required />
+            <button className="btn secondary">Submit for approval</button>
           </div>
-          <button className="btn secondary">Submit for approval</button>
         </form>
         {rateMsg && <p className="muted" style={{ marginTop: 6 }}>{rateMsg}</p>}
       </div>

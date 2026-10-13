@@ -394,7 +394,7 @@ ${data.expenses.slice().sort((a, b) => a.date.localeCompare(b.date)).map((e) => 
           <div style={{ flex: '2 1 220px' }}><label>Notes (optional)</label><input value={form.notes} maxLength={500} onChange={(e) => update('notes', e.target.value)} placeholder="e.g. 4 x front tyres, 1,000 km RUC" /></div>
         </div>
         {formError && <p className="error-text" style={{ margin: 0 }}>{formError}</p>}
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="btn-grid" style={{ marginTop: 0 }}>
           <button className="btn" type="submit" disabled={saving || !data}>{saving ? 'Saving...' : editingId ? 'Save changes' : 'Add expense'}</button>
           {editingId && <button className="btn secondary" type="button" onClick={cancelEdit}>Cancel</button>}
         </div>
@@ -425,7 +425,7 @@ ${data.expenses.slice().sort((a, b) => a.date.localeCompare(b.date)).map((e) => 
               )}
               {(data.repeating || []).map((e) => (
                 <div key={e._id} className="booking-row">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                  <div>
                     <div>
                       <strong>{categoryLabels[e.category] || e.category}</strong>{e.supplier ? ` · ${e.supplier}` : ''}
                       <div>{money(e.amount)} <span style={{ color: 'var(--primary)' }}>↻ {REPEAT_LABELS[e.repeat]}</span></div>
@@ -436,7 +436,7 @@ ${data.expenses.slice().sort((a, b) => a.date.localeCompare(b.date)).map((e) => 
                       </div>
                       {e.nextDate && <div className="muted" style={{ fontSize: '0.85rem' }}>Next: {formatNzDate(`${e.nextDate}T12:00:00`)}</div>}
                     </div>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                    <div className="btn-grid">
                       <button type="button" className="btn secondary" onClick={() => (intervalEdit?.id === e._id ? setIntervalEdit(null) : startIntervalEdit(e))}>Change interval</button>
                       <button type="button" className="btn danger" onClick={() => stopRepeat(e)}>Stop repeating</button>
                     </div>
@@ -452,12 +452,12 @@ ${data.expenses.slice().sort((a, b) => a.date.localeCompare(b.date)).map((e) => 
                           </label>
                         ))}
                       </div>
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                        <div>
-                          <label>Next payment due</label>
-                          <input type="date" value={intervalEdit.nextDate} min={nzToday()}
-                            onChange={(ev) => setIntervalEdit((ie) => ({ ...ie, nextDate: ev.target.value }))} />
-                        </div>
+                      <div>
+                        <label>Next payment due</label>
+                        <input type="date" value={intervalEdit.nextDate} min={nzToday()}
+                          onChange={(ev) => setIntervalEdit((ie) => ({ ...ie, nextDate: ev.target.value }))} />
+                      </div>
+                      <div className="btn-grid" style={{ marginTop: 0 }}>
                         <button type="button" className="btn" onClick={saveInterval} disabled={!intervalEdit.nextDate}>Save</button>
                         <button type="button" className="btn secondary" onClick={() => setIntervalEdit(null)}>Cancel</button>
                       </div>
@@ -496,7 +496,7 @@ ${data.expenses.slice().sort((a, b) => a.date.localeCompare(b.date)).map((e) => 
             <strong>{money(filteredTotal)}</strong>
           </div>
           <div style={{ overflowX: 'auto' }}>
-            <table>
+            <table className="table-stack">
               <thead>
                 <tr>
                   <th style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>Date{sortMark('date')}</th>
@@ -509,24 +509,26 @@ ${data.expenses.slice().sort((a, b) => a.date.localeCompare(b.date)).map((e) => 
               <tbody>
                 {rows.map((e) => (
                   <tr key={e._id}>
-                    <td style={{ whiteSpace: 'nowrap' }}>{formatNzDate(`${e.date}T12:00:00`)}</td>
-                    <td>
+                    <td data-label="Date" style={{ whiteSpace: 'nowrap' }}>{formatNzDate(`${e.date}T12:00:00`)}</td>
+                    <td data-label="Category">
                       {e.categoryLabel}
                       {REPEAT_LABELS[e.repeat] && <div style={{ fontSize: '0.8rem', color: 'var(--primary)' }}>↻ Repeats {REPEAT_LABELS[e.repeat]}</div>}
                       {e.recurringFromId && <div className="muted" style={{ fontSize: '0.8rem' }}>↻ Added automatically</div>}
                       {e.notes && <div className="muted" style={{ fontSize: '0.8rem' }}>{e.notes}</div>}
                     </td>
-                    <td>
-                      {e.supplier}
+                    <td data-label="Supplier">
+                      {e.supplier || '-'}
                       {e.reference && <div className="muted" style={{ fontSize: '0.8rem' }}>#{e.reference}</div>}
                     </td>
-                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <td data-label="Amount" className="num-cell">
                       {money(e.amount)}
                       <div className="muted" style={{ fontSize: '0.75rem' }}>{e.gstIncluded ? `incl. ${money(e.gst)} GST` : 'no GST'}</div>
                     </td>
-                    <td style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
-                      <button type="button" className="btn secondary" style={{ padding: '4px 10px' }} onClick={() => startEdit(e)}>Edit</button>{' '}
-                      <button type="button" className="btn danger" style={{ padding: '4px 10px' }} onClick={() => remove(e)}>Delete</button>
+                    <td>
+                      <div className="btn-grid compact" style={{ marginTop: 0, minWidth: 180 }}>
+                        <button type="button" className="btn secondary sm" onClick={() => startEdit(e)}>Edit</button>
+                        <button type="button" className="btn danger sm" onClick={() => remove(e)}>Delete</button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -541,9 +543,9 @@ ${data.expenses.slice().sort((a, b) => a.date.localeCompare(b.date)).map((e) => 
       {/* 3. Summary & report */}
       {s && (
         <>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, margin: '8px 0 12px' }}>
+          <div style={{ margin: '8px 0 12px' }}>
             <h2 style={{ margin: 0 }}>Summary - {fyLabel(data.financialYear)}</h2>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div className="btn-grid" style={{ maxWidth: 420 }}>
               <button type="button" className="btn secondary" onClick={exportCsv} disabled={!rows.length}>Download CSV</button>
               <button type="button" className="btn" onClick={printReport}>Print / save report</button>
             </div>
