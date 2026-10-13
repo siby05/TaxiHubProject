@@ -12,6 +12,9 @@ import { discountNote } from '../../utils/fare';
 import { useTripGpsTracking } from '../../hooks/useTripGpsTracking';
 import WhatsAppIcon from '../../components/WhatsAppIcon';
 import Modal from '../../components/Modal';
+import AddressAutocomplete from '../../components/AddressAutocomplete';
+import ScheduleField from '../../components/ScheduleField';
+import { newStopId, makeStopHandlers, stopsPayload } from '../../utils/stops';
 
 // Same rule as the backend's POST /api/booking/driver/location: a trip is
 // "on the go" (so its GPS route is recorded) once it's in progress, or
@@ -31,6 +34,61 @@ export default function DriverDashboard() {
   // The "Complete trip" / "Edit trip" dialog: { mode: 'complete' | 'edit',
   // booking, fare, paymentPending, error, saving } or null when closed.
   const [fareDialog, setFareDialog] = useState(null);
+  // "Edit trip" before it starts (route and time) - the trip being edited,
+  // or null. Completed trips use the fare dialog above instead.
+  const [tripEdit, setTripEdit] = useState(null);
+  const [tePickup, setTePickup] = useState(null);
+  const [teDrop, setTeDrop] = useState(null);
+  const [teStops, setTeStops] = useState([]);
+  const [teScheduledFor, setTeScheduledFor] = useState(null);
+  const [tePreview, setTePreview] = useState(null);
+  const [teError, setTeError] = useState('');
+  const [teSaving, setTeSaving] = useState(false);
+  const teStopHandlers = makeStopHandlers(setTeStops);
+
+  function openTripEdit(b) {
+    setTripEdit(b);
+    setTePickup({ label: b.pickupAddress, lat: b.pickupLat, lng: b.pickupLng });
+    setTeDrop({ label: b.dropAddress, lat: b.dropLat, lng: b.dropLng });
+    setTeStops((b.stops || []).map((st) => ({ id: newStopId(), selection: { label: st.address, lat: st.lat, lng: st.lng } })));
+    setTeScheduledFor(b.scheduledFor || null);
+    setTePreview(null);
+    setTeError('');
+  }
+
+  function tripEditPayload() {
+    return {
+      pickupAddress: tePickup.label, pickupLat: tePickup.lat, pickupLng: tePickup.lng,
+      dropAddress: teDrop.label, dropLat: teDrop.lat, dropLng: teDrop.lng,
+      stops: stopsPayload(teStops), scheduledFor: teScheduledFor,
+    };
+  }
+
+  // Live fare for the edited route (same endpoint, preview only).
+  useEffect(() => {
+    if (!tripEdit || !tePickup || !teDrop || teStops.some((st) => !st.selection)) return undefined;
+    let cancelled = false;
+    const t = setTimeout(() => {
+      client.put(`/booking/${tripEdit._id}/driver-edit`, { ...tripEditPayload(), preview: true })
+        .then((r) => { if (!cancelled) { setTePreview(r.data); setTeError(''); } })
+        .catch((err) => { if (!cancelled) { setTePreview(null); setTeError(err.response?.data?.error || 'Could not work out the fare'); } });
+    }, 300);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [tripEdit, tePickup, teDrop, teStops, teScheduledFor]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function saveTripEdit() {
+    setTeSaving(true);
+    setTeError('');
+    try {
+      await client.put(`/booking/${tripEdit._id}/driver-edit`, tripEditPayload());
+      setTripEdit(null);
+      load();
+    } catch (err) {
+      setTeError(err.response?.data?.error || 'Could not save the changes');
+    } finally {
+      setTeSaving(false);
+    }
+  }
   const [alert, setAlert] = useState('');
   const [availError, setAvailError] = useState('');
   const [showAllTrips, setShowAllTrips] = useState(false);
@@ -378,7 +436,10 @@ export default function DriverDashboard() {
                     {cardOwing && <button className="btn secondary" onClick={() => markPaid(b._id)}>Mark as paid</button>}
                   </div>
                   <div className="booking-actions trip-actions">
-                    <button className="btn danger-outline full" onClick={() => cancelTrip(b._id)}>Cancel trip</button>
+                    {b.status === 'accepted' && (
+                      <button className="btn secondary" onClick={() => openTripEdit(b)}>✏️ Edit trip</button>
+                    )}
+                    <button className="btn danger-outline" onClick={() => cancelTrip(b._id)}>Cancel trip</button>
                   </div>
                 </>
               );
@@ -417,6 +478,42 @@ export default function DriverDashboard() {
           </div>
         ))}
       </div>
+
+      {tripEdit && (
+        <Modal title="Edit trip" onClose={() => setTripEdit(null)}>
+          <p className="muted" style={{ marginTop: 0 }}>
+            {tripEdit.bookingId} · {tripEdit.passengerId?.name}. The fare is recalculated, and the passenger is told about the change in the app and by email.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <AddressAutocomplete label="Pickup address" defaultValue={tePickup?.label} onSelect={setTePickup} required />
+            {teStops.map((stop, i) => (
+              <div key={stop.id} style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
+                <div style={{ flex: 1 }}>
+                  <AddressAutocomplete label={`Stop ${i + 1}`} defaultValue={stop.selection?.label} onSelect={(sel) => teStopHandlers.update(stop.id, sel)} required />
+                </div>
+                <button type="button" className="btn danger" style={{ marginBottom: 1 }} onClick={() => teStopHandlers.remove(stop.id)}>Remove</button>
+              </div>
+            ))}
+            <button type="button" className="btn secondary" style={{ alignSelf: 'flex-start' }} onClick={teStopHandlers.add}>+ Add stop</button>
+            <AddressAutocomplete label="Drop-off address" defaultValue={teDrop?.label} onSelect={setTeDrop} required />
+            <ScheduleField onChange={setTeScheduledFor} defaultValue={teScheduledFor} />
+            {tePreview && (
+              <div className="card fare-confirm">
+                <strong>New estimated fare: ${tePreview.estimatedFare.toFixed(2)}</strong>
+                {tePreview.estimatedFare !== tripEdit.estimatedFare && <span className="muted"> (was ${Number(tripEdit.estimatedFare).toFixed(2)})</span>}
+                <div className="muted">{tePreview.distanceKm} km{teStops.length > 0 && ` · via ${teStops.length} stop${teStops.length > 1 ? 's' : ''}`}{teScheduledFor && ` · ${formatNzDateTime(teScheduledFor)}`}</div>
+              </div>
+            )}
+            {teError && <p className="error-text" style={{ margin: 0 }}>{teError}</p>}
+          </div>
+          <div className="booking-row" style={{ border: 'none', paddingBottom: 0 }}>
+            <div className="booking-actions trip-actions">
+              <button className="btn secondary" onClick={() => setTripEdit(null)}>Cancel</button>
+              <button className="btn" disabled={teSaving || !tePreview} onClick={saveTripEdit}>{teSaving ? 'Saving...' : 'Save changes'}</button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {fareDialog && (() => {
         const { mode, booking: fb, fare, paymentPending, error, saving } = fareDialog;

@@ -29,6 +29,7 @@ const { getPassengerRatingAvg } = require('../utils/ratings');
 const { placeholderEmail, hasRealEmail } = require('../utils/users');
 const { rateLimit } = require('../middleware/rateLimit');
 const { priceWithPromo, refreshReturnTripInBackground, publicPromotions } = require('../utils/discounts');
+const { formatNzDateTime } = require('../utils/nzTime');
 
 // The guest (QR-scan, no login) endpoints are the only unauthenticated
 // way to create data or look people up.
@@ -875,6 +876,71 @@ router.put('/:id/edit', auth, roleMiddleware(['passenger']), async (req, res) =>
       const notifySet = new Map([...oldEligible, ...newEligible].map((d) => [String(d.userId), d.userId]));
       for (const userId of notifySet.values()) emitToUser(req, userId, 'booking:updated', { bookingId: booking._id });
     }
+
+    res.json(updated);
+  } catch (err) {
+    serverError(res, err, req);
+  }
+});
+
+// PUT /api/booking/:id/driver-edit - the driver changes a trip of theirs
+// before it starts (still pending or accepted): pickup, drop-off, stops
+// and pickup time. Distance and fare are recalculated at the driver's rate
+// (discounts re-applied as for the passenger's own edit above) and the
+// passenger is told by in-app notice and email. { preview: true } returns
+// the recalculated fare without saving, for the edit dialog. Completed
+// trips are corrected with PUT /:id/fare instead.
+router.put('/:id/driver-edit', auth, roleMiddleware(['driver']), async (req, res) => {
+  try {
+    const driver = await Driver.findOne({ userId: req.user.id });
+    if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
+    const booking = await Booking.findById(req.params.id);
+    if (!booking) return res.status(404).json({ error: 'Booking not found' });
+    if (String(booking.driverId) !== String(driver._id)) return res.status(403).json({ error: 'Not your trip' });
+    if (booking.status === 'in-progress') return res.status(400).json({ error: 'This trip has already started, so its route can\'t be changed' });
+    if (!['pending', 'accepted'].includes(booking.status)) return res.status(400).json({ error: `Can't edit a trip that's already ${booking.status}` });
+    if (booking.paymentStatus === 'paid') return res.status(400).json({ error: 'This trip is already paid, so its route can\'t be changed' });
+
+    const { pickupAddress, pickupLat, pickupLng, dropAddress, dropLat, dropLng, scheduledFor, stops } = req.body;
+    const coordsOk = (lat, lng) => lat == null || (Number.isFinite(Number(lat)) && Number.isFinite(Number(lng)));
+    if (!coordsOk(pickupLat, pickupLng) || !coordsOk(dropLat, dropLng)) return res.status(400).json({ error: 'Choose the addresses from the suggestions' });
+    if (scheduledFor && new Date(scheduledFor) <= new Date()) return res.status(400).json({ error: 'The pickup time must be in the future' });
+    const stopsError = invalidStopsError(stops);
+    if (stopsError) return res.status(400).json({ error: stopsError });
+
+    const next = {
+      pickupAddress: pickupAddress ?? booking.pickupAddress,
+      pickupLat: pickupLat != null ? Number(pickupLat) : booking.pickupLat,
+      pickupLng: pickupLng != null ? Number(pickupLng) : booking.pickupLng,
+      dropAddress: dropAddress ?? booking.dropAddress,
+      dropLat: dropLat != null ? Number(dropLat) : booking.dropLat,
+      dropLng: dropLng != null ? Number(dropLng) : booking.dropLng,
+      stops: stops !== undefined ? cleanStops(stops) : (booking.stops || []),
+      scheduledFor: scheduledFor !== undefined ? (scheduledFor ? new Date(scheduledFor) : null) : booking.scheduledFor,
+    };
+    const distanceKm = routeDistanceKm({ lat: next.pickupLat, lng: next.pickupLng }, { lat: next.dropLat, lng: next.dropLng }, next.stops);
+    const requestedTime = next.scheduledFor ? new Date(next.scheduledFor) : new Date();
+    // The return-trip discount is re-applied by refreshReturnTripInBackground()
+    // below if the edited trip still pairs, same as the passenger's edit.
+    const fare = priceWithPromo(calculateTripFare(distanceKm, driver.ratePerKm, getSettings()), requestedTime);
+    const cardSurchargeAmount = booking.paymentMethod === 'card' ? calculateCardSurcharge(fare.estimatedFare) : 0;
+
+    if (req.body.preview) {
+      return res.json({ distanceKm, ...fare, cardSurchargeAmount, total: Math.round((fare.estimatedFare + cardSurchargeAmount) * 100) / 100 });
+    }
+
+    const updated = await Booking.findByIdAndUpdate(booking._id, { ...next, distanceKm, ...fare, cardSurchargeAmount });
+    refreshReturnTripInBackground(req, booking, updated);
+
+    emitToUser(req, booking.passengerId, 'booking:updated', { bookingId: booking._id });
+    notifyUser(booking.passengerId, {
+      type: 'booking-updated',
+      title: 'Your driver updated your trip',
+      message: `${updated.pickupAddress} → ${updated.dropAddress}${updated.scheduledFor ? ` · ${formatNzDateTime(updated.scheduledFor)}` : ''} · est. $${Number(updated.estimatedFare).toFixed(2)}`,
+      link: '/passenger',
+    });
+    const passenger = await User.findById(booking.passengerId);
+    if (passenger) runInBackground('email sendTripChangedByDriver', () => emailService.sendTripChangedByDriver(passenger.email, updated, booking.estimatedFare));
 
     res.json(updated);
   } catch (err) {

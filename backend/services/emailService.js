@@ -595,6 +595,18 @@ You'll get another email as soon as a driver accepts. Track it here: ${appUrl('/
   sendFareChanged: (to, subject, message) =>
     send(to, subject, `${message}\nOpen the app: ${appUrl('/passenger')}`),
 
+  // The driver changed a trip before it started (routes/booking.js
+  // PUT /:id/driver-edit) - new route/time/fare for the passenger.
+  sendTripChangedByDriver: (to, booking, oldFare) =>
+    send(to, `Your trip ${booking.bookingId} has been updated by your driver`,
+      `Your driver has updated your trip:\n` +
+      `Pickup: ${booking.pickupAddress}\n` +
+      `${(booking.stops || []).map((s, i) => `Stop ${i + 1}: ${s.address}\n`).join('')}` +
+      `Drop-off: ${booking.dropAddress}\n` +
+      `When: ${booking.scheduledFor ? formatNzDateTime(booking.scheduledFor) : 'Now'}\n` +
+      `Estimated fare: $${Number(booking.estimatedFare).toFixed(2)}${oldFare != null && oldFare !== booking.estimatedFare ? ` (was $${Number(oldFare).toFixed(2)})` : ''}\n` +
+      `If anything looks wrong, contact your driver or reply in the app: ${appUrl('/passenger')}`),
+
   // A driver turned a trip request down (see routes/booking.js
   // declineBooking). Either it's gone to other drivers, or no other driver
   // can take it and the request has been closed.
