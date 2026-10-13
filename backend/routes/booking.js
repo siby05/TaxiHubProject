@@ -1387,28 +1387,49 @@ function parseFare(value) {
   return { fare: Math.round(n * 100) / 100 };
 }
 
-// PUT /api/booking/:id/complete - driver enters the actual fare charged.
-// paymentPending: true leaves a cash trip unpaid (the passenger pays
-// later - "Mark as paid" once they do); otherwise cash is marked paid.
+// PUT /api/booking/:id/complete - driver enters the actual fare charged
+// and how it's being paid: paymentMethod 'cash' (paid now, or
+// paymentPending: true to collect later - "Mark as paid" once they do) or
+// 'card' (the passenger pays online afterwards via the pay link). Omitted,
+// the trip keeps its booked payment type. A trip already paid online
+// keeps that.
 router.put('/:id/complete', auth, roleMiddleware(['driver']), async (req, res) => {
   try {
     const { error: fareError, fare: actualFare } = parseFare(req.body.actualFare);
     if (fareError) return res.status(400).json({ error: fareError });
     const paymentPending = req.body.paymentPending === true;
+    if (req.body.paymentMethod !== undefined && !['cash', 'card'].includes(req.body.paymentMethod)) {
+      return res.status(400).json({ error: 'Payment must be cash or card' });
+    }
     const booking = await Booking.findById(req.params.id);
     if (!booking) return res.status(404).json({ error: 'Booking not found' });
     // Guards against double-incrementing the driver's totalTrips/
     // totalEarnings below if Complete is ever hit twice for the same trip.
     if (booking.status === 'completed') return res.status(400).json({ error: 'Trip already completed' });
 
+    const alreadyPaid = booking.paymentStatus === 'paid';
+    const paymentMethod = alreadyPaid ? booking.paymentMethod : (req.body.paymentMethod || booking.paymentMethod);
+    if (paymentMethod === 'card' && booking.paymentMethod !== 'card') {
+      const driver = await Driver.findById(booking.driverId);
+      if (driver?.acceptsOnlinePayment === false) {
+        return res.status(400).json({ error: 'Online payment is turned off in your settings - choose cash, or turn it on first' });
+      }
+    }
+    const finalFare = actualFare || booking.estimatedFare;
+
     const updated = await Booking.findByIdAndUpdate(req.params.id, {
       status: 'completed',
-      actualFare: actualFare || booking.estimatedFare,
+      actualFare: finalFare,
       completedAt: new Date(),
-      // Cash is collected in person at trip end (unless the driver says
-      // payment is pending); card bookings only become "paid" once the
-      // passenger actually pays via /api/payment.
-      ...(booking.paymentMethod !== 'card' && !paymentPending && { paymentStatus: 'paid' }),
+      ...(!alreadyPaid && {
+        paymentMethod,
+        // Cash is collected in person at trip end (unless the driver says
+        // payment is pending); card trips only become "paid" once the
+        // passenger actually pays via /api/payment.
+        ...(paymentMethod === 'card'
+          ? { paymentStatus: 'unpaid', cardSurchargeAmount: calculateCardSurcharge(finalFare) }
+          : { paymentStatus: paymentPending ? 'unpaid' : 'paid', cardSurchargeAmount: 0 }),
+      }),
     });
 
     // The trip is complete as soon as that write lands - answer the driver

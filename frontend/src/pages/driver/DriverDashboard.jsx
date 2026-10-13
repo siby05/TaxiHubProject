@@ -258,7 +258,11 @@ export default function DriverDashboard() {
   const fareText = (n) => (n == null || n === '' ? '' : Number(n).toFixed(2));
 
   function openComplete(b) {
-    setFareDialog({ mode: 'complete', booking: b, fare: fareText(b.estimatedFare), paymentPending: false, sendWhatsApp: false, error: '' });
+    setFareDialog({
+      mode: 'complete', booking: b, fare: fareText(b.estimatedFare), sendWhatsApp: false, error: '',
+      // 'cash-paid' | 'cash-later' | 'card' - starts on how it was booked.
+      completePayment: b.paymentMethod === 'card' ? 'card' : 'cash-paid',
+    });
   }
 
   function openEdit(b) {
@@ -269,7 +273,7 @@ export default function DriverDashboard() {
   }
 
   async function saveFareDialog() {
-    const { mode, booking, fare, paymentMethod, paymentPending, sendWhatsApp } = fareDialog;
+    const { mode, booking, fare, paymentMethod, paymentPending, sendWhatsApp, completePayment } = fareDialog;
     const amount = Number(fare);
     if (!Number.isFinite(amount) || amount <= 0) {
       setFareDialog((d) => ({ ...d, error: 'Enter the fare charged' }));
@@ -277,7 +281,7 @@ export default function DriverDashboard() {
     }
     if (mode === 'complete') {
       setFareDialog(null);
-      await complete(booking._id, amount, booking.paymentMethod !== 'card' && paymentPending, sendWhatsApp);
+      await complete(booking._id, amount, completePayment, sendWhatsApp);
       return;
     }
     setFareDialog((d) => ({ ...d, saving: true, error: '' }));
@@ -297,11 +301,15 @@ export default function DriverDashboard() {
   // WhatsApp only opens when the driver ticked "Send receipt on WhatsApp"
   // in the Complete trip box - it's not needed for every trip (passengers
   // with an email get the receipt emailed anyway).
-  async function complete(id, actualFare, paymentPending, sendWhatsApp) {
+  // payment: 'cash-paid' | 'cash-later' | 'card' (see the Complete trip box).
+  async function complete(id, actualFare, payment, sendWhatsApp) {
     const booking = bookings.find((b) => b._id === id);
+    const alreadyPaid = booking?.paymentStatus === 'paid';
+    const paymentMethod = payment === 'card' ? 'card' : 'cash';
+    const paymentPending = !alreadyPaid && payment === 'cash-later';
     if (booking && sendWhatsApp) {
       const finalBooking = { ...booking, actualFare: actualFare || booking.estimatedFare };
-      const cardOwing = booking.paymentMethod === 'card' && booking.paymentStatus !== 'paid';
+      const cardOwing = !alreadyPaid && paymentMethod === 'card';
       const payLink = cardOwing ? `${window.location.origin}/pay/${id}` : null;
       const receipt = receiptUrl(booking);
       // Opened before the API call so it counts as part of the tap (popup
@@ -317,7 +325,7 @@ export default function DriverDashboard() {
     }
 
     try {
-      await client.put(`/booking/${id}/complete`, { actualFare, paymentPending });
+      await client.put(`/booking/${id}/complete`, { actualFare, paymentPending, ...(!alreadyPaid && { paymentMethod }) });
     } catch (err) {
       setAlert(err.response?.data?.error || 'Could not complete this trip');
     }
@@ -604,7 +612,32 @@ export default function DriverDashboard() {
                 </div>
               </>
             )}
-            {isCash ? (
+            {mode === 'complete' ? (
+              cardPaid ? (
+                <p className="muted" style={{ margin: 0 }}>Paid online by card.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <label style={{ marginBottom: 0 }}>Payment</label>
+                  {[
+                    ['cash-paid', 'Paid in cash'],
+                    ['cash-later', 'Cash - pay later'],
+                    ['card', 'Card - pay online (passenger gets a payment link)'],
+                  ].map(([value, label]) => {
+                    const off = value === 'card' && fb.paymentMethod !== 'card' && profile?.acceptsOnlinePayment === false;
+                    return (
+                      <label key={value} style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 'normal', opacity: off ? 0.5 : 1 }}>
+                        <input type="radio" name="complete-payment" checked={fareDialog.completePayment === value} disabled={off}
+                          style={{ width: 'auto' }} onChange={() => set({ completePayment: value })} />
+                        {label}
+                      </label>
+                    );
+                  })}
+                  {fb.paymentMethod !== 'card' && profile?.acceptsOnlinePayment === false && (
+                    <span className="muted" style={{ fontSize: '0.85rem' }}>Card is off - online payment is turned off in your Settings.</span>
+                  )}
+                </div>
+              )
+            ) : isCash ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 'normal' }}>
                   <input type="radio" name="fare-paid" checked={!paymentPending} style={{ width: 'auto' }} onChange={() => set({ paymentPending: false })} />
@@ -631,7 +664,7 @@ export default function DriverDashboard() {
                   {fb.passengerHasEmail
                     ? 'Optional - the passenger is emailed their receipt anyway.'
                     : 'No email on file for this passenger, so WhatsApp is the only way they get a receipt.'}
-                  {!isCash && fb.paymentStatus !== 'paid' ? ' Includes the online payment link.' : ''}
+                  {(mode === 'complete' ? fareDialog.completePayment === 'card' : !isCash) && fb.paymentStatus !== 'paid' ? ' Includes the online payment link.' : ''}
                 </p>
               </div>
             )}
