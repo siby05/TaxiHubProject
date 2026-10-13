@@ -854,6 +854,7 @@ router.put('/:id/edit', auth, roleMiddleware(['passenger']), async (req, res) =>
       distanceKm,
       ...fare,
       cardSurchargeAmount,
+      fareSetByDriver: false,
     });
     refreshReturnTripInBackground(req, booking, updated);
 
@@ -888,8 +889,10 @@ router.put('/:id/edit', auth, roleMiddleware(['passenger']), async (req, res) =>
 // and pickup time. Distance and fare are recalculated at the driver's rate
 // (discounts re-applied as for the passenger's own edit above) and the
 // passenger is told by in-app notice and email. { preview: true } returns
-// the recalculated fare without saving, for the edit dialog. Completed
-// trips are corrected with PUT /:id/fare instead.
+// the recalculated fare without saving, for the edit dialog. An
+// estimatedFare in the body sets the fare by hand instead: it's then
+// fixed (fareSetByDriver), so automatic discounts don't change it later.
+// Completed trips are corrected with PUT /:id/fare instead.
 router.put('/:id/driver-edit', auth, roleMiddleware(['driver']), async (req, res) => {
   try {
     const driver = await Driver.findOne({ userId: req.user.id });
@@ -922,14 +925,23 @@ router.put('/:id/driver-edit', auth, roleMiddleware(['driver']), async (req, res
     const requestedTime = next.scheduledFor ? new Date(next.scheduledFor) : new Date();
     // The return-trip discount is re-applied by refreshReturnTripInBackground()
     // below if the edited trip still pairs, same as the passenger's edit.
-    const fare = priceWithPromo(calculateTripFare(distanceKm, driver.ratePerKm, getSettings()), requestedTime);
+    let fare = priceWithPromo(calculateTripFare(distanceKm, driver.ratePerKm, getSettings()), requestedTime);
+    let fareSetByDriver = false;
+    if (req.body.estimatedFare != null && req.body.estimatedFare !== '') {
+      const { error: fareError, fare: custom } = parseFare(req.body.estimatedFare);
+      if (fareError) return res.status(400).json({ error: fareError });
+      if (custom !== fare.estimatedFare) {
+        fare = { fareBeforeDiscount: custom, promoDiscountPercent: 0, returnTripDiscountPercent: 0, discountPercent: 0, discountAmount: 0, estimatedFare: custom };
+        fareSetByDriver = true;
+      }
+    }
     const cardSurchargeAmount = booking.paymentMethod === 'card' ? calculateCardSurcharge(fare.estimatedFare) : 0;
 
     if (req.body.preview) {
       return res.json({ distanceKm, ...fare, cardSurchargeAmount, total: Math.round((fare.estimatedFare + cardSurchargeAmount) * 100) / 100 });
     }
 
-    const updated = await Booking.findByIdAndUpdate(booking._id, { ...next, distanceKm, ...fare, cardSurchargeAmount });
+    const updated = await Booking.findByIdAndUpdate(booking._id, { ...next, distanceKm, ...fare, cardSurchargeAmount, fareSetByDriver });
     refreshReturnTripInBackground(req, booking, updated);
 
     emitToUser(req, booking.passengerId, 'booking:updated', { bookingId: booking._id });

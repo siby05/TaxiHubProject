@@ -211,7 +211,8 @@ async function reconcileReturnTripDiscounts(io, driverId, dateKey) {
   const pairedIds = pairedTripIds(trips, rt);
 
   for (const { b } of trips) {
-    if (!ADJUSTABLE.includes(b.status) || b.paymentStatus === 'paid') continue;
+    // A fare the driver set by hand (PUT /booking/:id/driver-edit) is fixed.
+    if (!ADJUSTABLE.includes(b.status) || b.paymentStatus === 'paid' || b.fareSetByDriver) continue;
     const paired = pairedIds.has(String(b._id));
     const percent = rt?.enabled && paired ? rt.percent : 0;
     const oldPercent = b.returnTripDiscountPercent || 0;
@@ -257,7 +258,7 @@ async function refreshReturnTrip(io, before, after) {
     const [driverId, dateKey] = key.split('|');
     await reconcileReturnTripDiscounts(io, driverId, dateKey);
   }
-  if (after && !after.driverId && after.returnTripDiscountPercent && ADJUSTABLE.includes(after.status) && after.paymentStatus !== 'paid') {
+  if (after && !after.driverId && after.returnTripDiscountPercent && ADJUSTABLE.includes(after.status) && after.paymentStatus !== 'paid' && !after.fareSetByDriver) {
     await applyReturnTripPercent(io, after, 0, 'unpaired');
   }
 }

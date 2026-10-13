@@ -42,6 +42,9 @@ export default function DriverDashboard() {
   const [teStops, setTeStops] = useState([]);
   const [teScheduledFor, setTeScheduledFor] = useState(null);
   const [tePreview, setTePreview] = useState(null);
+  // Fare box: follows the calculated fare until the driver types their own.
+  const [teFare, setTeFare] = useState('');
+  const [teFareCustom, setTeFareCustom] = useState(false);
   const [teError, setTeError] = useState('');
   const [teSaving, setTeSaving] = useState(false);
   const teStopHandlers = makeStopHandlers(setTeStops);
@@ -53,6 +56,8 @@ export default function DriverDashboard() {
     setTeStops((b.stops || []).map((st) => ({ id: newStopId(), selection: { label: st.address, lat: st.lat, lng: st.lng } })));
     setTeScheduledFor(b.scheduledFor || null);
     setTePreview(null);
+    setTeFare(Number(b.estimatedFare).toFixed(2));
+    setTeFareCustom(!!b.fareSetByDriver);
     setTeError('');
   }
 
@@ -70,17 +75,30 @@ export default function DriverDashboard() {
     let cancelled = false;
     const t = setTimeout(() => {
       client.put(`/booking/${tripEdit._id}/driver-edit`, { ...tripEditPayload(), preview: true })
-        .then((r) => { if (!cancelled) { setTePreview(r.data); setTeError(''); } })
+        .then((r) => {
+          if (cancelled) return;
+          setTePreview(r.data);
+          setTeError('');
+          if (!teFareCustom) setTeFare(r.data.estimatedFare.toFixed(2));
+        })
         .catch((err) => { if (!cancelled) { setTePreview(null); setTeError(err.response?.data?.error || 'Could not work out the fare'); } });
     }, 300);
     return () => { cancelled = true; clearTimeout(t); };
   }, [tripEdit, tePickup, teDrop, teStops, teScheduledFor]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function saveTripEdit() {
+    const amount = Number(teFare);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setTeError('Enter the fare');
+      return;
+    }
     setTeSaving(true);
     setTeError('');
     try {
-      await client.put(`/booking/${tripEdit._id}/driver-edit`, tripEditPayload());
+      await client.put(`/booking/${tripEdit._id}/driver-edit`, {
+        ...tripEditPayload(),
+        ...(teFareCustom && { estimatedFare: amount }),
+      });
       setTripEdit(null);
       load();
     } catch (err) {
@@ -482,7 +500,7 @@ export default function DriverDashboard() {
       {tripEdit && (
         <Modal title="Edit trip" onClose={() => setTripEdit(null)}>
           <p className="muted" style={{ marginTop: 0 }}>
-            {tripEdit.bookingId} · {tripEdit.passengerId?.name}. The fare is recalculated, and the passenger is told about the change in the app and by email.
+            {tripEdit.bookingId} · {tripEdit.passengerId?.name}. The fare follows the route unless you type your own. The passenger is told about the change in the app and by email.
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <AddressAutocomplete label="Pickup address" defaultValue={tePickup?.label} onSelect={setTePickup} required />
@@ -497,13 +515,22 @@ export default function DriverDashboard() {
             <button type="button" className="btn secondary" style={{ alignSelf: 'flex-start' }} onClick={teStopHandlers.add}>+ Add stop</button>
             <AddressAutocomplete label="Drop-off address" defaultValue={teDrop?.label} onSelect={setTeDrop} required />
             <ScheduleField onChange={setTeScheduledFor} defaultValue={teScheduledFor} />
-            {tePreview && (
-              <div className="card fare-confirm">
-                <strong>New estimated fare: ${tePreview.estimatedFare.toFixed(2)}</strong>
-                {tePreview.estimatedFare !== tripEdit.estimatedFare && <span className="muted"> (was ${Number(tripEdit.estimatedFare).toFixed(2)})</span>}
-                <div className="muted">{tePreview.distanceKm} km{teStops.length > 0 && ` · via ${teStops.length} stop${teStops.length > 1 ? 's' : ''}`}{teScheduledFor && ` · ${formatNzDateTime(teScheduledFor)}`}</div>
-              </div>
-            )}
+            <div>
+              <label>Fare (NZD)</label>
+              <input type="number" inputMode="decimal" min="0.01" step="0.01" value={teFare}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => { setTeFare(e.target.value); setTeFareCustom(true); }} />
+              <p className="muted" style={{ margin: '4px 0 0', fontSize: '0.85rem' }}>
+                Was ${Number(tripEdit.estimatedFare).toFixed(2)}.
+                {tePreview && <> Calculated for this route: ${tePreview.estimatedFare.toFixed(2)} ({tePreview.distanceKm} km{teStops.length > 0 && `, via ${teStops.length} stop${teStops.length > 1 ? 's' : ''}`}).</>}
+                {tePreview && teFareCustom && Number(teFare) !== tePreview.estimatedFare && (
+                  <> <button type="button" onClick={() => { setTeFareCustom(false); setTeFare(tePreview.estimatedFare.toFixed(2)); }}
+                    style={{ background: 'none', border: 'none', padding: 0, width: 'auto', color: 'var(--primary)', cursor: 'pointer', font: 'inherit' }}>
+                    Use calculated ${tePreview.estimatedFare.toFixed(2)}</button>.</>
+                )}
+                {teFareCustom && Number(teFare) !== tePreview?.estimatedFare && ' Your own fare is kept as set - discounts won\'t change it.'}
+              </p>
+            </div>
             {teError && <p className="error-text" style={{ margin: 0 }}>{teError}</p>}
           </div>
           <div className="booking-row" style={{ border: 'none', paddingBottom: 0 }}>

@@ -37,6 +37,8 @@ const { nzDateStamp } = require('../utils/nzTime');
 // undiscounted price; estimatedFare is after discount), promoDiscountPercent
 // / returnTripDiscountPercent (each discount that applies - only the bigger
 // one is taken), discountPercent, discountAmount - see utils/discounts.js.
+// fareSetByDriver (the driver typed the fare in Edit trip before the trip
+// started - automatic discounts then leave it alone).
 const Booking = createModel('Booking', {
   passengerId: 'User',
   driverId: 'Driver',
