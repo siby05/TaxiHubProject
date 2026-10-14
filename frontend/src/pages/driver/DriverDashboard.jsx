@@ -469,13 +469,18 @@ export default function DriverDashboard() {
                       <a className="btn call" href={telLink(b.passengerId?.mobile)}>📞 Call passenger</a>
                     )}
                     <a className="btn secondary" target="_blank" rel="noreferrer" href={directionsLink(b)}>📍 Directions</a>
-                    <button className="btn" onClick={() => openComplete(b)}>Complete</button>
-                    {remindLink && (
-                      <a className="btn whatsapp" target="_blank" rel="noreferrer" title="Message passenger on WhatsApp: payment reminder"
-                        href={remindLink}><WhatsAppIcon /> Remind to pay</a>
-                    )}
-                    {cardOwing && <button className="btn secondary" onClick={() => markPaid(b._id)}>Mark as paid</button>}
+                    {/* Complete gets its own full-width row; payment actions pair up below it. */}
+                    <button className="btn full" onClick={() => openComplete(b)}>Complete</button>
                   </div>
+                  {cardOwing && (
+                    <div className="booking-actions trip-actions">
+                      {remindLink && (
+                        <a className="btn whatsapp" target="_blank" rel="noreferrer" title="Message passenger on WhatsApp: payment reminder"
+                          href={remindLink}><WhatsAppIcon /> Remind to pay</a>
+                      )}
+                      <button className="btn secondary" onClick={() => markPaid(b._id)}>Mark as paid</button>
+                    </div>
+                  )}
                   <div className="booking-actions trip-actions">
                     {b.status === 'accepted' && (
                       <button className="btn secondary" onClick={() => openTripEdit(b)}>✏️ Edit trip</button>
