@@ -338,6 +338,24 @@ export default function DriverDashboard() {
   // (EFTPOS / another app). { booking, method } while open.
   const [markPaidFor, setMarkPaidFor] = useState(null);
 
+  // Card fee for an amount (same as online card payments), fetched for the
+  // Complete trip / Mark as paid boxes when card is chosen.
+  const [cardFeeFor, setCardFeeFor] = useState({}); // amount -> { cardFee, total }
+  function useCardFee(amount, active) {
+    useEffect(() => {
+      const a = Math.round(Number(amount) * 100) / 100;
+      if (!active || !(a > 0) || cardFeeFor[a]) return undefined;
+      const t = setTimeout(() => {
+        client.get('/booking/card-fee', { params: { amount: a } })
+          .then((r) => setCardFeeFor((m) => ({ ...m, [a]: r.data })))
+          .catch(() => {});
+      }, 250);
+      return () => clearTimeout(t);
+    }, [amount, active]); // eslint-disable-line react-hooks/exhaustive-deps
+    const a = Math.round(Number(amount) * 100) / 100;
+    return active ? cardFeeFor[a] : null;
+  }
+
   function markPaid(id) {
     const b = bookings.find((x) => x._id === id);
     if (b) setMarkPaidFor({ booking: b, method: b.paymentMethod === 'card' ? 'card' : 'cash' });
@@ -358,6 +376,11 @@ export default function DriverDashboard() {
     await client.put(`/booking/${id}/rate-passenger`, { rating, review });
     load();
   }
+
+  const completeCardFee = useCardFee(fareDialog?.fare,
+    fareDialog?.mode === 'complete' && ['card', 'card-paid'].includes(fareDialog?.completePayment) && fareDialog?.booking?.paymentStatus !== 'paid');
+  const markPaidCardFee = useCardFee(markPaidFor ? (markPaidFor.booking.actualFare ?? markPaidFor.booking.estimatedFare) : null,
+    markPaidFor?.method === 'card');
 
   return (
     <div className="container">
@@ -538,6 +561,11 @@ export default function DriverDashboard() {
                 {label}
               </label>
             ))}
+            {markPaidCardFee && (
+              <span className="muted" style={{ fontSize: '0.85rem' }}>
+                Card fee ${markPaidCardFee.cardFee.toFixed(2)} is added - ${markPaidCardFee.total.toFixed(2)} in total.
+              </span>
+            )}
           </div>
           <div className="booking-row" style={{ border: 'none', paddingBottom: 0 }}>
             <div className="booking-actions trip-actions">
@@ -675,6 +703,11 @@ export default function DriverDashboard() {
                   })}
                   {fb.paymentMethod !== 'card' && profile?.acceptsOnlinePayment === false && (
                     <span className="muted" style={{ fontSize: '0.85rem' }}>Card is off - online payment is turned off in your Settings.</span>
+                  )}
+                  {completeCardFee && (
+                    <span className="muted" style={{ fontSize: '0.85rem' }}>
+                      Card fee ${completeCardFee.cardFee.toFixed(2)} - the passenger {fareDialog.completePayment === 'card-paid' ? 'pays' : 'will pay'} ${completeCardFee.total.toFixed(2)} in total.
+                    </span>
                   )}
                 </div>
               )

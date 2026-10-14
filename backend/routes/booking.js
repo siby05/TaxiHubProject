@@ -1115,6 +1115,16 @@ router.get('/driver-count', auth, roleMiddleware(['passenger']), async (req, res
   res.json({ count: await Driver.countDocuments({ status: 'approved' }) });
 });
 
+// GET /api/booking/card-fee?amount= - the card fee added to a card payment
+// of that fare (utils/stripeFees.js, NZ card rate), for the driver's
+// Complete trip / Mark as paid boxes to show before confirming.
+router.get('/card-fee', auth, roleMiddleware(['driver']), (req, res) => {
+  const amount = Number(req.query.amount);
+  if (!Number.isFinite(amount) || amount <= 0) return res.json({ cardFee: 0, total: 0 });
+  const cardFee = calculateCardSurcharge(amount);
+  res.json({ cardFee, total: Math.round((amount + cardFee) * 100) / 100 });
+});
+
 // GET /api/booking/:id - single booking for its own passenger. Backs the
 // /pay/:bookingId deep link a driver can WhatsApp to a passenger who
 // completed a trip without having paid online yet (see PUT /:id/complete
@@ -1391,8 +1401,8 @@ function parseFare(value) {
 // and how it's being paid: paymentMethod 'cash' (paid now, or
 // paymentPending: true to collect later - "Mark as paid" once they do) or
 // 'card' - paidInPerson: true when the driver already took it by card
-// (EFTPOS / another app; paid, no online card fee), otherwise the
-// passenger pays online afterwards via the pay link. Omitted,
+// (EFTPOS / another app; paid, with the same card fee added as online),
+// otherwise the passenger pays online afterwards via the pay link. Omitted,
 // the trip keeps its booked payment type. A trip already paid online
 // keeps that.
 router.put('/:id/complete', auth, roleMiddleware(['driver']), async (req, res) => {
@@ -1430,7 +1440,7 @@ router.put('/:id/complete', auth, roleMiddleware(['driver']), async (req, res) =
         // payment is pending); card trips only become "paid" once the
         // passenger actually pays via /api/payment.
         ...(paidInPerson
-          ? { paymentStatus: 'paid', paidVia: 'card-in-person', cardSurchargeAmount: 0 }
+          ? { paymentStatus: 'paid', paidVia: 'card-in-person', cardSurchargeAmount: calculateCardSurcharge(finalFare) }
           : paymentMethod === 'card'
             ? { paymentStatus: 'unpaid', paidVia: null, cardSurchargeAmount: calculateCardSurcharge(finalFare) }
             : { paymentStatus: paymentPending ? 'unpaid' : 'paid', paidVia: paymentPending ? null : 'cash', cardSurchargeAmount: 0 }),
@@ -1743,7 +1753,7 @@ router.put('/:id/fare', auth, roleMiddleware(['driver']), async (req, res) => {
 // PUT /api/booking/:id/mark-paid { method?: 'cash' | 'card' } - driver
 // manually confirms payment was received outside the app: in cash, or by
 // card in person (EFTPOS / another app - recorded as paidVia
-// 'card-in-person', no online card fee). Without method the payment type
+// 'card-in-person', with the card fee added on the fare, as online). Without method the payment type
 // stays as booked. An alternative to the Stripe flow, not a replacement.
 router.put('/:id/mark-paid', auth, roleMiddleware(['driver']), async (req, res) => {
   const booking = await Booking.findById(req.params.id);
@@ -1759,7 +1769,7 @@ router.put('/:id/mark-paid', auth, roleMiddleware(['driver']), async (req, res) 
     paymentStatus: 'paid',
     paymentMethod: paidBy,
     paidVia: paidBy === 'card' ? 'card-in-person' : 'cash',
-    cardSurchargeAmount: 0,
+    cardSurchargeAmount: paidBy === 'card' ? calculateCardSurcharge(booking.actualFare ?? booking.estimatedFare) : 0,
   });
   res.json(updated);
 });

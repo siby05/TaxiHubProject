@@ -105,7 +105,7 @@ function buildInvoicePdf(booking, passenger, driver, driverName) {
       y += size + 10;
     }
     amount('Fare', fare);
-    if (booking.cardSurchargeAmount > 0) amount('Online payment surcharge', booking.cardSurchargeAmount);
+    if (booking.cardSurchargeAmount > 0) amount('Card fee', booking.cardSurchargeAmount);
     y += 6;
     amount('Total', total, { bold: true, size: 15, color: PRIMARY });
 

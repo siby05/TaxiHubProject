@@ -393,7 +393,7 @@ function buildInvoiceHtml(booking, passenger, driver, driverName, { forPrint = f
         <td style="padding:4px 0;color:#64748b;font-size:13px;">Fare</td>
         <td style="padding:4px 0;color:#0f172a;font-size:13px;text-align:right;">$${fare.toFixed(2)}</td>
       </tr>
-      ${booking.cardSurchargeAmount > 0 ? `<tr><td style="padding:4px 0;color:#64748b;font-size:13px;">Online payment surcharge</td><td style="padding:4px 0;color:#0f172a;font-size:13px;text-align:right;">$${booking.cardSurchargeAmount.toFixed(2)}</td></tr>` : ''}
+      ${booking.cardSurchargeAmount > 0 ? `<tr><td style="padding:4px 0;color:#64748b;font-size:13px;">Card fee</td><td style="padding:4px 0;color:#0f172a;font-size:13px;text-align:right;">$${booking.cardSurchargeAmount.toFixed(2)}</td></tr>` : ''}
       <tr>
         <td style="padding:12px 0 0;color:#0f172a;font-size:16px;font-weight:700;">Total</td>
         <td style="padding:12px 0 0;color:#0EA5E9;font-size:16px;font-weight:700;text-align:right;">$${total.toFixed(2)}</td>
@@ -528,7 +528,7 @@ function buildInvoiceText(booking, passenger, driver, driverName) {
     `Pickup: ${booking.pickupAddress}\nDrop-off: ${booking.dropAddress}\nDistance: ${booking.distanceKm} km\n` +
     `${driverName ? `Driver: ${driverName}\n` : ''}${vLabel ? `Vehicle: ${vLabel}\n` : ''}` +
     `Payment: ${paymentLabel(booking)}, ${booking.paymentStatus === 'paid' ? 'paid' : 'unpaid'}\n` +
-    `Fare: $${fare.toFixed(2)}${booking.cardSurchargeAmount > 0 ? `\nOnline payment surcharge: $${booking.cardSurchargeAmount.toFixed(2)}` : ''}\n` +
+    `Fare: $${fare.toFixed(2)}${booking.cardSurchargeAmount > 0 ? `\nCard fee: $${booking.cardSurchargeAmount.toFixed(2)}` : ''}\n` +
     `Total: $${total.toFixed(2)}\n\n` +
     `EasyRide${settings.adminEmail ? ` - ${settings.adminEmail}` : ''}${settings.adminMobile ? ` - ${settings.adminMobile}` : ''}`;
 }
