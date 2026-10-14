@@ -269,11 +269,12 @@ export default function DriverDashboard() {
     setFareDialog({
       mode: 'edit', booking: b, fare: fareText(b.actualFare ?? b.estimatedFare),
       paymentMethod: b.paymentMethod, paymentPending: b.paymentStatus !== 'paid', error: '',
+      paidInPerson: b.paidVia === 'card-in-person',
     });
   }
 
   async function saveFareDialog() {
-    const { mode, booking, fare, paymentMethod, paymentPending, sendWhatsApp, completePayment } = fareDialog;
+    const { mode, booking, fare, paymentMethod, paymentPending, paidInPerson, sendWhatsApp, completePayment } = fareDialog;
     const amount = Number(fare);
     if (!Number.isFinite(amount) || amount <= 0) {
       setFareDialog((d) => ({ ...d, error: 'Enter the fare charged' }));
@@ -289,7 +290,7 @@ export default function DriverDashboard() {
       await client.put(`/booking/${booking._id}/fare`, {
         actualFare: amount,
         paymentMethod,
-        ...(paymentMethod !== 'card' && { paymentPending }),
+        ...(paymentMethod !== 'card' ? { paymentPending } : { paidInPerson: !!paidInPerson }),
       });
       setFareDialog(null);
       load();
@@ -379,6 +380,9 @@ export default function DriverDashboard() {
 
   const completeCardFee = useCardFee(fareDialog?.fare,
     fareDialog?.mode === 'complete' && ['card', 'card-paid'].includes(fareDialog?.completePayment) && fareDialog?.booking?.paymentStatus !== 'paid');
+  const editCardFee = useCardFee(fareDialog?.fare,
+    fareDialog?.mode === 'edit' && fareDialog?.paymentMethod === 'card'
+      && !(fareDialog?.booking?.paymentStatus === 'paid' && fareDialog?.booking?.paidVia !== 'card-in-person' && fareDialog?.booking?.paymentMethod === 'card'));
   const markPaidCardFee = useCardFee(markPaidFor ? (markPaidFor.booking.actualFare ?? markPaidFor.booking.estimatedFare) : null,
     markPaidFor?.method === 'card');
 
@@ -651,7 +655,9 @@ export default function DriverDashboard() {
         // Editing can switch the payment type; completing keeps the booked one.
         const method = (mode === 'edit' && fareDialog.paymentMethod) || fb.paymentMethod;
         const isCash = method !== 'card';
-        const cardPaid = fb.paymentMethod === 'card' && fb.paymentStatus === 'paid';
+        // Paid online by Stripe - fixed. Card paid in person (EFTPOS) stays editable.
+        const cardPaid = fb.paymentMethod === 'card' && fb.paymentStatus === 'paid' && fb.paidVia !== 'card-in-person';
+        const inPerson = !isCash && !!fareDialog.paidInPerson;
         const canSwitchMethod = mode === 'edit' && !cardPaid;
         const set = (patch) => setFareDialog((d) => ({ ...d, ...patch, error: '' }));
         return (
@@ -667,14 +673,20 @@ export default function DriverDashboard() {
             {canSwitchMethod && (
               <>
                 <label>Payment type</label>
-                <div style={{ display: 'flex', gap: 16, marginBottom: 12 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
                   <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 'normal' }}>
                     <input type="radio" name="fare-method" checked={isCash} style={{ width: 'auto' }} onChange={() => set({ paymentMethod: 'cash' })} />
                     Cash
                   </label>
-                  <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 'normal', opacity: profile?.acceptsOnlinePayment === false ? 0.5 : 1 }}>
-                    <input type="radio" name="fare-method" checked={!isCash} style={{ width: 'auto' }} disabled={profile?.acceptsOnlinePayment === false}
-                      onChange={() => set({ paymentMethod: 'card' })} />
+                  <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 'normal' }}>
+                    <input type="radio" name="fare-method" checked={inPerson} style={{ width: 'auto' }}
+                      onChange={() => set({ paymentMethod: 'card', paidInPerson: true })} />
+                    Card (EFTPOS / other app) - paid
+                  </label>
+                  <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 'normal', opacity: profile?.acceptsOnlinePayment === false && !(fb.paymentMethod === 'card' && fb.paidVia !== 'card-in-person') ? 0.5 : 1 }}>
+                    <input type="radio" name="fare-method" checked={!isCash && !inPerson} style={{ width: 'auto' }}
+                      disabled={profile?.acceptsOnlinePayment === false && !(fb.paymentMethod === 'card' && fb.paidVia !== 'card-in-person')}
+                      onChange={() => set({ paymentMethod: 'card', paidInPerson: false })} />
                     Card (online)
                   </label>
                 </div>
@@ -724,7 +736,8 @@ export default function DriverDashboard() {
               </div>
             ) : (
               <p className="muted" style={{ margin: 0 }}>
-                {cardPaid ? 'Paid online by card.' : 'Card trip - the passenger pays online. Use "Remind to pay" to send them the payment link.'}
+                {cardPaid ? 'Paid online by card.' : inPerson ? 'Paid by card in person.' : 'Card trip - the passenger pays online. Use "Remind to pay" to send them the payment link.'}
+                {editCardFee && ` Card fee $${editCardFee.cardFee.toFixed(2)} - $${editCardFee.total.toFixed(2)} in total.`}
               </p>
             )}
             {mode === 'complete' && waLink(fb.passengerId?.mobile) && (
