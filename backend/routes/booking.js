@@ -22,7 +22,7 @@ const { auth, roleMiddleware } = require('../middleware/auth');
 const { emailService, buildReceiptPage, buildRespondPage, buildRespondResultPage } = require('../services/emailService');
 const { runInBackground } = require('../utils/background');
 const { buildInvoicePdf } = require('../services/invoicePdf');
-const { haversineKm, calculateTripFare, calculateCardSurcharge, routeDistanceKm, invalidStopsError, cleanStops } = require('../utils/distance');
+const { haversineKm, calculateTripFare, calculateCardSurcharge, routeDistanceKm, invalidStopsError, cleanStops, drivingRouteDistanceKm } = require('../utils/distance');
 const { VEHICLE_TYPES, isValidVehicleType } = require('../config/vehicleTypes');
 const { notifyUser, notifyAdmins } = require('../utils/notify');
 const { getPassengerRatingAvg } = require('../utils/ratings');
@@ -393,7 +393,7 @@ router.post('/homepage-quote', guestLimiter, async (req, res) => {
     const requestedTime = scheduledFor ? new Date(scheduledFor) : undefined;
     const { usable } = await findEligibleCandidatesWithTiming('cash', null, { lat: coords[0], lng: coords[1] }, requestedTime);
     const rate = usable.length ? usable.reduce((sum, d) => sum + d.ratePerKm, 0) / usable.length : (Number(process.env.DEFAULT_RATE_PER_KM) || 1.8);
-    const distanceKm = routeDistanceKm({ lat: coords[0], lng: coords[1] }, { lat: coords[2], lng: coords[3] }, []);
+    const distanceKm = await drivingRouteDistanceKm({ lat: coords[0], lng: coords[1] }, { lat: coords[2], lng: coords[3] }, []);
     const quote = buildQuote(distanceKm, rate, 'cash', scheduledFor, { pickupLat: coords[0], pickupLng: coords[1], dropLat: coords[2], dropLng: coords[3] });
     res.json({ ...quote, awaitingDriverConfirmation: !usable.length, provisional: !usable.length });
   } catch (err) { serverError(res, err, req); }
@@ -419,7 +419,7 @@ router.post('/guest-quote', guestLimiter, async (req, res) => {
         requestedUnavailable: resolved.requestedUnavailable, requestedCashOnly: resolved.requestedCashOnly, nextAvailableTime: resolved.nextAvailableTime,
       });
     }
-    const distanceKm = routeDistanceKm({ lat: pickupLat, lng: pickupLng }, { lat: dropLat, lng: dropLng }, stops);
+    const distanceKm = await drivingRouteDistanceKm({ lat: pickupLat, lng: pickupLng }, { lat: dropLat, lng: dropLng }, stops);
     res.json({
       ...buildQuote(distanceKm, resolved.driver.ratePerKm, paymentMethod, scheduledFor, { pickupLat, pickupLng, dropLat, dropLng }),
       usedFallback: resolved.usedFallback, requestedUnavailable: resolved.requestedUnavailable,
@@ -469,14 +469,14 @@ router.post('/quote', auth, roleMiddleware(['passenger', 'driver']), async (req,
     } else {
       ({ driver, usedFallback, requestedUnavailable, requestedCashOnly, requestedName, nextAvailableTime, requestedOffSchedule } = await resolveDriver(driverId, paymentMethod, vehicleType, { lat: pickupLat, lng: pickupLng }, scheduledFor ? new Date(scheduledFor) : undefined));
       if (!driver) {
-        const distanceKm = routeDistanceKm({ lat: pickupLat, lng: pickupLng }, { lat: dropLat, lng: dropLng }, stops);
+        const distanceKm = await drivingRouteDistanceKm({ lat: pickupLat, lng: pickupLng }, { lat: dropLat, lng: dropLng }, stops);
         return res.json({ ...buildQuote(distanceKm, Number(process.env.DEFAULT_RATE_PER_KM) || 1.8, paymentMethod, scheduledFor, { pickupLat, pickupLng, dropLat, dropLng }),
           awaitingDriverConfirmation: true,
           availabilityMessage: 'No driver is currently scheduled for your requested time. You can still submit your booking request. We will check with our drivers and update you once availability is confirmed. Your booking is not confirmed yet.' });
       }
     }
 
-    const distanceKm = routeDistanceKm({ lat: pickupLat, lng: pickupLng }, { lat: dropLat, lng: dropLng }, stops);
+    const distanceKm = await drivingRouteDistanceKm({ lat: pickupLat, lng: pickupLng }, { lat: dropLat, lng: dropLng }, stops);
     res.json({
       ...buildQuote(distanceKm, driver.ratePerKm, paymentMethod, scheduledFor, { pickupLat, pickupLng, dropLat, dropLng }),
       usedFallback, requestedUnavailable, requestedCashOnly, requestedName, requestedOffSchedule,
@@ -521,7 +521,7 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
       return res.status(403).json({ error: 'Your account is restricted from making new bookings. Contact support.' });
     }
 
-    const distanceKm = routeDistanceKm({ lat: pickupLat, lng: pickupLng }, { lat: dropLat, lng: dropLng }, stops);
+    const distanceKm = await drivingRouteDistanceKm({ lat: pickupLat, lng: pickupLng }, { lat: dropLat, lng: dropLng }, stops);
     const passenger = await User.findById(req.user.id);
     const passengerRatingAvg = await getPassengerRatingAvg(passenger._id);
 
@@ -707,7 +707,7 @@ router.post('/guest', guestLimiter, async (req, res) => {
       });
     }
 
-    const distanceKm = routeDistanceKm({ lat: pickupLat, lng: pickupLng }, { lat: dropLat, lng: dropLng }, stops);
+    const distanceKm = await drivingRouteDistanceKm({ lat: pickupLat, lng: pickupLng }, { lat: dropLat, lng: dropLng }, stops);
     const passengerRatingAvg = await getPassengerRatingAvg(passenger._id);
 
     const resolved = await resolveDriver(driverId, paymentMethod, vehicleType, { lat: pickupLat, lng: pickupLng }, scheduledFor ? new Date(scheduledFor) : undefined);
@@ -822,7 +822,7 @@ router.put('/:id/edit', auth, roleMiddleware(['passenger']), async (req, res) =>
     const oldVehicleType = booking.requestedVehicleType;
     const nextVehicleType = vehicleType !== undefined ? (vehicleType || null) : oldVehicleType;
 
-    const distanceKm = routeDistanceKm({ lat: nextPickupLat, lng: nextPickupLng }, { lat: nextDropLat, lng: nextDropLng }, nextStops);
+    const distanceKm = await drivingRouteDistanceKm({ lat: nextPickupLat, lng: nextPickupLng }, { lat: nextDropLat, lng: nextDropLng }, nextStops);
     const bookingSettings = getSettings();
     const nextScheduledFor = scheduledFor !== undefined ? scheduledFor : booking.scheduledFor;
     const nextRequestedTime = nextScheduledFor ? new Date(nextScheduledFor) : new Date();
@@ -953,7 +953,7 @@ router.put('/:id/driver-edit', auth, roleMiddleware(['driver']), async (req, res
       stops: stops !== undefined ? cleanStops(stops) : (booking.stops || []),
       scheduledFor: scheduledFor !== undefined ? (scheduledFor ? new Date(scheduledFor) : null) : booking.scheduledFor,
     };
-    const distanceKm = routeDistanceKm({ lat: next.pickupLat, lng: next.pickupLng }, { lat: next.dropLat, lng: next.dropLng }, next.stops);
+    const distanceKm = await drivingRouteDistanceKm({ lat: next.pickupLat, lng: next.pickupLng }, { lat: next.dropLat, lng: next.dropLng }, next.stops);
     const requestedTime = next.scheduledFor ? new Date(next.scheduledFor) : new Date();
     // The return-trip discount is re-applied by refreshReturnTripInBackground()
     // below if the edited trip still pairs, same as the passenger's edit.
