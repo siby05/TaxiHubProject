@@ -380,7 +380,6 @@ export default function Home() {
           </div>
           <HomepageBookingForm />
         </div>
-        <div className="hm-photo-credit"><a href="https://commons.wikimedia.org/wiki/File:MT_Taranaki_New_Plymouth.jpg" target="_blank" rel="noreferrer">Mount Taranaki photo: Juannier / Wikimedia Commons</a></div>
       </section>
 
       <Deals />
@@ -593,6 +592,7 @@ export default function Home() {
 
       <footer className="hm-footer">
         <p>© 2026 EasyRide NZ</p>
+        <p className="hm-image-licence">Hero photograph: <a href="https://commons.wikimedia.org/wiki/File:MT_Taranaki_New_Plymouth.jpg" target="_blank" rel="noreferrer">Juannier, Wikimedia Commons</a> · <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noreferrer">CC BY-SA 4.0</a> · Cropped and darkened for layout</p>
         <p><a href="mailto:easyridenz@gmail.com">easyridenz@gmail.com</a> · New Plymouth, New Zealand</p>
       </footer>
     </div>
