@@ -113,17 +113,21 @@
 .er-footer p{margin:0 0 7px;font-size:.83rem}
 
 @media(max-width:1020px){.er-hero-inner{gap:25px;grid-template-columns:minmax(0,1.1fr) minmax(315px,.9fr)}.er-points{gap:7px}.er-points svg{width:27px;height:27px}.er-points strong{font-size:.75rem}.er-benefits>div{padding:0 7px;gap:9px}.er-benefits svg{width:29px;height:29px}}
+/* At tablet/mobile sizes the booking panel and offer banner belong to normal
+   document flow. Avoid the old negative bottom margin on the booking panel;
+   that produced a detached/overlapping card and an excessive gap below it,
+   especially as the date picker or fare result expanded the form. */
 @media(max-width:760px){
   .er-container{padding-left:17px;padding-right:17px}
   .er-hero{min-height:0;background-position:9% 9%}
-  .er-hero-inner{display:block;padding-top:43px;padding-bottom:35px;min-height:0}
+  .er-hero-inner{display:block;padding-top:43px;padding-bottom:22px;min-height:0}
   .er-hero h1{font-size:clamp(2.45rem,7vw,3.6rem);margin-bottom:14px}
   .er-hero-copy>p{font-size:1rem;margin-bottom:29px}
   .er-points{max-width:none;gap:9px;margin-bottom:28px}
   .er-points>div{gap:8px}
   .er-points svg{width:28px;height:28px}
-  .er-booking{justify-self:stretch;max-width:580px;margin:0 auto -90px}
-  .er-offers-wrap{margin-top:113px}
+  .er-booking{justify-self:stretch;max-width:580px;margin:0 auto;position:relative;z-index:1}
+  .er-offers-wrap{margin-top:20px}
   .er-offers{grid-template-columns:1fr;gap:11px;padding:18px}
   .er-service-grid{grid-template-columns:1fr;max-width:540px;margin:auto}
   .er-card>img{height:205px}
