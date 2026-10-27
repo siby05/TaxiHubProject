@@ -451,10 +451,10 @@ router.post('/quote', auth, roleMiddleware(['passenger', 'driver']), async (req,
     } else {
       ({ driver, usedFallback, requestedUnavailable, requestedCashOnly, requestedName, nextAvailableTime, requestedOffSchedule } = await resolveDriver(driverId, paymentMethod, vehicleType, { lat: pickupLat, lng: pickupLng }, scheduledFor ? new Date(scheduledFor) : undefined));
       if (!driver) {
-        return res.status(404).json({
-          error: noDriverError(requestedUnavailable, requestedName, requestedCashOnly, vehicleType, nextAvailableTime, requestedOffSchedule),
-          requestedUnavailable, requestedCashOnly, nextAvailableTime,
-        });
+        const distanceKm = routeDistanceKm({ lat: pickupLat, lng: pickupLng }, { lat: dropLat, lng: dropLng }, stops);
+        return res.json({ ...buildQuote(distanceKm, Number(process.env.DEFAULT_RATE_PER_KM) || 1.8, paymentMethod, scheduledFor),
+          awaitingDriverConfirmation: true,
+          availabilityMessage: 'No driver is currently scheduled for your requested time. You can still submit your booking request. We will check with our drivers and update you once availability is confirmed. Your booking is not confirmed yet.' });
       }
     }
 
@@ -532,15 +532,11 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
     } else {
       const { usable, nextAvailableTime } = await findEligibleCandidatesWithTiming(paymentMethod, vehicleType, pickup, requestedTime);
       broadcastCandidates = usable;
-      if (broadcastCandidates.length === 0) {
-        return res.status(404).json({
-          error: noDriverError(false, null, false, vehicleType, nextAvailableTime),
-          requestedUnavailable: false, requestedCashOnly: false, nextAvailableTime,
-        });
-      }
-      ratePerKmForEstimate = broadcastCandidates.reduce((sum, d) => sum + d.ratePerKm, 0) / broadcastCandidates.length;
+
+      ratePerKmForEstimate = broadcastCandidates.length ? broadcastCandidates.reduce((sum, d) => sum + d.ratePerKm, 0) / broadcastCandidates.length : (Number(process.env.DEFAULT_RATE_PER_KM) || 1.8);
     }
 
+    const awaitingDriverConfirmation = !targetDriverId && broadcastCandidates.length === 0;
     const bookingSettings = getSettings();
     const fare = priceWithPromo(calculateTripFare(distanceKm, ratePerKmForEstimate, bookingSettings), requestedTime);
     const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(fare.estimatedFare) : 0;
@@ -585,6 +581,10 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
       runInBackground('email sendBookingConfirmation', () => emailService.sendBookingConfirmation(passenger.email, booking));
     }
 
+    if (awaitingDriverConfirmation) {
+      notifyAdmins({ type: 'booking-unassigned', title: 'Booking requires driver confirmation',
+        message: `Trip ${booking.bookingId}: no driver is scheduled. Please contact drivers and update the passenger once confirmed.`, link: '/admin' });
+    }
     const notifyDriverIds = targetDriverId
       ? [(await Driver.findById(targetDriverId)).userId]
       : broadcastCandidates.map((d) => d.userId);
@@ -599,7 +599,8 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
     // return-trip pair (a broadcast is checked when someone accepts it).
     if (targetDriverId) refreshReturnTripInBackground(req, null, booking);
 
-    res.status(201).json({ ...booking, usedFallback, requestedUnavailable, requestedCashOnly, requestedName, broadcast: !targetDriverId });
+    res.status(201).json({ ...booking, usedFallback, requestedUnavailable, requestedCashOnly, requestedName, broadcast: !targetDriverId, awaitingDriverConfirmation,
+      ...(awaitingDriverConfirmation && { availabilityMessage: 'Your booking request has been received. No driver is currently scheduled for your requested time. We will check with our drivers and update you once availability is confirmed. Your trip is not yet confirmed.' }) });
   } catch (err) {
     serverError(res, err, req);
   }
