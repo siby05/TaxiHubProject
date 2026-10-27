@@ -69,7 +69,8 @@ setIo(io);
 // (the real visitor); with a hop count of 1 every visitor resolved to the
 // CDN's own address and shared a single rate-limit bucket, which is how
 // address autocomplete went dark for everyone at once.
-app.set('trust proxy', true);
+// Configure the proxy hop count to match the deployment (Render typically uses one hop).
+app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS || 1));
 app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
 app.use(express.json());
 
@@ -135,7 +136,7 @@ connectDatabase().then(async () => {
   // only gets seeded once, the first time it's ever genuinely empty -
   // real data added after that is never touched again.
   const User = require('./models/User');
-  if ((await User.countDocuments()) === 0) {
+  if ((await User.countDocuments()) === 0 && process.env.DB_MODE !== 'mongo' && process.env.NODE_ENV !== 'production') {
     await require('./utils/seed')();
   }
   // Hydrate admin-configured settings from the database before serving any
