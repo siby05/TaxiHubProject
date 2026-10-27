@@ -381,6 +381,24 @@ router.get('/promotions', async (req, res) => {
   }
 });
 
+// Public, rate-limited fare estimate for the real homepage booking form.
+// Uses the same settings, route discounts and driver matching as passenger quotes.
+// It never creates a booking or exposes driver/customer personal information.
+router.post('/homepage-quote', guestLimiter, async (req, res) => {
+  try {
+    const { pickupLat, pickupLng, dropLat, dropLng, scheduledFor } = req.body || {};
+    const coords = [pickupLat, pickupLng, dropLat, dropLng].map(Number);
+    if (coords.some((n) => !Number.isFinite(n)) || Math.abs(coords[0]) > 90 || Math.abs(coords[2]) > 90 || Math.abs(coords[1]) > 180 || Math.abs(coords[3]) > 180) return res.status(400).json({ error: 'Choose valid pickup and destination addresses' });
+    if (scheduledFor && (!Number.isFinite(Date.parse(scheduledFor)) || Date.parse(scheduledFor) < Date.now())) return res.status(400).json({ error: 'Choose a future pickup time' });
+    const requestedTime = scheduledFor ? new Date(scheduledFor) : undefined;
+    const { usable } = await findEligibleCandidatesWithTiming('cash', null, { lat: coords[0], lng: coords[1] }, requestedTime);
+    const rate = usable.length ? usable.reduce((sum, d) => sum + d.ratePerKm, 0) / usable.length : (Number(process.env.DEFAULT_RATE_PER_KM) || 1.8);
+    const distanceKm = routeDistanceKm({ lat: coords[0], lng: coords[1] }, { lat: coords[2], lng: coords[3] }, []);
+    const quote = buildQuote(distanceKm, rate, 'cash', scheduledFor, { pickupLat: coords[0], pickupLng: coords[1], dropLat: coords[2], dropLng: coords[3] });
+    res.json({ ...quote, awaitingDriverConfirmation: !usable.length, provisional: !usable.length });
+  } catch (err) { serverError(res, err, req); }
+});
+
 // POST /api/booking/guest-quote - public counterpart to /quote below, for
 // the QR-scan guest checkout (see POST /guest) which has no logged-in user
 // to authenticate. driverId is required - a guest is always quoting a
