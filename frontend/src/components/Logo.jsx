@@ -1,2 +1,14 @@
-export function LogoBadge({size=32,dark=false}) {const ink=dark?'#fff':'#0B2942';return <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true" style={{display:'block',flexShrink:0}}><path d="M9 30 17 18q2-4 8-4h15q6 0 8 5l7 11" fill="none" stroke={ink} strokeWidth="4" strokeLinecap="round"/><rect x="7" y="29" width="50" height="15" rx="5" fill="none" stroke={ink} strokeWidth="4"/><circle cx="19" cy="44" r="5" fill={ink}/><circle cx="45" cy="44" r="5" fill={ink}/><path d="M12 52q20 17 40 0" fill="none" stroke="#FFCA28" strokeWidth="3"/></svg>}
-export default function Logo({size=32,tagline=false,dark=false,gap}) {return <span style={{display:'inline-flex',alignItems:'center',gap:gap??size*.22}}><LogoBadge size={size} dark={dark}/><span style={{display:'flex',flexDirection:'column',lineHeight:1}}><span style={{fontFamily:'Sora,system-ui,sans-serif',fontWeight:800,fontSize:size*.67}}><span style={{color:dark?'#fff':'#0B2942'}}>Easy</span><span style={{color:'#FFCA28'}}>Ride</span></span>{tagline&&<span style={{fontSize:size*.18,letterSpacing:1,color:dark?'#ddd':'#475569',marginTop:4}}>TAXI &amp; PRIVATE TRANSFERS</span>}</span></span>}
+// Single source for the car logo: /favicon.svg. The same asset is used by
+// the navbar, drawer, receipt emails and browser icon.
+export function LogoBadge({ size = 32 }) {
+  return <img src="/favicon.svg" width={size} height={size} alt="" aria-hidden="true" style={{display:'block',flexShrink:0}} />;
+}
+export default function Logo({size=32,tagline=false,dark=false,gap}) {
+  return <span style={{display:'inline-flex',alignItems:'center',gap:gap??size*.22}}>
+    <LogoBadge size={size}/>
+    <span style={{display:'flex',flexDirection:'column',lineHeight:1}}>
+      <span style={{fontFamily:'Sora,system-ui,sans-serif',fontWeight:800,fontSize:size*.67}}><span style={{color:dark?'#fff':'#0B2942'}}>Easy</span><span style={{color:'#FFCA28'}}>Ride</span></span>
+      {tagline&&<span style={{fontSize:size*.18,letterSpacing:1,color:dark?'#ddd':'#475569',marginTop:4}}>TAXI &amp; PRIVATE TRANSFERS</span>}
+    </span>
+  </span>;
+}
