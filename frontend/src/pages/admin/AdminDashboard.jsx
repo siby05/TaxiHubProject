@@ -755,7 +755,7 @@ export default function AdminDashboard() {
             <div>
               <label>Global minimum rate per km (NZ$)</label>
               <input type="number" min="0.01" step="0.05" placeholder="Use individual driver rates" value={settings.globalRatePerKm ?? ''} onChange={(e) => setSettings((old) => ({ ...old, globalRatePerKm: e.target.value }))} />
-              <p className="muted">Sets a minimum per-km rate for all new trip estimates. Higher driver rates remain effective. Leave blank to use driver rates. Discounts still apply.</p>
+              <p className="muted">Overrides individual driver per-km rates for all new trip estimates. Leave blank to use driver rates. A configured long-distance rate may still increase fares; discounts still apply.</p>
             </div>
             <div>
               <label>Long-distance rate</label>
