@@ -350,11 +350,10 @@ function buildInvoiceHtml(booking, passenger, driver, driverName, { forPrint = f
       <td style="padding:24px 32px;">
         <table style="border-collapse:collapse;" cellpadding="0" cellspacing="0" role="presentation">
           <tr>
-            <td style="width:40px;vertical-align:middle;">
-              <!-- Simplified brand car icon without external assets for reliable email rendering. -->
-              <table bgcolor="#0B2942" style="border-collapse:separate;background:#0B2942;border:2px solid #FFCA28;border-radius:9px;" cellpadding="0" cellspacing="0" role="presentation">
-                <tr><td style="width:34px;height:34px;text-align:center;vertical-align:middle;line-height:34px;color:#ffffff;font-size:18px;font-weight:800;font-family:Georgia,serif;">&#128663;</td></tr>
-              </table>
+            <td style="width:44px;vertical-align:middle;">
+              <!-- The exact site car-logo asset; when external images are blocked,
+                   the adjacent EasyRide wordmark still identifies the sender. -->
+              <img src="${esc(siteUrl())}/favicon.svg" alt="EasyRide" width="40" height="40" style="display:block;width:40px;height:40px;border:0;" />
             </td>
             <td style="vertical-align:middle;padding-left:10px;">
               <span style="font-size:22px;font-weight:800;"><span style="color:#ffffff;">Easy</span><span style="color:#FFCA28;">Ride</span></span>
