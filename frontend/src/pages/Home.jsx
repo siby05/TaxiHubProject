@@ -325,37 +325,24 @@ export default function Home() {
 
   return (
     <div className="hm">
-      <section className={`hm-hero${heroOnScreen ? '' : ' hm-paused'}`} ref={heroRef}>
-        <div className="hm-aurora" aria-hidden="true"><span /><span /><span /></div>
-        <div className="hm-grid" aria-hidden="true" />
+      <section className="hm-hero hm-approved">
         <div className="hm-hero-inner">
-          <div>
-            <span className="hm-eyebrow"><span className="hm-dot" />Easy Ride · Now driving in New Plymouth</span>
-            <h1>A private passenger service in New Plymouth you can <span className="hm-grad">actually see coming</span>.</h1>
-            <p className="hm-tagline">
-              Scan the QR code on a driver's car, or book from the app - either way you get an upfront fare, a real
-              admin-approved driver, and live updates from request to drop-off. No guessing, no surge pricing.
-            </p>
-            <div className="hm-cta">
-              <Link className="btn hm-primary" to="/register">Book a ride</Link>
-              {driverSignupEnabled && <Link className="btn hm-ghost" to="/driver-signup">Drive with us</Link>}
-            </div>
-            <div className="hm-trust">
-              <span><Icon.check /> Admin-approved drivers</span>
-              <span><Icon.check /> NZTA compliant</span>
-              <span><Icon.check /> Upfront fares</span>
-              <span><Icon.check /> Cash or card</span>
-            </div>
+          <div className="hm-approved-copy">
+            <span className="hm-approved-kicker">TAXI &amp; PRIVATE TRANSFERS</span>
+            <h1>Your Local Ride<br/>in New Plymouth</h1>
+            <p className="hm-tagline">Airport transfers, local trips and private transport — safe, comfortable and on time.</p>
+            <div className="hm-approved-highlights"><span>✓ Safe &amp; reliable</span><span>◷ Flexible bookings</span><span>⌖ Local service</span></div>
+            <Link className="btn hm-primary" to="/register">Get a Quote &amp; Book →</Link>
           </div>
-          <TripCard active={heroOnScreen} />
-          <div className="hm-trust hm-trust-mobile">
-            <span><Icon.check /> Admin-approved drivers</span>
-            <span><Icon.check /> NZTA compliant</span>
-            <span><Icon.check /> Upfront fares</span>
-            <span><Icon.check /> Cash or card</span>
+          <div className="hm-approved-booking">
+            <div className="hm-booking-tabs"><strong>🚕 Book a Ride</strong><Link to="/airport-transfers">✈ Airport Transfer</Link></div>
+            <h2>Where can we take you?</h2>
+            <p>Get an upfront fare estimate in our secure booking form.</p>
+            <div className="hm-booking-fields"><div>⌖ Pickup location</div><div>⌖ Destination</div><div>▦ Date &amp; time</div></div>
+            <Link className="btn hm-primary" to="/register">Get a Quote &amp; Book →</Link>
+            <small>Secure booking · Subject to driver confirmation</small>
           </div>
         </div>
-        <div className="hm-road" aria-hidden="true"><CarSide /></div>
       </section>
 
       <Deals />
