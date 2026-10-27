@@ -30,7 +30,7 @@ let settings = {
   outstandingFeeLimit: 50,
   // Fare floor: no trip is ever quoted below this, regardless of distance.
   minimumFare: 8,
-  globalRatePerKm: null, // optional global minimum $/km; higher driver rates still apply
+  globalRatePerKm: null, // optional global $/km override; driver rates when unset
   // Optional flat prices for distance bands, e.g. "any trip up to 5km is
   // $12 flat" - an alternative floor alongside minimumFare, for markets
   // where a short trip should cost more than base-fare-plus-per-km would
