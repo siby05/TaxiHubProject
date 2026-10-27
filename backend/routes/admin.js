@@ -34,6 +34,16 @@ function withCompliance(driver) {
 
 router.use(auth, roleMiddleware(['admin']));
 
+// Publishing requires an explicit admin action; private feedback stays private.
+router.put('/feedback/:id/publish', async (req, res) => {
+  if (typeof req.body.published !== 'boolean') return res.status(400).json({ error: 'published must be a boolean' });
+  const feedback = await Feedback.findById(req.params.id);
+  if (!feedback) return res.status(404).json({ error: 'Feedback not found' });
+  if (req.body.published && (!feedback.rating || !feedback.message?.trim())) return res.status(400).json({ error: 'Only written, rated feedback can be published' });
+  const updated = await Feedback.findByIdAndUpdate(feedback._id, { published: req.body.published });
+  res.json(updated);
+});
+
 function publicUser(user) {
   const { password, ...rest } = user;
   return rest;
