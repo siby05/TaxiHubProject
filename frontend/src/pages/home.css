@@ -217,3 +217,25 @@
    stop costing CPU/battery. Declared last so it beats the car exemption
    above. */
 .hm .hm-hero.hm-paused *, .hm .hm-hero.hm-paused *::before, .hm .hm-hero.hm-paused *::after { animation-play-state: paused !important; }
+
+/* Approved premium homepage */
+.hm-approved{background:linear-gradient(90deg,rgba(7,21,39,.94),rgba(7,21,39,.57)),url('/images/byd-atto3.png') center/cover no-repeat;min-height:520px}
+.hm-approved .hm-hero-inner{padding:80px 16px 90px;grid-template-columns:1.1fr .9fr;gap:50px}
+.hm-approved-kicker{color:#ffca28;font-size:.8rem;letter-spacing:.2em;font-weight:800}
+.hm-approved h1{font-size:clamp(2.6rem,5vw,4rem);line-height:1.09;margin:19px 0}
+.hm-approved-highlights{display:flex;gap:16px;flex-wrap:wrap;color:#fff;margin:28px 0;font-weight:650;font-size:.9rem}
+.hm-approved .hm-primary{background:#ffca28;color:#102033;font-weight:800;box-shadow:none}
+.hm-approved-booking{background:#fff;color:#152638;border-radius:15px;padding:25px;box-shadow:0 18px 55px #07162966}
+.hm-approved-booking h2{font-size:1.4rem;margin:20px 0 6px}
+.hm-approved-booking p{font-size:.9rem;color:#64748b}
+.hm-booking-tabs{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:.85rem}
+.hm-booking-tabs strong{background:#ffca28;border-radius:8px;padding:11px}
+.hm-booking-tabs a{color:#102033}
+.hm-booking-fields{display:grid;gap:12px;margin:18px 0}
+.hm-booking-fields div{background:#f8fafc;padding:14px;border:1px solid #dce4ed;border-radius:8px;color:#64748b}
+.hm-approved-booking .btn{display:block;text-align:center}
+.hm-approved-booking small{display:block;text-align:center;margin-top:10px;color:#64748b}
+.hm-nav-contact{display:inline-block;background:#ffca28;color:#102033!important;border-radius:9px;padding:10px 17px;font-weight:750;text-decoration:none}
+.hm-nav-contact:hover{background:#ffe084;color:#102033}
+.hm-deals{background:#fff9e8}
+@media(max-width:790px){.hm-approved .hm-hero-inner{grid-template-columns:1fr;padding:42px 16px;gap:28px}.hm-approved h1{font-size:2.5rem}}
