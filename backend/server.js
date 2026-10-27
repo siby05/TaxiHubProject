@@ -90,7 +90,20 @@ app.use((req, res, next) => {
 app.use(signUploadsInResponses);
 app.use('/uploads', serveSignedUpload(path.join(__dirname, 'uploads')));
 
-app.get('/api/health', (req, res) => res.json({ status: 'ok', dbMode: process.env.DB_MODE || 'memory', email: emailStatus }));
+// Render can see our listening port during MongoDB initialization. Health and
+// application traffic remain unavailable until required startup checks pass.
+let startupReady = false;
+let startupError = 'Initializing database and configuration';
+app.get('/api/health', (req, res) => res.status(startupReady ? 200 : 503).json({
+  status: startupReady ? 'ok' : 'starting',
+  dbMode: process.env.DB_MODE || 'memory',
+  ...(startupReady ? { email: emailStatus } : {}),
+}));
+app.use('/api', (req, res, next) => {
+  if (startupReady) return next();
+  res.setHeader('Retry-After', '15');
+  return res.status(503).json({ error: 'EasyRide is starting. Please retry shortly.' });
+});
 
 app.use('/api/auth', authRoutes);
 app.use('/api/passenger', passengerRoutes);
@@ -127,33 +140,36 @@ io.on('connection', (socket) => {
   }
 });
 
-const PORT = process.env.PORT || 5000;
+const PORT = Number(process.env.PORT) || 5000;
 
-connectDatabase().then(async () => {
-  checkStartupSecurity();
-  // Memory mode always starts empty, so this reseeds fresh demo/test
-  // accounts on every restart exactly as before. A real (mongo) database
-  // only gets seeded once, the first time it's ever genuinely empty -
-  // real data added after that is never touched again.
-  const User = require('./models/User');
-  if ((await User.countDocuments()) === 0 && process.env.DB_MODE !== 'mongo' && process.env.NODE_ENV !== 'production') {
-    await require('./utils/seed')();
-  }
-  // Hydrate admin-configured settings from the database before serving any
-  // requests, so a real (mongo) deployment doesn't silently reset every
-  // setting back to hardcoded defaults on each restart/redeploy.
-  await loadSettings();
-  await checkStartupSecurity.demoAccounts();
-  // After loadSettings() so the admin-configured From address is known.
-  // Not awaited: a slow/unreachable Brevo must not delay the API coming up.
-  verifyEmailConfig();
-  server.listen(PORT, () => console.log(`EasyRide API listening on http://localhost:${PORT}`));
-  startReminderScheduler();
-  startBackupScheduler();
-  // Retention cleanup disabled: preserve all trip, complaint, notification, and GPS records.
-  // startRetentionScheduler();
-  startKeepAwake();
-}).catch((err) => {
-  console.error('[startup] failed to start:', err.message);
-  process.exit(1);
+// Do not hold the HTTP port hostage to database availability: Render's port
+// scanner otherwise times out before a connection error can be surfaced.
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`[startup] HTTP listening on 0.0.0.0:${PORT}; waiting for database readiness`);
 });
+
+async function initialize() {
+  try {
+    checkStartupSecurity();
+    await connectDatabase();
+    const User = require('./models/User');
+    if ((await User.countDocuments()) === 0 && process.env.DB_MODE !== 'mongo' && process.env.NODE_ENV !== 'production') {
+      await require('./utils/seed')();
+    }
+    await loadSettings();
+    await checkStartupSecurity.demoAccounts();
+    startupReady = true;
+    startupError = null;
+    verifyEmailConfig();
+    startReminderScheduler();
+    startBackupScheduler();
+    startKeepAwake();
+    console.log('[startup] EasyRide API ready');
+  } catch (err) {
+    startupError = err?.message || String(err);
+    console.error('[startup] initialization failed; health remains 503:', startupError);
+    // Fail closed: never expose booking endpoints while database/settings
+    // are unavailable. Do not crash/restart in a loop and obscure the cause.
+  }
+}
+initialize();
