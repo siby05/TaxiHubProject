@@ -55,7 +55,7 @@ export default function AirportTransfers() {
       </div>
 
       <p className="muted" style={{ textAlign: 'center' }}>
-        Heading further? See <Link to="/new-plymouth-to-auckland">New Plymouth to Auckland</Link> transfers. Need a ride right now instead? <Link to="/register">Book a private ride in New Plymouth</Link>. Read more{' '}
+        Heading further? See <Link to="/new-plymouth-to-auckland">New Plymouth to Auckland</Link> and <Link to="/new-plymouth-to-palmerston-north">Palmerston North transfers</Link>. Need a ride right now instead? <Link to="/register">Book a private ride in New Plymouth</Link>. Read more{' '}
         <Link to="/about">about EasyRide</Link>.
       </p>
     </div>

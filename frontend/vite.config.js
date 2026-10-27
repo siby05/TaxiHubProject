@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import { writeBrandIcons } from './scripts/generateBrandIcons.js';
 import { PAGES, DEFAULT_META, siteUrlFrom, structuredData } from './src/seo/site.js';
 
 const escapeHtml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -60,15 +61,17 @@ function seo(siteUrl) {
       ].join('\n');
       this.emitFile({ type: 'asset', fileName: 'robots.txt', source: `${robots}\n` });
 
-      const today = new Date().toISOString().slice(0, 10);
       const urls = Object.entries(PAGES).filter(([, page]) => page.sitemap).map(([p, page]) => (
-        `  <url><loc>${site}${p}</loc><lastmod>${today}</lastmod><changefreq>${page.sitemap.changefreq}</changefreq><priority>${page.sitemap.priority}</priority></url>`
+        `  <url><loc>${site}${p}</loc><changefreq>${page.sitemap.changefreq}</changefreq><priority>${page.sitemap.priority}</priority></url>`
       )).join('\n');
       this.emitFile({ type: 'asset', fileName: 'sitemap.xml', source: `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n` });
     },
     // After index.html is on disk: one copy per public page with that
     // page's own head tags, served by vercel.json's per-page rewrites.
     writeBundle() {
+      // Refresh every PNG + ICO from the exact SVG mark used in the site header.
+      // Old binary files in public/ would otherwise keep Google's old favicon.
+      writeBrandIcons(path.join(process.cwd(), 'public'), outDir);
       const indexPath = path.join(outDir, 'index.html');
       const html = fs.readFileSync(indexPath, 'utf8');
       fs.writeFileSync(indexPath, renderPage(html, site, '/', PAGES['/'] || DEFAULT_META));

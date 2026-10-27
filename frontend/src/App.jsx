@@ -7,6 +7,7 @@ import Home from './pages/Home';
 import About from './pages/About';
 import AirportTransfers from './pages/AirportTransfers';
 import NewPlymouthToAuckland from './pages/NewPlymouthToAuckland';
+import TransferRoutes from './pages/TransferRoutes';
 import Login from './pages/Login';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
@@ -48,6 +49,8 @@ export default function App() {
         <Route path="/about" element={<About />} />
         <Route path="/airport-transfers" element={<AirportTransfers />} />
         <Route path="/new-plymouth-to-auckland" element={<NewPlymouthToAuckland />} />
+        <Route path="/auckland-to-new-plymouth" element={<TransferRoutes route="auckland" />} />
+        <Route path="/new-plymouth-to-palmerston-north" element={<TransferRoutes route="palmerston" />} />
         <Route path="/login" element={<Login />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password/:token" element={<ResetPassword />} />

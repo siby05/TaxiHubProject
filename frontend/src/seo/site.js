@@ -29,9 +29,9 @@ export const BUSINESS = {
 // Home page - targets "Easy Ride New Plymouth" (the brand, written the way
 // people search it) and "private taxi in New Plymouth".
 export const DEFAULT_META = {
-  title: 'Easy Ride New Plymouth · Private Passenger Service & Airport Transfers',
-  description: 'Book private taxi rides and airport transfers in New Plymouth with EasyRide. Request a local driver, see estimated fares, and receive confirmation once a driver accepts. Cash or card.',
-  heading: 'Easy Ride New Plymouth - Private Passenger Service & Airport Transfers',
+  title: 'New Plymouth Taxi & Airport Transfers | EasyRide NZ',
+  description: 'Book a New Plymouth taxi or airport transfer with EasyRide. Get an upfront fare estimate for local trips, Auckland transfers and rides across Taranaki.',
+  heading: 'EasyRide New Plymouth – Taxis, Airport Transfers & Local Rides',
   summary: 'Easy Ride (EasyRide) is a private passenger service in New Plymouth, Taranaki: book a vetted local driver with an upfront fare, pay by cash or card, and follow your trip live. We also do New Plymouth Airport transfers and long-distance trips to Auckland, Wellington and across Taranaki.',
 };
 
@@ -93,6 +93,22 @@ export const AIRPORT_FAQ = [
   },
 ];
 
+// Routes in both directions have their own genuinely useful travel details.
+// Descriptions match what the booking app can do today; availability is
+// confirmed separately, and road-distance routing remains pending.
+export const AUCKLAND_RETURN_FAQ = [
+  { q: 'Can I book from Auckland Airport to New Plymouth?', a: 'Yes. Request a private pickup at Auckland Airport or another Auckland address, then travel directly to New Plymouth. Driver availability must be confirmed for your chosen date.' },
+  { q: 'How long does Auckland to New Plymouth take?', a: 'The drive typically takes roughly 4.5 to 5.5 hours depending on Auckland traffic, pickup address, weather and stops. Allow extra time during holiday traffic.' },
+  { q: 'What is the fare?', a: 'Enter your pickup and destination to see an upfront fare estimate. Any eligible route discount configured by EasyRide is reflected in the quote before booking.' },
+  { q: 'Can we stop for food or a break?', a: 'You can request stops when arranging the trip. Please confirm the plan with your driver before travel.' },
+];
+export const PALMERSTON_FAQ = [
+  { q: 'Can I book a New Plymouth to Palmerston North transfer?', a: 'Yes. You can request a private door-to-door transfer to Palmerston North for a specified date and time, subject to driver confirmation.' },
+  { q: 'Which towns are on the way?', a: 'Depending on the route, popular stops include Hāwera, Whanganui and surrounding towns. Your actual route and any stopovers should be confirmed with your driver.' },
+  { q: 'How do I get a fare estimate?', a: 'Enter your two addresses on the EasyRide booking form. It shows the current fare estimate and any eligible configured discounts before you continue.' },
+  { q: 'Can I book the return trip?', a: 'You can also request Palmerston North to New Plymouth. Availability and fare are confirmed separately for each journey.' },
+];
+
 // Public, indexable pages. `heading`/`summary` are the crawler-visible
 // fallback text written into each page's static HTML (inside <noscript>).
 // `sitemap` pages are listed in sitemap.xml. Anything not listed here
@@ -115,6 +131,22 @@ export const PAGES = {
     summary: 'Easy Ride runs private door-to-door trips from New Plymouth to Auckland and Auckland Airport (about 350-360 km, 4.5-5 hours) with a fixed upfront fare and a confirmed local driver. Pre-book at least 12 hours ahead.',
     sitemap: { changefreq: 'monthly', priority: '0.9' },
     faq: AUCKLAND_FAQ,
+  },
+  '/auckland-to-new-plymouth': {
+    title: 'Auckland to New Plymouth Private Transfer | EasyRide NZ',
+    description: 'Request a private transfer from Auckland or Auckland Airport to New Plymouth. See estimated fares and route discounts, then confirm with an EasyRide driver.',
+    heading: 'Auckland to New Plymouth private car transfers',
+    summary: 'Arrange an Auckland Airport or city pickup and travel to New Plymouth, Taranaki. EasyRide offers upfront estimated fares, optional stops and advance booking, subject to driver confirmation.',
+    sitemap: { changefreq: 'monthly', priority: '0.8' },
+    faq: AUCKLAND_RETURN_FAQ,
+  },
+  '/new-plymouth-to-palmerston-north': {
+    title: 'New Plymouth to Palmerston North Transfers | EasyRide',
+    description: 'Book a private New Plymouth to Palmerston North transfer. Plan your pickup, review an upfront fare estimate and request a driver for your trip.',
+    heading: 'New Plymouth to Palmerston North private transfer',
+    summary: 'EasyRide helps passengers request door-to-door transfers between New Plymouth and Palmerston North, including Hāwera and Whanganui stopovers by arrangement, with upfront estimates and driver confirmation.',
+    sitemap: { changefreq: 'monthly', priority: '0.8' },
+    faq: PALMERSTON_FAQ,
   },
   '/about': {
     title: 'About Easy Ride · Private Passenger Service in New Plymouth, Taranaki',
@@ -164,6 +196,7 @@ export function structuredData(site, pathname) {
       { '@type': 'City', name: 'New Plymouth' },
       { '@type': 'AdministrativeArea', name: 'Taranaki' },
       { '@type': 'City', name: 'Auckland' },
+      { '@type': 'City', name: 'Palmerston North' },
     ],
     provider: {
       '@type': 'LocalBusiness',
@@ -177,6 +210,14 @@ export function structuredData(site, pathname) {
     },
   };
   const blocks = [business];
+  if (pathname === '/') blocks.push({
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: BUSINESS.name,
+    alternateName: BUSINESS.alternateNames,
+    url: `${site}/`,
+    inLanguage: 'en-NZ',
+  });
   const faq = PAGES[pathname]?.faq;
   if (faq) {
     blocks.push({

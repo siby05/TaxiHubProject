@@ -65,7 +65,7 @@ export default function NewPlymouthToAuckland() {
       </div>
 
       <p className="muted" style={{ textAlign: 'center' }}>
-        Flying from New Plymouth instead? See <Link to="/airport-transfers">New Plymouth Airport transfers</Link>. Just
+        Travelling in the other direction? See <Link to="/auckland-to-new-plymouth">Auckland to New Plymouth private transfers</Link>. Flying from New Plymouth instead? See <Link to="/airport-transfers">New Plymouth Airport transfers</Link>. Just
         need a ride around town? <Link to="/">Book a private ride in New Plymouth</Link>.
       </p>
     </div>
