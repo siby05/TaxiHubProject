@@ -297,3 +297,6 @@
   .hm-approved-booking .hm-booking-tabs{font-size:.76rem}
   .hm-approved .hm-cta,.hm-approved-booking .btn{width:100%}
 }
+
+.hm-photo-credit{position:absolute;bottom:5px;right:14px;font-size:10px;z-index:2}
+.hm-photo-credit a{color:#e5e7eb;text-decoration:underline;text-underline-offset:2px}
