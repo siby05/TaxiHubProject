@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import AddressAutocomplete from '../components/AddressAutocomplete';
+import ScheduleField from '../components/ScheduleField';
 import client from '../api/client';
 import { useDriverSignupEnabled } from '../hooks/useDriverSignupEnabled';
 import './home.css';
@@ -217,6 +219,40 @@ const DIRECTION_LABEL = {
 // promotion, and same-day Auckland / Palmerston North return trips - each open day links to
 // the driver who already has the other leg, since booking with them is
 // what earns the discount. Renders nothing when neither is on.
+function HomepageBookingForm() {
+  const navigate = useNavigate();
+  const [pickup,setPickup] = useState(null);
+  const [drop,setDrop] = useState(null);
+  const [scheduledFor,setScheduledFor] = useState(null);
+  const [quote,setQuote] = useState(null);
+  const [error,setError] = useState('');
+  const [loading,setLoading] = useState(false);
+  useEffect(() => { setQuote(null); setError(''); }, [pickup,drop,scheduledFor]);
+  async function calculate(e) {
+    e.preventDefault();
+    if (!pickup || !drop) { setError('Select both addresses from the suggestions.'); return; }
+    setLoading(true);setError('');setQuote(null);
+    try {
+      const {data} = await client.post('/booking/homepage-quote', { pickupLat:pickup.lat,pickupLng:pickup.lng,dropLat:drop.lat,dropLng:drop.lng,scheduledFor });
+      setQuote(data);
+    } catch (err) { setError(err.response?.data?.error || 'Could not calculate a fare. Please try again.'); }
+    finally { setLoading(false); }
+  }
+  function continueBooking() {
+    sessionStorage.setItem('easyride-home-quote',JSON.stringify({pickup,drop,scheduledFor}));
+    navigate('/register');
+  }
+  return <form className="hm-approved-booking" onSubmit={calculate}>
+    <div className="hm-booking-tabs"><strong>🚕 Book a Ride</strong><Link to="/airport-transfers">✈ Airport Transfer</Link></div>
+    <h2>Where can we take you?</h2><p>Choose locations to calculate your estimated fare.</p>
+    <div className="hm-booking-fields"><AddressAutocomplete label="Pickup location" placeholder="Enter pickup address" onSelect={setPickup} required allowLocate/><AddressAutocomplete label="Destination" placeholder="Where are you going?" onSelect={setDrop} required/><ScheduleField onChange={setScheduledFor}/></div>
+    {error && <p role="alert" className="error-text">{error}</p>}
+    {quote && <div className="hm-quoted-fare" role="status"><strong>Estimated fare: ${Number(quote.estimatedFare).toFixed(2)}</strong><span>{Number(quote.distanceKm).toFixed(1)} km {quote.discountPercent>0 && `· ${quote.discountPercent}% discount applied`}</span>{quote.provisional && <small>No driver currently scheduled. This is a provisional estimate; your trip requires driver confirmation.</small>}</div>}
+    {quote ? <button type="button" className="btn hm-primary" onClick={continueBooking}>Continue to Booking →</button> : <button className="btn hm-primary" disabled={loading}>{loading?'Calculating...':'Calculate Fare →'}</button>}
+    <small>Secure booking · Final quote confirmed before submitting your request</small>
+  </form>;
+}
+
 function Deals() {
   const [deals, setDeals] = useState(null);
   useEffect(() => {
@@ -342,14 +378,7 @@ export default function Home() {
             <div className="hm-approved-highlights"><span>✓ Safe &amp; reliable</span><span>◷ Flexible bookings</span><span>⌖ Local service</span></div>
             <Link className="btn hm-primary" to="/register">Get a Quote &amp; Book →</Link>
           </div>
-          <div className="hm-approved-booking">
-            <div className="hm-booking-tabs"><strong>🚕 Book a Ride</strong><Link to="/airport-transfers">✈ Airport Transfer</Link></div>
-            <h2>Where can we take you?</h2>
-            <p>Get an upfront fare estimate in our secure booking form.</p>
-            <div className="hm-booking-fields"><div>⌖ Pickup location</div><div>⌖ Destination</div><div>▦ Date &amp; time</div></div>
-            <Link className="btn hm-primary" to="/register">Get a Quote &amp; Book →</Link>
-            <small>Secure booking · Subject to driver confirmation</small>
-          </div>
+          <HomepageBookingForm />
         </div>
       </section>
 
