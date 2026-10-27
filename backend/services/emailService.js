@@ -305,6 +305,20 @@ function driverLine(driver, driverName) {
   return label ? `\nDriver: ${driverName || 'assigned'} - ${label}` : '';
 }
 
+// Invitation appended only to the outgoing invoice email, never to the
+// invoice/receipt document, download, or printable receipt page.
+function receiptTestimonialInvitation() {
+  const url = `${siteUrl()}/about#feedback`;
+  return {
+    text: `How was your EasyRide trip? We'd appreciate your feedback. Leave an optional passenger testimonial or star rating here: ${url}`,
+    html: `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:560px;margin:18px auto 0;padding:20px 24px;background:#fff9e8;border:1px solid #f2e5bd;border-radius:10px;color:#0B2942;">
+      <div style="font-size:16px;font-weight:700;margin-bottom:8px;">How was your EasyRide trip?</div>
+      <p style="font-size:14px;line-height:1.5;margin:0 0 12px;">We'd appreciate your feedback. Share an optional passenger testimonial or star rating.</p>
+      <a href="${esc(url)}" style="display:inline-block;background:#0B2942;color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;padding:11px 16px;border-radius:8px;">Leave a review</a>
+    </div>`,
+  };
+}
+
 // Addresses, names and vehicle details are typed by users and end up in
 // HTML that is both emailed and served as a page (GET /:id/receipt).
 function esc(value) {
@@ -587,19 +601,24 @@ You'll get another email as soon as a driver accepts. Track it here: ${appUrl('/
   sendBookingConfirmedDirect: (to, booking, driver, driverName) =>
     send(to, `Your ride is confirmed (${booking.bookingId})`, `Your ride from ${booking.pickupAddress} to ${booking.dropAddress} is confirmed - the driver has been notified.\nPickup time: ${pickupTimeText(booking)}\nEstimated fare: $${Number(booking.estimatedFare).toFixed(2)}.${driverLine(driver, driverName)}`),
 
+  // Only the email accompanying a completed-trip invoice gets a review
+  // invitation. buildInvoiceHtml / buildInvoiceText / invoicePdf remain
+  // unchanged and are reused for receipt viewing, printing and downloads.
   // Sent automatically the moment a driver marks a trip complete (see
   // routes/booking.js PUT /:id/complete) - this is the passenger's
   // receipt. passenger is {name, address} - address is included in
   // "Billed to" when set. pdf is the buildInvoicePdf() Buffer, attached
   // so the passenger has a file to keep/forward, not just the inline HTML.
-  sendInvoiceEmail: (to, booking, passenger, driver, driverName, pdf) =>
-    send(
+  sendInvoiceEmail: (to, booking, passenger, driver, driverName, pdf) => {
+    const invitation = receiptTestimonialInvitation();
+    return send(
       to,
       `Invoice - trip ${booking.bookingId}`,
-      buildInvoiceText(booking, passenger, driver, driverName),
+      `${buildInvoiceText(booking, passenger, driver, driverName)}\n\n${invitation.text}`,
       pdf && [{ filename: `EasyRide-invoice-${booking.bookingId}.pdf`, content: pdf, contentType: 'application/pdf' }],
-      buildInvoiceHtml(booking, passenger, driver, driverName),
-    ),
+      `${buildInvoiceHtml(booking, passenger, driver, driverName)}\n${invitation.html}`,
+    );
+  },
 
   // Sent ahead of the trip when a same-day return-trip discount starts or
   // stops applying to an already-booked trip (see utils/discounts.js).
@@ -688,4 +707,4 @@ You'll get another email as soon as a driver accepts. Track it here: ${appUrl('/
     ),
 };
 
-module.exports = { emailService, buildReceiptPage, buildRespondPage, buildRespondResultPage, verifyEmailConfig, emailStatus: status };
+module.exports = { emailService, buildReceiptPage, buildRespondPage, buildRespondResultPage, receiptTestimonialInvitation, verifyEmailConfig, emailStatus: status };
