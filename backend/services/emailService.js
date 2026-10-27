@@ -471,14 +471,14 @@ function buildRespondResultPage(title, message, ok) {
   return pageShell(title, `
     <h1 style="font-size:20px;margin:0 0 8px;color:${ok ? '#16a34a' : '#dc2626'};">${esc(title)}</h1>
     <p style="color:#334155;line-height:1.6;margin:0 0 20px;">${esc(message)}</p>
-    <a href="${esc(appUrl())}" style="${BTN}background:#0EA5E9;color:#fff;">Open the app</a>`);
+    <a href="${esc(appUrl())}" style="${BTN}background:#0B2942;color:#fff;">Open the app</a>`);
 }
 
 function pageShell(title, body) {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(title)} - EasyRide</title>
-<style>body{margin:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#0f172a}.card{max-width:520px;margin:24px auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:24px}.brand{max-width:520px;margin:20px auto 0;padding:0 4px;font-weight:800;font-size:18px;color:#0B2942}.brand span{color:#0EA5E9}</style>
-</head><body><div class="brand">Easy<span>Ride</span></div><div class="card">${body}</div></body></html>`;
+<style>body{margin:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#0f172a}.card{max-width:520px;margin:24px auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:24px}.brand{max-width:520px;margin:20px auto 0;padding:0 4px;font-weight:800;font-size:18px;color:#0B2942}.brand span{color:#d4a315}</style>
+</head><body><div class="brand"><img src="${esc(siteUrl())}/favicon.svg" alt="" width="30" height="30" style="vertical-align:middle;margin-right:8px">Easy<span>Ride</span></div><div class="card">${body}</div></body></html>`;
 }
 
 function buildReceiptPage(booking, passenger, driver, driverName, pdfUrl) {
@@ -493,7 +493,7 @@ function buildReceiptPage(booking, passenger, driver, driverName, pdfUrl) {
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   body { margin: 0; background: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
   .toolbar { display: flex; gap: 10px; justify-content: center; padding: 16px; }
-  .toolbar a, .toolbar button { font: inherit; font-weight: 600; padding: 10px 18px; border: none; border-radius: 6px; background: #0EA5E9; color: #fff; cursor: pointer; text-decoration: none; }
+  .toolbar a, .toolbar button { font: inherit; font-weight: 600; padding: 10px 18px; border: none; border-radius: 6px; background: #0B2942; color: #fff; cursor: pointer; text-decoration: none; }
   .toolbar .secondary { background: #e2e8f0; color: #1e293b; }
   @media (max-width: 640px) { .toolbar .secondary { display: none; } }
   .sheet { padding: 0 16px 32px; }
