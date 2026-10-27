@@ -314,7 +314,7 @@ export default function DriverDashboard() {
       const finalBooking = { ...booking, actualFare: actualFare || booking.estimatedFare };
       const cardOwing = !alreadyPaid && payment === 'card';
       const payLink = cardOwing ? `${window.location.origin}/pay/${id}` : null;
-      const receipt = receiptUrl(booking);
+      const receipt = (alreadyPaid || payment === 'cash-paid' || payment === 'card-paid') ? receiptUrl(booking) : null;
       // Opened before the API call so it counts as part of the tap (popup
       // blockers reject a window opened after an await). One message: the
       // receipt link, with the pay link folded in if a card fare is owing,
@@ -415,9 +415,7 @@ export default function DriverDashboard() {
               {notifPermission !== 'granted' && notifPermission !== 'unsupported' && (
                 <button className="btn secondary" onClick={enableNotifications}>🔔 Enable trip notifications</button>
               )}
-              <button className={`btn ${profile.isAvailable ? 'secondary' : ''}`} onClick={toggleAvailable} disabled={profile.status !== 'approved'}>
-                {profile.isAvailable ? 'Go offline' : 'Go online'}
-              </button>
+              {!profile.isAvailable && <button className="btn" onClick={toggleAvailable} disabled={profile.status !== 'approved'}>Go online</button>}
             </div>
           </div>
           {availError && <p className="error-text" style={{ marginTop: 10 }}>{availError}</p>}
@@ -521,7 +519,7 @@ export default function DriverDashboard() {
               const unpaid = b.paymentStatus !== 'paid';
               const payLink = b.paymentMethod === 'card' ? `${window.location.origin}/pay/${b._id}` : null;
               const remindLink = unpaid && waLink(b.passengerId?.mobile, paymentReminderMessage(b, profile?.userId?.name, payLink));
-              const receiptWa = receiptUrl(b) && waLink(b.passengerId?.mobile, receiptMessage(b, profile?.userId?.name, receiptUrl(b), unpaid ? payLink : null));
+              const receiptWa = !unpaid && receiptUrl(b) && waLink(b.passengerId?.mobile, receiptMessage(b, profile?.userId?.name, receiptUrl(b), unpaid ? payLink : null));
               return (
                 <div className="booking-actions trip-actions">
                   {remindLink && (
@@ -529,8 +527,8 @@ export default function DriverDashboard() {
                       href={remindLink}><WhatsAppIcon /> Remind to pay</a>
                   )}
                   {unpaid && <button className="btn secondary" onClick={() => markPaid(b._id)}>Mark as paid</button>}
-                  {receiptUrl(b) && <a className="btn secondary" target="_blank" rel="noreferrer" href={receiptUrl(b)}>View receipt</a>}
-                  {receiptUrl(b) && b.passengerHasEmail && (
+                  {!unpaid && receiptUrl(b) && <a className="btn secondary" target="_blank" rel="noreferrer" href={receiptUrl(b)}>View receipt</a>}
+                  {!unpaid && receiptUrl(b) && b.passengerHasEmail && (
                     <button className="btn secondary" disabled={!!receiptSent[b._id]} onClick={() => emailReceipt(b._id)}>
                       {receiptSent[b._id] === 'sent' ? 'Receipt emailed' : receiptSent[b._id] === 'sending' ? 'Sending...' : 'Email receipt'}
                     </button>
