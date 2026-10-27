@@ -34,7 +34,7 @@ function rangeBasedPrice(distanceKm, fareRanges) {
 // own rate is already higher, which is kept.
 function effectiveRatePerKm(distanceKm, ratePerKm, settings) {
   const driverRate = Number(ratePerKm) || Number(process.env.DEFAULT_RATE_PER_KM) || 1.8;
-  const rate = Math.max(driverRate, Number(settings?.globalRatePerKm) || 0);
+  const rate = Number(settings?.globalRatePerKm) > 0 ? Number(settings.globalRatePerKm) : driverRate;
   const longRate = Number(settings?.longDistanceRatePerKm) || 0;
   const threshold = Number(settings?.longDistanceThresholdKm) || 100;
   return longRate > 0 && distanceKm > threshold ? Math.max(rate, longRate) : rate;
