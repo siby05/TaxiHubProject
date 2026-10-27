@@ -546,7 +546,7 @@ router.get('/settings', async (req, res) => {
 // PUT /api/admin/settings - update commission/fee policy
 router.put('/settings', async (req, res) => {
   const {
-    commissionType, commissionPercent, weeklyFlatFee, outstandingFeeLimit, minimumFare, fareRanges,
+    commissionType, commissionPercent, weeklyFlatFee, outstandingFeeLimit, minimumFare, globalRatePerKm, fareRanges,
     longDistanceThresholdKm, longDistanceRatePerKm, driverSignupEnabled, vehicleSelectionEnabled, tempPasswordVisible, adminEmail, adminMobile, backupFrequency, tripRetentionDays,
     promoDiscount, returnTripDiscount, routeDiscounts, dbStorageLimitMb, dbCleanupAtPercent,
   } = req.body;
@@ -560,6 +560,7 @@ router.put('/settings', async (req, res) => {
       ...(weeklyFlatFee != null && { weeklyFlatFee: Number(weeklyFlatFee) }),
       ...(outstandingFeeLimit != null && { outstandingFeeLimit: Number(outstandingFeeLimit) }),
       ...(minimumFare != null && { minimumFare: Number(minimumFare) }),
+      ...(globalRatePerKm !== undefined && { globalRatePerKm: globalRatePerKm === '' || globalRatePerKm == null ? null : Number(globalRatePerKm) }),
       ...(longDistanceThresholdKm != null && longDistanceThresholdKm !== '' && { longDistanceThresholdKm: Number(longDistanceThresholdKm) }),
       ...(longDistanceRatePerKm !== undefined && {
         longDistanceRatePerKm: longDistanceRatePerKm === '' || longDistanceRatePerKm == null || Number(longDistanceRatePerKm) === 0 ? null : Number(longDistanceRatePerKm),

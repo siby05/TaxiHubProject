@@ -30,6 +30,7 @@ let settings = {
   outstandingFeeLimit: 50,
   // Fare floor: no trip is ever quoted below this, regardless of distance.
   minimumFare: 8,
+  globalRatePerKm: null, // optional global $/km override; driver rates when unset
   // Optional flat prices for distance bands, e.g. "any trip up to 5km is
   // $12 flat" - an alternative floor alongside minimumFare, for markets
   // where a short trip should cost more than base-fare-plus-per-km would
@@ -162,6 +163,7 @@ function updateSettings(patch) {
   if (patch.dbCleanupAtPercent !== undefined && !(patch.dbCleanupAtPercent >= 10 && patch.dbCleanupAtPercent <= 100)) {
     throw new Error('Clean-up threshold must be between 10% and 100%');
   }
+  if (patch.globalRatePerKm != null && (!Number.isFinite(patch.globalRatePerKm) || patch.globalRatePerKm <= 0)) throw new Error('Global rate must be greater than zero');
   if (patch.longDistanceThresholdKm !== undefined && !(patch.longDistanceThresholdKm > 0)) {
     throw new Error('longDistanceThresholdKm must be a distance above 0 km');
   }
