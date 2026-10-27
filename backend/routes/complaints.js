@@ -363,10 +363,10 @@ router.post('/:complaintId/upload-document', auth, roleMiddleware(['admin']), up
   res.json({ message: 'Document uploaded', complaint });
 });
 
-// DELETE /api/complaints/admin/archive-old - purge complaints past the 2-year NZ TA retention window
-router.delete('/admin/archive-old', auth, roleMiddleware(['admin']), async (req, res) => {
-  const result = await Complaint.deleteMany({ retentionExpiryDate: { $lt: new Date() } });
-  res.json({ message: 'Old complaints archived', deletedCount: result.deletedCount });
+// Historical complaint records are retained. No delete or purge operation is exposed.
+// Archival requires a reviewed policy and a non-destructive implementation.
+router.delete('/admin/archive-old', auth, roleMiddleware(['admin']), (req, res) => {
+  res.status(409).json({ error: 'Destructive archiving is disabled. No records have been deleted.' });
 });
 
 module.exports = router;
