@@ -14,7 +14,7 @@ const { runInBackground } = require('../utils/background');
 const { ensureDriverQrCode } = require('../utils/qrcode');
 const { getDriverBilling } = require('../utils/billing');
 const WeeklyPayment = require('../models/WeeklyPayment');
-const { getSettings, updateSettings } = require('../config/platformSettings');
+const { getSettings, updateSettingsConfirmed } = require('../config/platformSettings');
 const { checkDriverCompliance } = require('../utils/compliance');
 const { isValidVehicleType } = require('../config/vehicleTypes');
 const { DRIVER_DOCUMENTS, isValidDocumentKey, documentLabel, allDocumentsVerified, outstandingDocuments } = require('../config/driverDocuments');
@@ -554,7 +554,7 @@ router.put('/settings', async (req, res) => {
     if (adminEmail != null && adminEmail && !/^\S+@\S+\.\S+$/.test(adminEmail)) {
       return res.status(400).json({ error: 'adminEmail must be a valid email address' });
     }
-    const updated = updateSettings({
+    const updated = await updateSettingsConfirmed({
       ...(commissionType && { commissionType }),
       ...(commissionPercent != null && { commissionPercent: Number(commissionPercent) }),
       ...(weeklyFlatFee != null && { weeklyFlatFee: Number(weeklyFlatFee) }),
