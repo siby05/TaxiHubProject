@@ -150,7 +150,8 @@ connectDatabase().then(async () => {
   server.listen(PORT, () => console.log(`EasyRide API listening on http://localhost:${PORT}`));
   startReminderScheduler();
   startBackupScheduler();
-  startRetentionScheduler();
+  // Retention cleanup disabled: preserve all trip, complaint, notification, and GPS records.
+  // startRetentionScheduler();
   startKeepAwake();
 }).catch((err) => {
   console.error('[startup] failed to start:', err.message);
