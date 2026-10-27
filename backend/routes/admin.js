@@ -538,7 +538,7 @@ router.put('/settings', async (req, res) => {
   const {
     commissionType, commissionPercent, weeklyFlatFee, outstandingFeeLimit, minimumFare, fareRanges,
     longDistanceThresholdKm, longDistanceRatePerKm, driverSignupEnabled, vehicleSelectionEnabled, tempPasswordVisible, adminEmail, adminMobile, backupFrequency, tripRetentionDays,
-    promoDiscount, returnTripDiscount, dbStorageLimitMb, dbCleanupAtPercent,
+    promoDiscount, returnTripDiscount, routeDiscounts, dbStorageLimitMb, dbCleanupAtPercent,
   } = req.body;
   try {
     if (adminEmail != null && adminEmail && !/^\S+@\S+\.\S+$/.test(adminEmail)) {
@@ -567,7 +567,8 @@ router.put('/settings', async (req, res) => {
       ...(promoDiscount && {
         promoDiscount: { ...promoDiscount, percent: Number(promoDiscount.percent), startDate: promoDiscount.startDate || null, endDate: promoDiscount.endDate || null },
       }),
-      ...(returnTripDiscount && { returnTripDiscount: { ...returnTripDiscount, percent: Number(returnTripDiscount.percent) } }),    });
+      ...(returnTripDiscount && { returnTripDiscount: { ...returnTripDiscount, percent: Number(returnTripDiscount.percent) } }),
+      ...(routeDiscounts !== undefined && { routeDiscounts }),    });
     // Turning the return-trip discount on/off or changing its percent
     // re-prices already-booked pairs (and tells those passengers).
     if (returnTripDiscount) runInBackground('return-trip discount repricing', () => repriceUpcomingReturnTrips(req.app.get('io')));
