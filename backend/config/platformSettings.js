@@ -125,6 +125,7 @@ let settings = {
 };
 
 let settingsDocId = null;
+let latestSettingsWrite = Promise.resolve();
 
 // Called once at startup (see server.js), before the server accepts any
 // requests. Merges the stored doc *over* the defaults above rather than
@@ -201,17 +202,33 @@ function updateSettings(patch) {
     patch = { ...patch, routeDiscounts: patch.routeDiscounts.map((r) => ({ direction: r.direction, enabled: !!r.enabled, percent: Number(r.percent) || 0 })) };
   }
   settings = { ...settings, ...patch };
-  // Fire-and-forget: callers of updateSettings() expect a synchronous
-  // return (every route in the app relies on that), so persistence
-  // happens in the background - a transient DB hiccup here must never
-  // block or fail the settings change the admin is actively making, it
-  // just means this particular change won't survive the next restart.
+  // Existing synchronous callers continue to work, but the admin settings
+  // endpoint can now await the actual database write before reporting Saved.
   if (settingsDocId) {
-    PlatformSettings.findByIdAndUpdate(settingsDocId, patch).catch((err) => {
-      console.error('[platformSettings] failed to persist update:', err.message);
-    });
+    latestSettingsWrite = Promise.resolve(latestSettingsWrite).catch(() => {}).then(() => PlatformSettings.findByIdAndUpdate(settingsDocId, patch));
+    latestSettingsWrite.catch((err) => console.error('[platformSettings] failed to persist update:', err.message));
   }
   return { ...settings };
 }
 
-module.exports = { getSettings, updateSettings, loadSettings };
+async function updateSettingsConfirmed(patch) {
+  if (!settingsDocId) throw new Error('Settings storage is not initialized');
+  if (process.env.DB_MODE !== 'mongo' && process.env.NODE_ENV === 'production') {
+    throw new Error('Settings cannot persist: set DB_MODE=mongo and a valid MONGO_URI on Render');
+  }
+  const previous = { ...settings };
+  const updated = updateSettings(patch);
+  try {
+    await latestSettingsWrite;
+    const persisted = await PlatformSettings.findById(settingsDocId);
+    if (!persisted || (patch.globalRatePerKm !== undefined && persisted.globalRatePerKm !== updated.globalRatePerKm)) {
+      throw new Error('Settings could not be verified in the database');
+    }
+    return updated;
+  } catch (err) {
+    settings = previous;
+    throw err;
+  }
+}
+
+module.exports = { getSettings, updateSettings, updateSettingsConfirmed, loadSettings };
