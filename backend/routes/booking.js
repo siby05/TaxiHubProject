@@ -34,7 +34,7 @@ const { formatNzDateTime } = require('../utils/nzTime');
 // The guest (QR-scan, no login) endpoints are the only unauthenticated
 // way to create data or look people up.
 const guestLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 30 });
-const { isWithinSchedule, hasDeclaredSchedule } = require('../utils/schedule');
+const { isWithinSchedule, hasDeclaredSchedule, ownBookingScheduleAdvisory } = require('../utils/schedule');
 
 // A booking's requested time counts as "scheduled ahead" (checked against
 // drivers' schedules for that time rather than who's online now) once it's
@@ -459,13 +459,11 @@ router.post('/quote', auth, roleMiddleware(['passenger', 'driver']), async (req,
     if (req.user.role === 'driver') {
       driver = await Driver.findOne({ userId: req.user.id });
       if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
-      // Booking a passenger in for *now* needs no schedule check - the
-      // driver is right there doing it. For a later time it must fall in
-      // their own declared hours (same rule as POST /api/driver/bookings,
-      // surfaced here at the quote so they find out before confirming).
-      if (scheduledFor && !isWithinSchedule(driver, new Date(scheduledFor))) {
-        return res.status(400).json({ error: OUTSIDE_OWN_SCHEDULE });
-      }
+      // Driver-initiated bookings are manually accepted by that driver.
+      // Inform them about their shift rather than refusing to quote; this
+      // does not change scheduled auto-dispatch or passenger eligibility.
+      const advice = ownBookingScheduleAdvisory(driver, scheduledFor);
+      requestedOffSchedule = advice.requestedOffSchedule;
     } else {
       ({ driver, usedFallback, requestedUnavailable, requestedCashOnly, requestedName, nextAvailableTime, requestedOffSchedule } = await resolveDriver(driverId, paymentMethod, vehicleType, { lat: pickupLat, lng: pickupLng }, scheduledFor ? new Date(scheduledFor) : undefined));
       if (!driver) {
@@ -480,6 +478,9 @@ router.post('/quote', auth, roleMiddleware(['passenger', 'driver']), async (req,
     res.json({
       ...buildQuote(distanceKm, driver.ratePerKm, paymentMethod, scheduledFor, { pickupLat, pickupLng, dropLat, dropLng }),
       usedFallback, requestedUnavailable, requestedCashOnly, requestedName, requestedOffSchedule,
+      ...(req.user.role === 'driver' && requestedOffSchedule
+        ? { availabilityMessage: ownBookingScheduleAdvisory(driver, scheduledFor).scheduleMessage }
+        : {}),
     });
   } catch (err) {
     serverError(res, err, req);
