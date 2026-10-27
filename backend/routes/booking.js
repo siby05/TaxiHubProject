@@ -1154,21 +1154,14 @@ async function acceptBooking(req, booking, driver, driverName) {
     return { status: 403, error: 'This trip was not sent to you' };
   }
 
-  const updated = await Booking.findByIdAndUpdate(booking._id, {
-    status: 'accepted',
-    acceptedAt: new Date(),
+  // Conditional atomic claim prevents two drivers accepting one broadcast ride.
+  const updated = await Booking.findOneAndUpdate({
+    _id: booking._id, status: 'pending', driverId: isBroadcast ? null : driver._id,
+  }, {
+    status: 'accepted', acceptedAt: new Date(),
     ...(isBroadcast && { driverId: driver._id }),
   });
-
-  // Narrow (not eliminate) the race window: if another driver's claim on
-  // this same broadcast request landed between our update and this
-  // re-check, back out rather than reporting a false success.
-  if (isBroadcast) {
-    const verify = await Booking.findById(booking._id);
-    if (String(verify.driverId) !== String(driver._id)) {
-      return { status: 409, error: 'This trip was just accepted by another driver.' };
-    }
-  }
+  if (!updated) return { status: 409, error: 'This trip has already been accepted or changed.' };
 
   const passenger = await User.findById(booking.passengerId);
   runInBackground('email sendBookingAccepted', () => emailService.sendBookingAccepted(passenger.email, updated, driver, driverName));
