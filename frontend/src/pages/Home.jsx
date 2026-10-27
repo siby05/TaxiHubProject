@@ -300,6 +300,13 @@ function useReveal() {
   }, []);
 }
 
+
+function Testimonials() {
+  const [items,setItems]=useState([]);
+  useEffect(()=>{client.get('/feedback/testimonials').then((r)=>setItems(r.data||[])).catch(()=>{});},[]);
+  if (!items.length) return null;
+  return <section className="hm-section alt"><div className="container"><div className="hm-head"><div className="hm-kicker">Passenger experiences</div><h2>What our passengers say</h2></div><div className="hm-testimonials">{items.map((f,i)=><blockquote key={i}><div aria-label={`${f.rating} out of 5 stars`}>{'★'.repeat(Math.max(0,Math.min(5,f.rating)))}</div><p>“{f.message}”</p><strong>— {f.name}</strong></blockquote>)}</div></div></section>;
+}
 export default function Home() {
   const driverSignupEnabled = useDriverSignupEnabled();
   const [vehicleTypes, setVehicleTypes] = useState(FALLBACK_VEHICLE_TYPES);
@@ -346,6 +353,7 @@ export default function Home() {
       </section>
 
       <Deals />
+      <Testimonials />
 
       <section className="hm-section">
         <div className="container">
