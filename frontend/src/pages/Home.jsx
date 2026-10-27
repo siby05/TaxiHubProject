@@ -380,6 +380,7 @@ export default function Home() {
           </div>
           <HomepageBookingForm />
         </div>
+        <div className="hm-photo-credit"><a href="https://commons.wikimedia.org/wiki/File:Taranaki_banner_Mount_Taranaki_from_New_Plymouth.JPG" target="_blank" rel="noreferrer">Mount Taranaki photo: AlasdairW / Wikimedia Commons</a></div>
       </section>
 
       <Deals />
