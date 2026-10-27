@@ -45,6 +45,8 @@ function matches(doc, filter) {
         }
       });
     }
+    // MongoDB equality with null matches fields that are null or missing.
+    if (cond === null) return val == null;
     return String(val) === String(cond);
   });
 }
