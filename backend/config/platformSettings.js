@@ -120,6 +120,7 @@ let settings = {
   // Doesn't stack with promoDiscount; a trip gets whichever is bigger.
   // See utils/discounts.js pairedTripIds().
   returnTripDiscount: { enabled: false, percent: 10, minGapHours: 1 },
+  routeDiscounts: [], // e.g. [{ direction: 'np-akl', enabled: true, percent: 10 }]
 };
 
 let settingsDocId = null;
@@ -191,6 +192,11 @@ function updateSettings(patch) {
     const minGapHours = r.minGapHours == null || r.minGapHours === '' ? 1 : Number(r.minGapHours);
     if (!(minGapHours >= 0 && minGapHours <= 12)) throw new Error('Gap before the return trip must be between 0 and 12 hours');
     patch = { ...patch, returnTripDiscount: { enabled: !!r.enabled, percent: r.percent, minGapHours } };
+  }
+  if (patch.routeDiscounts !== undefined) {
+    const allowed = new Set(['np-akl', 'akl-np', 'np-pmr', 'pmr-np']);
+    if (!Array.isArray(patch.routeDiscounts) || patch.routeDiscounts.length > 4 || patch.routeDiscounts.some((r) => !allowed.has(r.direction) || (r.enabled && !validPercent(Number(r.percent))))) throw new Error('Invalid route discount configuration');
+    patch = { ...patch, routeDiscounts: patch.routeDiscounts.map((r) => ({ direction: r.direction, enabled: !!r.enabled, percent: Number(r.percent) || 0 })) };
   }
   settings = { ...settings, ...patch };
   // Fire-and-forget: callers of updateSettings() expect a synchronous
