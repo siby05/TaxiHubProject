@@ -585,9 +585,17 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
       notifyAdmins({ type: 'booking-unassigned', title: 'Booking requires driver confirmation',
         message: `Trip ${booking.bookingId}: no driver is scheduled. Please contact drivers and update the passenger once confirmed.`, link: '/admin' });
     }
+    // When nobody is scheduled, still offer the unassigned request to
+    // approved drivers for manual acceptance, including outside their shifts.
+    // This does not automatically confirm the passenger's ride.
+    const standbyDrivers = awaitingDriverConfirmation
+      ? (await Driver.find({ status: 'approved' })).filter((d) =>
+          (paymentMethod !== 'card' || d.acceptsOnlinePayment !== false)
+          && (!vehicleType || d.vehicleType === vehicleType))
+      : [];
     const notifyDriverIds = targetDriverId
       ? [(await Driver.findById(targetDriverId)).userId]
-      : broadcastCandidates.map((d) => d.userId);
+      : (awaitingDriverConfirmation ? standbyDrivers : broadcastCandidates).map((d) => d.userId);
 
     // In parallel rather than one driver after another - each alert is only
     // a couple of lookups plus the live socket push now (its email and
@@ -1007,14 +1015,10 @@ router.get('/driver', auth, roleMiddleware(['driver']), async (req, res) => {
     .populate('passengerId', 'name mobile email')
     .sort({ createdAt: -1 });
 
-  // Same time rule as findEligibleCandidates(): a request for now needs the
-  // driver online and on shift now; one scheduled ahead needs their
-  // declared schedule to cover that time (or, with no schedule declared,
-  // for them to be online) - so a driver who's offline today still sees a
-  // trip for next week that falls in their shifts.
-  const availableFor = (b) => (isScheduledAhead(b.scheduledFor)
-    ? (hasDeclaredSchedule(driver) ? isWithinSchedule(driver, new Date(b.scheduledFor)) : driver.isAvailable)
-    : driver.isAvailable && isWithinSchedule(driver));
+  // Driver may manually accept a pending request outside their schedule.
+  // Scheduling affects automatic eligibility, not visibility of unassigned
+  // requests. This supports a single driver who also acts as admin.
+  const availableFor = () => true;
 
   let broadcastPending = [];
   if (driver.status === 'approved') {
