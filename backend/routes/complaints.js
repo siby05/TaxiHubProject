@@ -160,6 +160,7 @@ router.get('/driver/complaints-against-me', auth, roleMiddleware(['driver']), as
 // GET /api/complaints/driver/:complaintId
 router.get('/driver/:complaintId', auth, roleMiddleware(['driver']), async (req, res) => {
   const driver = await Driver.findOne({ userId: req.user.id });
+  if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
   const complaint = await Complaint.findOne({ _id: req.params.complaintId, driverId: driver._id })
     .populate('complainantId', 'name email mobile')
     .populate('driverComments.commentedBy', 'name')
@@ -174,6 +175,10 @@ router.post('/:complaintId/driver-comment', auth, roleMiddleware(['driver']), as
     const { comment } = req.body;
     if (!comment || !comment.trim()) return res.status(400).json({ error: 'Comment cannot be empty' });
 
+    const driver = await Driver.findOne({ userId: req.user.id });
+    if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
+    const ownedComplaint = await Complaint.findOne({ _id: req.params.complaintId, driverId: driver._id });
+    if (!ownedComplaint) return res.status(404).json({ error: 'Complaint not found' });
     const driverUser = await User.findById(req.user.id);
 
     const complaint = await Complaint.findByIdAndUpdate(req.params.complaintId, {
