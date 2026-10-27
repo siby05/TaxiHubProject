@@ -30,7 +30,7 @@ export const BUSINESS = {
 // people search it) and "private taxi in New Plymouth".
 export const DEFAULT_META = {
   title: 'Easy Ride New Plymouth · Private Passenger Service & Airport Transfers',
-  description: 'Easy Ride is a private passenger service in New Plymouth - upfront fares, vetted local drivers and live trip updates. Airport transfers and long-distance trips to Auckland, Wellington and across Taranaki. Cash or card.',
+  description: 'Book private taxi rides and airport transfers in New Plymouth with EasyRide. Request a local driver, see estimated fares, and receive confirmation once a driver accepts. Cash or card.',
   heading: 'Easy Ride New Plymouth - Private Passenger Service & Airport Transfers',
   summary: 'Easy Ride (EasyRide) is a private passenger service in New Plymouth, Taranaki: book a vetted local driver with an upfront fare, pay by cash or card, and follow your trip live. We also do New Plymouth Airport transfers and long-distance trips to Auckland, Wellington and across Taranaki.',
 };
@@ -48,7 +48,7 @@ export const AUCKLAND_FAQ = [
   },
   {
     q: 'Can you take me to Auckland Airport?',
-    a: 'Yes. Book a New Plymouth to Auckland Airport transfer around your flight time - your driver is confirmed ahead, and the fare is agreed before you travel.',
+    a: 'You can request an Auckland Airport transfer for your travel date. We will confirm driver availability after you submit the request.',
   },
   {
     q: 'How far in advance do I need to book?',
@@ -85,7 +85,7 @@ export const AIRPORT_FAQ = [
   },
   {
     q: 'Can I pay by card?',
-    a: 'Yes - pay online by card or pay the driver in cash, whichever suits you. Every trip comes with an emailed or WhatsApp receipt.',
+    a: 'You can choose available cash or card options. Receipts are provided after a completed trip has been paid.',
   },
   {
     q: 'Do you go further than New Plymouth?',
@@ -102,9 +102,9 @@ export const PAGES = {
   '/': { ...DEFAULT_META, sitemap: { changefreq: 'weekly', priority: '1.0' } },
   '/airport-transfers': {
     title: 'New Plymouth Airport Transfers · Easy Ride Private Passenger Service',
-    description: 'Pre-book a private ride to or from New Plymouth Airport (NPL). Upfront fares, confirmed local driver, cash or card. Book 12 hours ahead for airport and long-distance trips across Taranaki.',
+    description: 'Request New Plymouth Airport transfers with EasyRide. View an estimated fare, book ahead, and receive a driver confirmation once availability is arranged. Cash or card.',
     heading: 'New Plymouth Airport Transfers',
-    summary: 'Pre-book a confirmed local driver to or from New Plymouth Airport (NPL), with an upfront fare and cash or card payment. Airport and long-distance trips need 12 hours\' notice.',
+    summary: 'Request a private airport transfer to or from New Plymouth Airport (NPL). View the fare estimate before submitting; driver availability is confirmed separately.',
     sitemap: { changefreq: 'monthly', priority: '0.9' },
     faq: AIRPORT_FAQ,
   },

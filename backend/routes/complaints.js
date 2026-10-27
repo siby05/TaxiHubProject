@@ -160,6 +160,7 @@ router.get('/driver/complaints-against-me', auth, roleMiddleware(['driver']), as
 // GET /api/complaints/driver/:complaintId
 router.get('/driver/:complaintId', auth, roleMiddleware(['driver']), async (req, res) => {
   const driver = await Driver.findOne({ userId: req.user.id });
+  if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
   const complaint = await Complaint.findOne({ _id: req.params.complaintId, driverId: driver._id })
     .populate('complainantId', 'name email mobile')
     .populate('driverComments.commentedBy', 'name')
@@ -174,6 +175,10 @@ router.post('/:complaintId/driver-comment', auth, roleMiddleware(['driver']), as
     const { comment } = req.body;
     if (!comment || !comment.trim()) return res.status(400).json({ error: 'Comment cannot be empty' });
 
+    const driver = await Driver.findOne({ userId: req.user.id });
+    if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
+    const ownedComplaint = await Complaint.findOne({ _id: req.params.complaintId, driverId: driver._id });
+    if (!ownedComplaint) return res.status(404).json({ error: 'Complaint not found' });
     const driverUser = await User.findById(req.user.id);
 
     const complaint = await Complaint.findByIdAndUpdate(req.params.complaintId, {
@@ -358,10 +363,10 @@ router.post('/:complaintId/upload-document', auth, roleMiddleware(['admin']), up
   res.json({ message: 'Document uploaded', complaint });
 });
 
-// DELETE /api/complaints/admin/archive-old - purge complaints past the 2-year NZ TA retention window
-router.delete('/admin/archive-old', auth, roleMiddleware(['admin']), async (req, res) => {
-  const result = await Complaint.deleteMany({ retentionExpiryDate: { $lt: new Date() } });
-  res.json({ message: 'Old complaints archived', deletedCount: result.deletedCount });
+// Historical complaint records are retained. No delete or purge operation is exposed.
+// Archival requires a reviewed policy and a non-destructive implementation.
+router.delete('/admin/archive-old', auth, roleMiddleware(['admin']), (req, res) => {
+  res.status(409).json({ error: 'Destructive archiving is disabled. No records have been deleted.' });
 });
 
 module.exports = router;

@@ -229,6 +229,11 @@ function createModel(name, refs = {}) {
       true,
       refs,
     ),
+    findOneAndUpdate: (filter, update) => new ChainableQuery(
+      () => getModel().findOneAndUpdate(filter, normalizeUpdate(update), { new: true }),
+      true,
+      refs,
+    ),
     countDocuments: (filter = {}) => getModel().countDocuments(filter),
     deleteMany: (filter = {}) => getModel().deleteMany(filter),
   };

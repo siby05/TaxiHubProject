@@ -3,6 +3,11 @@ const { serverError } = require('../utils/serverError');
 const router = express.Router();
 const Booking = require('../models/Booking');
 const Driver = require('../models/Driver');
+const User = require('../models/User');
+const { hasRealEmail } = require('../utils/users');
+const { emailService } = require('../services/emailService');
+const { buildInvoicePdf } = require('../services/invoicePdf');
+const { runInBackground } = require('../utils/background');
 const { auth, roleMiddleware } = require('../middleware/auth');
 const { getEffectiveCommissionSettings } = require('../utils/billing');
 const { calculateCardSurcharge, cardRegion } = require('../utils/stripeFees');
@@ -15,6 +20,23 @@ if (process.env.STRIPE_SECRET_KEY) {
 const CURRENCY = 'nzd';
 const toCents = (dollars) => Math.round(dollars * 100);
 const fareOf = (booking) => booking.actualFare || booking.estimatedFare;
+
+// Receipts are issued only after payment has been recorded and the trip is complete.
+function emailPaidReceipt(bookingId) {
+  runInBackground('email paid receipt', async () => {
+    const booking = await Booking.findById(bookingId);
+    if (!booking || booking.status !== 'completed' || booking.paymentStatus !== 'paid') return;
+    const passenger = await User.findById(booking.passengerId);
+    if (!hasRealEmail(passenger)) return;
+    const driver = await Driver.findById(booking.driverId);
+    const driverUser = driver ? await User.findById(driver.userId) : null;
+    const billedTo = { name: passenger.name, address: passenger.address };
+    const pdf = await buildInvoicePdf(booking, billedTo, driver, driverUser?.name)
+      .catch((err) => { console.error('[receipt] PDF generation failed:', err); return undefined; });
+    await emailService.sendInvoiceEmail(passenger.email, booking, billedTo, driver, driverUser?.name, pdf);
+  });
+}
+
 
 // Every payment step starts with the same checks: the booking exists, is
 // the caller's, is a card trip, and is in a state that can be paid.
@@ -82,6 +104,7 @@ router.post('/start', auth, roleMiddleware(['passenger']), async (req, res) => {
 
     const mockId = `mock_pi_${Date.now()}`;
     await Booking.findByIdAndUpdate(booking._id, { paymentIntentId: mockId, paymentStatus: 'paid' });
+    emailPaidReceipt(booking._id);
     res.json({ mock: true, message: 'STRIPE_SECRET_KEY not set - payment auto-marked as paid for testing' });
   } catch (err) {
     serverError(res, err, req);
@@ -163,6 +186,7 @@ router.post('/pay', auth, roleMiddleware(['passenger']), async (req, res) => {
     if (intent.status === 'succeeded') {
       await Booking.findByIdAndUpdate(booking._id, { paymentStatus: 'paid' });
       await recordStripeFee(booking._id, intent.id);
+      emailPaidReceipt(booking._id);
     }
     res.json({ status: intent.status, clientSecret: intent.client_secret });
   } catch (err) {
@@ -193,10 +217,12 @@ router.post('/confirm', auth, roleMiddleware(['passenger']), async (req, res) =>
       }
       await Booking.findByIdAndUpdate(bookingId, { paymentStatus: 'paid' });
       await recordStripeFee(bookingId, intent.id);
+      emailPaidReceipt(bookingId);
       return res.json(await Booking.findById(bookingId));
     }
 
     res.json(await Booking.findByIdAndUpdate(bookingId, { paymentStatus: 'paid' }));
+    emailPaidReceipt(bookingId);
   } catch (err) {
     serverError(res, err, req);
   }

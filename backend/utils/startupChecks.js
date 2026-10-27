@@ -14,7 +14,7 @@ function checkStartupSecurity() {
   const isProd = process.env.NODE_ENV === 'production' || process.env.DB_MODE === 'mongo';
   if (PLACEHOLDER_SECRETS.has(secret.trim()) || secret.length < 24) {
     const msg = '[security] JWT_SECRET is missing, a placeholder, or shorter than 24 characters - set a long random value in the environment';
-    if (isProd) console.error(msg); else console.warn(msg);
+    if (isProd) throw new Error(msg); else console.warn(msg);
   }
 }
 

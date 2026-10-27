@@ -451,10 +451,10 @@ router.post('/quote', auth, roleMiddleware(['passenger', 'driver']), async (req,
     } else {
       ({ driver, usedFallback, requestedUnavailable, requestedCashOnly, requestedName, nextAvailableTime, requestedOffSchedule } = await resolveDriver(driverId, paymentMethod, vehicleType, { lat: pickupLat, lng: pickupLng }, scheduledFor ? new Date(scheduledFor) : undefined));
       if (!driver) {
-        return res.status(404).json({
-          error: noDriverError(requestedUnavailable, requestedName, requestedCashOnly, vehicleType, nextAvailableTime, requestedOffSchedule),
-          requestedUnavailable, requestedCashOnly, nextAvailableTime,
-        });
+        const distanceKm = routeDistanceKm({ lat: pickupLat, lng: pickupLng }, { lat: dropLat, lng: dropLng }, stops);
+        return res.json({ ...buildQuote(distanceKm, Number(process.env.DEFAULT_RATE_PER_KM) || 1.8, paymentMethod, scheduledFor),
+          awaitingDriverConfirmation: true,
+          availabilityMessage: 'No driver is currently scheduled for your requested time. You can still submit your booking request. We will check with our drivers and update you once availability is confirmed. Your booking is not confirmed yet.' });
       }
     }
 
@@ -532,15 +532,11 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
     } else {
       const { usable, nextAvailableTime } = await findEligibleCandidatesWithTiming(paymentMethod, vehicleType, pickup, requestedTime);
       broadcastCandidates = usable;
-      if (broadcastCandidates.length === 0) {
-        return res.status(404).json({
-          error: noDriverError(false, null, false, vehicleType, nextAvailableTime),
-          requestedUnavailable: false, requestedCashOnly: false, nextAvailableTime,
-        });
-      }
-      ratePerKmForEstimate = broadcastCandidates.reduce((sum, d) => sum + d.ratePerKm, 0) / broadcastCandidates.length;
+
+      ratePerKmForEstimate = broadcastCandidates.length ? broadcastCandidates.reduce((sum, d) => sum + d.ratePerKm, 0) / broadcastCandidates.length : (Number(process.env.DEFAULT_RATE_PER_KM) || 1.8);
     }
 
+    const awaitingDriverConfirmation = !targetDriverId && broadcastCandidates.length === 0;
     const bookingSettings = getSettings();
     const fare = priceWithPromo(calculateTripFare(distanceKm, ratePerKmForEstimate, bookingSettings), requestedTime);
     const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(fare.estimatedFare) : 0;
@@ -585,6 +581,10 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
       runInBackground('email sendBookingConfirmation', () => emailService.sendBookingConfirmation(passenger.email, booking));
     }
 
+    if (awaitingDriverConfirmation) {
+      notifyAdmins({ type: 'booking-unassigned', title: 'Booking requires driver confirmation',
+        message: `Trip ${booking.bookingId}: no driver is scheduled. Please contact drivers and update the passenger once confirmed.`, link: '/admin' });
+    }
     const notifyDriverIds = targetDriverId
       ? [(await Driver.findById(targetDriverId)).userId]
       : broadcastCandidates.map((d) => d.userId);
@@ -599,7 +599,8 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
     // return-trip pair (a broadcast is checked when someone accepts it).
     if (targetDriverId) refreshReturnTripInBackground(req, null, booking);
 
-    res.status(201).json({ ...booking, usedFallback, requestedUnavailable, requestedCashOnly, requestedName, broadcast: !targetDriverId });
+    res.status(201).json({ ...booking, usedFallback, requestedUnavailable, requestedCashOnly, requestedName, broadcast: !targetDriverId, awaitingDriverConfirmation,
+      ...(awaitingDriverConfirmation && { availabilityMessage: 'Your booking request has been received. No driver is currently scheduled for your requested time. We will check with our drivers and update you once availability is confirmed. Your trip is not yet confirmed.' }) });
   } catch (err) {
     serverError(res, err, req);
   }
@@ -1154,21 +1155,14 @@ async function acceptBooking(req, booking, driver, driverName) {
     return { status: 403, error: 'This trip was not sent to you' };
   }
 
-  const updated = await Booking.findByIdAndUpdate(booking._id, {
-    status: 'accepted',
-    acceptedAt: new Date(),
+  // Conditional atomic claim prevents two drivers accepting one broadcast ride.
+  const updated = await Booking.findOneAndUpdate({
+    _id: booking._id, status: 'pending', driverId: isBroadcast ? null : driver._id,
+  }, {
+    status: 'accepted', acceptedAt: new Date(),
     ...(isBroadcast && { driverId: driver._id }),
   });
-
-  // Narrow (not eliminate) the race window: if another driver's claim on
-  // this same broadcast request landed between our update and this
-  // re-check, back out rather than reporting a false success.
-  if (isBroadcast) {
-    const verify = await Booking.findById(booking._id);
-    if (String(verify.driverId) !== String(driver._id)) {
-      return { status: 409, error: 'This trip was just accepted by another driver.' };
-    }
-  }
+  if (!updated) return { status: 409, error: 'This trip has already been accepted or changed.' };
 
   const passenger = await User.findById(booking.passengerId);
   runInBackground('email sendBookingAccepted', () => emailService.sendBookingAccepted(passenger.email, updated, driver, driverName));
@@ -1483,7 +1477,7 @@ router.put('/:id/complete', auth, roleMiddleware(['driver']), async (req, res) =
       // receipt link on WhatsApp from the driver's phone instead - see
       // DriverDashboard.jsx complete(), fed by receiptToken/
       // passengerHasEmail on GET /driver.
-      if (hasRealEmail(passenger)) {
+      if (updated.paymentStatus === 'paid' && hasRealEmail(passenger)) {
         const billedTo = { name: passenger.name, address: passenger.address };
         const pdf = await buildInvoicePdf(updated, billedTo, driver, driverUser?.name)
           .catch((err) => { console.error(`[receipt] PDF for ${updated.bookingId} failed: ${err.message}`); return undefined; });
@@ -1596,6 +1590,7 @@ router.post('/:id/email-receipt', auth, roleMiddleware(['driver']), async (req, 
   const booking = await Booking.findById(req.params.id);
   if (!driver || !booking || String(booking.driverId) !== String(driver._id)) return res.status(404).json({ error: 'Booking not found' });
   if (booking.status !== 'completed') return res.status(400).json({ error: 'A receipt is only available once the trip is completed' });
+  if (booking.paymentStatus !== 'paid') return res.status(409).json({ error: 'Confirm payment before sending a receipt' });
   const passenger = await User.findById(booking.passengerId);
   if (!hasRealEmail(passenger)) return res.status(400).json({ error: 'This passenger has no email on file - send the receipt on WhatsApp instead' });
 
@@ -1629,7 +1624,7 @@ router.get(['/:id/receipt', '/:id/receipt.pdf'], async (req, res) => {
   if (payload.receipt !== req.params.id) return res.status(403).type('text').send('This link is for a different booking.');
 
   const booking = await Booking.findById(req.params.id).populate('driverId');
-  if (!booking || booking.status !== 'completed') return res.status(404).type('text').send('Receipt not found');
+  if (!booking || booking.status !== 'completed' || booking.paymentStatus !== 'paid') return res.status(404).type('text').send('Receipt is available after payment is confirmed');
   const passenger = await User.findById(booking.passengerId);
   const driverUser = booking.driverId ? await User.findById(booking.driverId.userId) : null;
   const billedTo = { name: passenger?.name, address: passenger?.address };
@@ -1784,6 +1779,15 @@ router.put('/:id/mark-paid', auth, roleMiddleware(['driver']), async (req, res) 
     cardSurchargeAmount: paidBy === 'card' ? calculateCardSurcharge(booking.actualFare ?? booking.estimatedFare) : 0,
   });
   res.json(updated);
+  runInBackground('email paid receipt', async () => {
+    const passenger = await User.findById(updated.passengerId);
+    if (!hasRealEmail(passenger)) return;
+    const driverUser = await User.findById(driver.userId);
+    const billedTo = { name: passenger.name, address: passenger.address };
+    const pdf = await buildInvoicePdf(updated, billedTo, driver, driverUser?.name)
+      .catch((err) => { console.error('[receipt] PDF generation failed:', err); return undefined; });
+    await emailService.sendInvoiceEmail(passenger.email, updated, billedTo, driver, driverUser?.name, pdf);
+  });
 });
 
 module.exports = router;
