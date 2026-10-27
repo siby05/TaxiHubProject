@@ -1483,7 +1483,7 @@ router.put('/:id/complete', auth, roleMiddleware(['driver']), async (req, res) =
       // receipt link on WhatsApp from the driver's phone instead - see
       // DriverDashboard.jsx complete(), fed by receiptToken/
       // passengerHasEmail on GET /driver.
-      if (hasRealEmail(passenger)) {
+      if (updated.paymentStatus === 'paid' && hasRealEmail(passenger)) {
         const billedTo = { name: passenger.name, address: passenger.address };
         const pdf = await buildInvoicePdf(updated, billedTo, driver, driverUser?.name)
           .catch((err) => { console.error(`[receipt] PDF for ${updated.bookingId} failed: ${err.message}`); return undefined; });
@@ -1596,6 +1596,7 @@ router.post('/:id/email-receipt', auth, roleMiddleware(['driver']), async (req, 
   const booking = await Booking.findById(req.params.id);
   if (!driver || !booking || String(booking.driverId) !== String(driver._id)) return res.status(404).json({ error: 'Booking not found' });
   if (booking.status !== 'completed') return res.status(400).json({ error: 'A receipt is only available once the trip is completed' });
+  if (booking.paymentStatus !== 'paid') return res.status(409).json({ error: 'Confirm payment before sending a receipt' });
   const passenger = await User.findById(booking.passengerId);
   if (!hasRealEmail(passenger)) return res.status(400).json({ error: 'This passenger has no email on file - send the receipt on WhatsApp instead' });
 
@@ -1629,7 +1630,7 @@ router.get(['/:id/receipt', '/:id/receipt.pdf'], async (req, res) => {
   if (payload.receipt !== req.params.id) return res.status(403).type('text').send('This link is for a different booking.');
 
   const booking = await Booking.findById(req.params.id).populate('driverId');
-  if (!booking || booking.status !== 'completed') return res.status(404).type('text').send('Receipt not found');
+  if (!booking || booking.status !== 'completed' || booking.paymentStatus !== 'paid') return res.status(404).type('text').send('Receipt is available after payment is confirmed');
   const passenger = await User.findById(booking.passengerId);
   const driverUser = booking.driverId ? await User.findById(booking.driverId.userId) : null;
   const billedTo = { name: passenger?.name, address: passenger?.address };
@@ -1784,6 +1785,15 @@ router.put('/:id/mark-paid', auth, roleMiddleware(['driver']), async (req, res) 
     cardSurchargeAmount: paidBy === 'card' ? calculateCardSurcharge(booking.actualFare ?? booking.estimatedFare) : 0,
   });
   res.json(updated);
+  runInBackground('email paid receipt', async () => {
+    const passenger = await User.findById(updated.passengerId);
+    if (!hasRealEmail(passenger)) return;
+    const driverUser = await User.findById(driver.userId);
+    const billedTo = { name: passenger.name, address: passenger.address };
+    const pdf = await buildInvoicePdf(updated, billedTo, driver, driverUser?.name)
+      .catch((err) => { console.error('[receipt] PDF generation failed:', err); return undefined; });
+    await emailService.sendInvoiceEmail(passenger.email, updated, billedTo, driver, driverUser?.name, pdf);
+  });
 });
 
 module.exports = router;
