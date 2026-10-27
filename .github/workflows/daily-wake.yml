@@ -21,7 +21,7 @@ jobs:
     steps:
       - name: Ping during NZ daytime and evening
         env:
-          BACKEND_URL: ${{ secrets.BACKEND_URL || vars.BACKEND_URL }}
+          BACKEND_URL: https://easyride-backend-2bxw.onrender.com
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         shell: bash
         run: |
