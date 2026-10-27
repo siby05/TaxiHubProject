@@ -41,7 +41,7 @@ function matches(doc, filter) {
           case '$lt': return val < opVal;
           case '$ne': return String(val) !== String(opVal);
           case '$in': return Array.isArray(opVal) && opVal.map(String).includes(String(val));
-          default: return true;
+          default: throw new Error(`Unsupported MemoryStore query operator: ${op}`);
         }
       });
     }
@@ -207,6 +207,11 @@ class Collection {
     return new Query(this, { filter: id ? { _id: String(id) } : { __none: true }, single: true });
   }
 
+  findOneAndUpdate(filter, update) {
+    const found = this.docs.find((doc) => matches(doc, filter));
+    return new Query(this, { single: true, mode: 'update', updateId: found?._id || null, updatePayload: update });
+  }
+
   findByIdAndUpdate(id, update, _opts = {}) {
     return new Query(this, { single: true, mode: 'update', updateId: id, updatePayload: update });
   }
@@ -240,6 +245,7 @@ function createModel(name, refs = {}) {
     findOne: (filter) => collection.findOne(filter),
     findById: (id) => collection.findById(id),
     findByIdAndUpdate: (id, update, opts) => collection.findByIdAndUpdate(id, update, opts),
+    findOneAndUpdate: (filter, update) => collection.findOneAndUpdate(filter, update),
     countDocuments: (filter) => collection.countDocuments(filter),
     deleteMany: (filter) => collection.deleteMany(filter),
   };
