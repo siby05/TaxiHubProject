@@ -85,6 +85,9 @@ export default function About() {
           </form>
         )}
       </div>
+      <p className="muted" style={{ marginTop: 24, fontSize: '0.75rem', lineHeight: 1.5 }}>
+        Photo credit: <a href="https://commons.wikimedia.org/wiki/File:New-plymouth-city-skyline-npdc.jpg" target="_blank" rel="noreferrer">Mknz24 / Wikimedia Commons</a>, <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noreferrer">CC BY-SA 4.0</a>. Homepage image cropped and darkened for layout.
+      </p>
     </div>
   );
 }
