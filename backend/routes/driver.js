@@ -16,7 +16,7 @@ const { notifyUser, notifyAdmins } = require('../utils/notify');
 const { priceWithPromo, discountedFare, refreshReturnTripInBackground } = require('../utils/discounts');
 const { driverEarnings, tripCountOf, faresOf } = require('../utils/earnings');
 const { checkDriverCompliance } = require('../utils/compliance');
-const { isWithinSchedule, nzDayAndTime } = require('../utils/schedule');
+const { isWithinSchedule, nzDayAndTime, ownBookingScheduleAdvisory } = require('../utils/schedule');
 const { checkWeeklyPattern, checkSchedule } = require('../utils/workTime');
 const { getSettings } = require('../config/platformSettings');
 const { DRIVER_DOCUMENTS, isValidDocumentKey, documentLabel, allDocumentsVerified } = require('../config/driverDocuments');
@@ -390,15 +390,10 @@ router.post('/bookings', auth, roleMiddleware(['driver']), async (req, res) => {
     if (paymentMethod === 'card' && driver.acceptsOnlinePayment === false) {
       return res.status(400).json({ error: 'You have online payment turned off - book this trip as cash, or turn it on from your Fees page.' });
     }
-    // A driver booking a passenger in directly (see POST / above for the
-    // usual auto-match path) skips the whole eligibility check that keeps
-    // a driver from being offered trips outside their own declared
-    // availabilitySchedule - without this, "book for passenger" would let
-    // them commit themselves to a scheduled trip during hours they've
-    // told the platform they're not working.
-    if (scheduledFor && !isWithinSchedule(driver, new Date(scheduledFor))) {
-      return res.status(400).json({ error: "That time is outside your schedule. Add a shift for it on your Schedule page, or pick a different time." });
-    }
+    // A driver who creates this booking is also personally accepting it.
+    // Their declared schedule is advisory here rather than a hard gate.
+    // Auto-dispatched passenger requests still obey schedule eligibility.
+    const scheduleAdvice = ownBookingScheduleAdvisory(driver, scheduledFor);
 
     let passenger;
     if (passengerId) {
@@ -483,7 +478,7 @@ router.post('/bookings', auth, roleMiddleware(['driver']), async (req, res) => {
       link: '/admin',
     });
 
-    res.status(201).json({ booking, passenger: { _id: passenger._id, name: passenger.name, mobile: passenger.mobile } });
+    res.status(201).json({ booking, passenger: { _id: passenger._id, name: passenger.name, mobile: passenger.mobile }, ...scheduleAdvice });
   } catch (err) {
     serverError(res, err, req);
   }

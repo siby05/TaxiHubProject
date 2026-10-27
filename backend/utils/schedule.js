@@ -77,4 +77,18 @@ function hasDeclaredSchedule(driver, now = new Date()) {
   return dated.some((d) => d.date >= today && (d.slots || []).length > 0);
 }
 
-module.exports = { isWithinSchedule, hasDeclaredSchedule, nzDayAndTime, daySlots };
+// Drivers who explicitly create a booking for their own passenger may
+// knowingly take a trip outside their declared working shifts. The schedule
+// is advisory for that path; auto-dispatch still respects it.
+const OWN_BOOKING_SCHEDULE_NOTICE = 'This pickup is outside your declared working schedule. You can still book it for your passenger, but you are accepting responsibility for being available at that time. Update your Schedule page if you want your working hours to reflect this trip.';
+
+function ownBookingScheduleAdvisory(driver, scheduledFor) {
+  const date = scheduledFor ? new Date(scheduledFor) : null;
+  const offSchedule = !!date && !Number.isNaN(date.getTime()) && !isWithinSchedule(driver, date);
+  return {
+    requestedOffSchedule: offSchedule,
+    scheduleMessage: offSchedule ? OWN_BOOKING_SCHEDULE_NOTICE : null,
+  };
+}
+
+module.exports = { isWithinSchedule, hasDeclaredSchedule, nzDayAndTime, daySlots, ownBookingScheduleAdvisory };
