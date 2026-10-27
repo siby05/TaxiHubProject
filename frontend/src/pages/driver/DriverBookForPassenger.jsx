@@ -100,6 +100,9 @@ export default function DriverBookForPassenger() {
         <div className="card" style={{ maxWidth: 480, background: '#dcfce7' }}>
           <h3>Booking created</h3>
           <p>For {success.passenger.name} ({success.passenger.mobile}) - ${success.booking.estimatedFare} estimated, already marked accepted.</p>
+          {success.requestedOffSchedule && <p role="status" style={{ color: '#92400e', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8, padding: 12 }}>
+            <strong>Schedule information:</strong> {success.scheduleMessage}
+          </p>}
           <div className="btn-grid">
             <button className="btn" onClick={() => navigate('/driver')}>Back to trips</button>
             {waLink(success.passenger.mobile, `Hi ${success.passenger.name}, your EasyRide ride is booked (${success.booking.bookingId}). Pickup: ${success.booking.pickupAddress}, drop: ${success.booking.dropAddress}. Estimated fare: $${success.booking.estimatedFare}.`) && (
@@ -168,6 +171,10 @@ export default function DriverBookForPassenger() {
           <AddressAutocomplete label="Drop address" onSelect={setDrop} required />
           {(!pickup || !drop) && <p className="muted">Enter both pickup and drop address (pick a suggestion from the list) to see the fare and confirm.</p>}
           <ScheduleField onChange={setScheduledFor} />
+          <p className="muted" style={{ margin: '-3px 0 0', fontSize: '0.85rem' }}>
+            Your schedule is for automatic trip matching. When you book directly for a passenger,
+            you can choose a time outside your scheduled shifts. You're agreeing to be available for that booking.
+          </p>
 
           <div>
             <label>Payment</label>
@@ -185,6 +192,9 @@ export default function DriverBookForPassenger() {
 
           {quote && !quoteLoading && (
             <div className="card fare-confirm">
+              {quote.requestedOffSchedule && <p role="status" style={{ color: '#92400e', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8, padding: 12, marginTop: 0 }}>
+                <strong>Outside your working schedule — booking permitted.</strong> {quote.availabilityMessage}
+              </p>}
               <strong>
                 {customFareNumber !== null && !customFareInvalid
                   ? <>Trip price: ${customFareNumber.toFixed(2)} <span className="muted" style={{ fontWeight: 400 }}>(set by you - calculated fare ${quote.estimatedFare.toFixed(2)})</span></>
