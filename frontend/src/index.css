@@ -577,3 +577,29 @@ h1,h2,h3{color:inherit;letter-spacing:-.018em}
 th{color:#0b2942;background:#f8fafc}
 a:focus-visible,.btn:focus-visible{outline:2px solid #d4a315;outline-offset:3px}
 @media(max-width:640px){.card{padding:16px;border-radius:12px}.navbar{padding-left:14px;padding-right:14px}}
+
+/* Public homepage navbar: matches the approved design on laptops while
+   retaining a compact hamburger + contact layout on phones. */
+.navbar:not(.signed-in){background:#0b2942;border-bottom:2px solid #ffca28;gap:20px}
+.navbar:not(.signed-in) .navbar-start{flex:0 0 auto}
+.navbar:not(.signed-in) .navbar-burger{display:none}
+.navbar:not(.signed-in) .navbar-inline{gap:22px;min-width:0}
+.navbar:not(.signed-in) .er-nav-public{display:flex;align-items:center;gap:22px}
+.navbar:not(.signed-in) .er-nav-public a{font-size:.85rem;color:#e3eaf4;white-space:nowrap}
+.navbar:not(.signed-in) .er-nav-public a:hover,.navbar:not(.signed-in) .er-nav-public a.active{color:#ffca28}
+.navbar:not(.signed-in) .er-nav-login{font-size:.84rem;white-space:nowrap;color:#f8fafc}
+.navbar:not(.signed-in) .hm-nav-contact{display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;padding:10px 17px;color:#112942!important;background:#ffca28;border-radius:8px;font-weight:800;font-size:.85rem;min-height:42px}
+.navbar:not(.signed-in) .hm-nav-contact:hover{background:#ffda61;color:#112942!important}
+@media(max-width:1050px){
+  .navbar:not(.signed-in) .navbar-burger{display:inline-flex}
+  .navbar:not(.signed-in) .er-nav-public{display:none}
+}
+@media(max-width:620px){
+  .navbar:not(.signed-in){padding-left:12px;padding-right:12px;gap:8px}
+  .navbar:not(.signed-in) .navbar-start{gap:9px}
+  .navbar:not(.signed-in) .navbar .brand{font-size:.95rem}
+  .navbar:not(.signed-in) .er-nav-login{display:none}
+  .navbar:not(.signed-in) .navbar-inline{gap:8px}
+  .navbar:not(.signed-in) .hm-nav-contact{padding:8px 11px;min-height:40px}
+  .navbar:not(.signed-in) .brand{max-width:170px;min-width:0}
+}

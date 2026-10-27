@@ -49,6 +49,8 @@ export default function Navbar() {
   const links = user
     ? ROLE_LINKS[user.role] || []
     : [
+      { to: '/login', label: 'Log in' },
+      { to: '/airport-transfers', label: 'Airport transfers' },
       { to: '/new-plymouth-to-auckland', label: 'To Auckland' },
       { to: '/about', label: 'About' },
       { to: '/register', label: 'Sign up' },
@@ -98,7 +100,13 @@ export default function Navbar() {
 
       {!user && (
         <nav className="navbar-inline" aria-label="Main">
-          <NavLink to="/login" end>Log in</NavLink>
+          <div className="er-nav-public">
+            <NavLink to="/" end>Home</NavLink>
+            <a href="/#services">Services</a>
+            <NavLink to="/airport-transfers">Airport Transfers</NavLink>
+            <NavLink to="/about">About</NavLink>
+          </div>
+          <NavLink className="er-nav-login" to="/login" end>Log in</NavLink>
           {contactMobile && <a className="hm-nav-contact" href={waLink(contactMobile, 'Hi EasyRide, I would like to enquire about booking a ride.')} target="_blank" rel="noreferrer">Contact</a>}
         </nav>
       )}

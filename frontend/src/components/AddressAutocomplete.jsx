@@ -26,7 +26,7 @@ function locateErrorMessage(err) {
   return 'Finding your location took too long - try again, or type the address.';
 }
 
-export default function AddressAutocomplete({ label, placeholder, onSelect, required, allowLocate, defaultValue }) {
+export default function AddressAutocomplete({ label, placeholder, onSelect, required, allowLocate, compactLocate = false, defaultValue }) {
   const [query, setQuery] = useState(defaultValue || '');
 
   // defaultValue only seeded the initial state above - a caller that
@@ -182,8 +182,8 @@ export default function AddressAutocomplete({ label, placeholder, onSelect, requ
           onFocus={() => (results.length || loading) && setOpen(true)}
         />
         {allowLocate && (
-          <button type="button" className="btn secondary" style={{ whiteSpace: 'nowrap', flexShrink: 0 }} onClick={useCurrentLocation} disabled={locating}>
-            {locating ? '...' : '📍 Locate'}
+          <button type="button" className="btn secondary" style={{ whiteSpace: 'nowrap', flexShrink: 0 }} aria-label={compactLocate ? 'Use my current location' : undefined} title={compactLocate ? 'Use my current location' : undefined} onClick={useCurrentLocation} disabled={locating}>
+            {locating ? '…' : compactLocate ? '📍' : '📍 Locate'}
           </button>
         )}
       </div>
