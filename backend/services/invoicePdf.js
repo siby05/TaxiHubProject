@@ -47,13 +47,20 @@ function buildInvoicePdf(booking, passenger, driver, driverName) {
 
     // Header band
     doc.rect(0, 0, pageW, 96).fill(NAVY);
-    // The car badge and gold wordmark match the approved website mark.
-    doc.lineWidth(2).strokeColor('#ffffff').roundedRect(left + 2, 40, 34, 16, 4).stroke();
-    doc.moveTo(left + 7, 40).lineTo(left + 13, 31).lineTo(left + 27, 31).lineTo(left + 34, 40).stroke();
-    doc.circle(left + 10, 58, 3).fill('#ffffff');
-    doc.circle(left + 28, 58, 3).fill('#ffffff');
-    doc.fontSize(22).fillColor('#ffffff').text('Easy', left + 44, 32, { continued: true }).fillColor('#FFCA28').text('Ride');
-    doc.font('Regular').fontSize(8.5).fillColor('#94a3b8').text('TAXI & PRIVATE TRANSFERS', left + 44, 62, { characterSpacing: 1 });
+    // Render exactly the same logo geometry and colors as frontend/public/favicon.svg.
+    // PDFKit draws vector primitives so no image fetching or raster scaling is needed.
+    const iconX = left; const iconY = 25; const scale = 0.72;
+    const pt = (x, y) => [iconX + x * scale, iconY + y * scale];
+    doc.roundedRect(iconX, iconY, 64 * scale, 64 * scale, 14 * scale).fill(NAVY);
+    doc.lineWidth(4 * scale).strokeColor('#FFFFFF');
+    doc.moveTo(...pt(10,30)).lineTo(...pt(17,19)).lineTo(...pt(25,15)).lineTo(...pt(40,15)).lineTo(...pt(48,20)).lineTo(...pt(54,30)).stroke();
+    doc.roundedRect(...pt(7,29), 50 * scale, 15 * scale, 5 * scale).stroke();
+    doc.circle(...pt(19,44), 5 * scale).fill('#FFFFFF');
+    doc.circle(...pt(45,44), 5 * scale).fill('#FFFFFF');
+    doc.lineWidth(3*scale).strokeColor('#FFCA28');
+    doc.moveTo(...pt(12,52)).bezierCurveTo(...pt(24,63), ...pt(40,63), ...pt(52,52)).stroke();
+    doc.fontSize(22).fillColor('#ffffff').text('Easy', left + 57, 32, { continued: true }).fillColor('#FFCA28').text('Ride');
+    doc.font('Regular').fontSize(8.5).fillColor('#94a3b8').text('TAXI & PRIVATE TRANSFERS', left + 57, 62, { characterSpacing: 1 });
 
     // Title row
     let y = 130;
