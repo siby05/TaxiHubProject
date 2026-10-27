@@ -346,6 +346,7 @@ export default function PassengerDashboard() {
                 {quote.requestedCashOnly && (
                   <p className="muted" style={{ color: '#b45309' }}>⚠️ {quote.requestedName || 'That driver'} is cash-only - matching you with another driver for online payment.</p>
                 )}
+                {quote.awaitingDriverConfirmation && <p role="status" style={{ color: '#92400e' }}><strong>Driver confirmation pending.</strong> {quote.availabilityMessage}</p>}
                 <strong>Estimated fare: ${quote.estimatedFare.toFixed(2)}</strong>{discountNote(quote)}
                 {quote.cardSurchargeAmount > 0 && (
                   <div className="muted">+ ${quote.cardSurchargeAmount.toFixed(2)} card processing fee (Stripe, NZ cards) = <strong>${quote.total.toFixed(2)} total</strong> - overseas cards cost a little more, shown before you pay</div>
@@ -353,7 +354,7 @@ export default function PassengerDashboard() {
                 <div className="muted">{quote.distanceKm} km{stops.length > 0 && ` · via ${stops.length} stop${stops.length > 1 ? 's' : ''}`}{scheduledFor && ` · scheduled for ${formatNzDateTime(scheduledFor)}`}</div>
                 {error && <p className="error-text">{error}</p>}
                 <button className="btn" style={{ marginTop: 8 }} onClick={confirmBooking} disabled={loading}>
-                  {loading ? 'Booking...' : 'Confirm & request ride'}
+                  {loading ? 'Booking...' : quote.awaitingDriverConfirmation ? 'Submit booking request' : 'Confirm & request ride'}
                 </button>
               </div>
             )}
