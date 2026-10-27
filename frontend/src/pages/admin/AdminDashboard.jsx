@@ -1024,6 +1024,7 @@ export default function AdminDashboard() {
                     <strong>{f.name}</strong>{f.email && <span className="muted"> · {f.email}</span>}
                     {f.rating ? <span> · {'★'.repeat(f.rating)}{'☆'.repeat(5 - f.rating)}</span> : ''}
                     <div className="muted">{f.message}</div>
+                    {f.rating && <button type="button" className="btn secondary" style={{marginTop:8}} onClick={async () => { try { await client.put(`/admin/feedback/${f._id}/publish`, {published: !f.published}); load(); } catch (err) { setError(err.response?.data?.error || 'Could not update testimonial'); } }}>{f.published ? 'Remove from homepage' : 'Approve for homepage'}</button>}
                   </td>
                   <td className="muted">{formatNzDateTime(f.createdAt)}</td>
                 </tr>
