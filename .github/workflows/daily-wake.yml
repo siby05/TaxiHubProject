@@ -1,46 +1,56 @@
-# Wakes the backend at 6am NZ time and runs the scheduled-backup check.
-#
-# Render's free plan puts the server to sleep when nobody is using the site,
-# and while it's asleep its hourly backup check never runs. This calls
-# POST /api/cron/backup (backend/routes/cron.js) every day, which wakes the
-# server and sends the weekly backup if one is due - otherwise it does
-# nothing.
-#
-# Needs two repository secrets (GitHub > Settings > Secrets and variables >
-# Actions):
-#   BACKEND_URL  - the Render backend address, e.g. https://easyride-api.onrender.com
-#   CRON_SECRET  - any long random string; set the same value as CRON_SECRET
-#                  in the Render service's environment variables.
-name: Daily backend wake-up
+# External keep-alive for Render Free. Scheduled workflows run from default branch.
+# GitHub Actions scheduled jobs may run late; availability is best effort.
+name: Daytime backend keep-alive
 
 on:
   schedule:
-    # 6am NZ time, which also starts the server's own 6am-11pm keep-awake
-    # pings (backend/utils/keepAwake.js). Two runs because cron here is UTC:
-    # 17:00 UTC = 6am NZDT (summer), 18:00 UTC = 6am NZST (winter) - the
-    # other run is harmless, the backup only sends when one is due. GitHub
-    # may run scheduled jobs a little late at busy times.
-    - cron: '0 17 * * *'
-    - cron: '0 18 * * *'
-  workflow_dispatch: {}
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daytime-backend-keepalive
+  cancel-in-progress: false
 
 jobs:
-  wake:
+  ping:
     runs-on: ubuntu-latest
+    timeout-minutes: 4
     steps:
-      - name: Wake backend and run backup check
+      - name: Ping during NZ daytime and evening
         env:
-          BACKEND_URL: ${{ secrets.BACKEND_URL }}
+          BACKEND_URL: ${{ secrets.BACKEND_URL || vars.BACKEND_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        shell: bash
         run: |
-          if [ -z "$BACKEND_URL" ] || [ -z "$CRON_SECRET" ]; then
-            echo "::error::Set the BACKEND_URL and CRON_SECRET repository secrets first."
+          set -euo pipefail
+          # TZ automatically accounts for New Zealand daylight saving.
+          NZ_TIME="$(TZ=Pacific/Auckland date +%H:%M)"
+          NZ_HOUR="$(TZ=Pacific/Auckland date +%H)"
+          echo "New Zealand time: $NZ_TIME"
+          # Runs from 06:00 through 00:59; intentionally pauses 01:00-05:59.
+          if (( 10#$NZ_HOUR >= 1 && 10#$NZ_HOUR < 6 )); then
+            echo "Scheduled sleep window (01:00-06:00 NZ); skipping."
+            exit 0
+          fi
+          if [[ -z "$BACKEND_URL" ]]; then
+            echo "::error::BACKEND_URL missing. Set a GitHub Actions repository secret or variable to the Render backend base URL."
             exit 1
           fi
-          # A sleeping free-plan server can take up to about a minute to
-          # start, so allow a long timeout and a few retries.
-          curl --fail-with-body --silent --show-error \
-            --retry 4 --retry-delay 20 --retry-all-errors --max-time 120 \
-            -X POST -H "X-Cron-Secret: $CRON_SECRET" \
-            "${BACKEND_URL%/}/api/cron/backup"
+          BASE="${BACKEND_URL%/}"
+          if [[ ! "$BASE" =~ ^https://[^/]+$ ]]; then
+            echo "::error::BACKEND_URL must be an HTTPS base URL, without an /api path."
+            exit 1
+          fi
+          curl --fail --silent --show-error --location \
+            --retry 2 --retry-delay 10 --retry-all-errors \
+            --max-time 100 "$BASE/api/health"
           echo
+          # Keep the existing backup check where configured, once in the 6am hour.
+          if [[ "$NZ_HOUR" == "06" && -n "$CRON_SECRET" && "$NZ_TIME" == 06:0* ]]; then
+            curl --fail --silent --show-error --max-time 100 \
+              -X POST -H "X-Cron-Secret: $CRON_SECRET" "$BASE/api/cron/backup"
+            echo
+          fi
