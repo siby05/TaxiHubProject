@@ -244,3 +244,27 @@
 .hm-testimonials blockquote{margin:0;padding:25px;border:1px solid #e2e8f0;background:white;border-radius:14px;box-shadow:0 8px 24px #0b29420d}
 .hm-testimonials blockquote div{color:#d4a017;letter-spacing:2px}
 .hm-testimonials blockquote p{line-height:1.65}
+
+/* Functional homepage inputs and premium offers */
+.hm-approved-booking .hm-booking-fields{gap:14px}
+.hm-approved-booking .autocomplete-wrap,.hm-approved-booking .autocomplete-wrap>div{min-width:0}
+.hm-approved-booking .autocomplete-wrap label,.hm-approved-booking .hm-booking-fields label{color:#13243a;font-weight:700;font-size:.84rem;display:block;margin-bottom:6px}
+.hm-approved-booking .autocomplete-wrap input,.hm-approved-booking .hm-booking-fields input,.hm-approved-booking .hm-booking-fields select{background:#f8fafc;color:#13243a;border:1px solid #dce4ed;border-radius:9px;padding:12px;min-width:0;max-width:100%}
+.hm-approved-booking .autocomplete-list{z-index:30}
+.hm-approved-booking .hm-booking-fields > div{background:transparent;border:0;padding:0;color:inherit}
+.hm-approved-booking .hm-primary{width:100%;border:0;cursor:pointer}
+.hm-quoted-fare{border:1px solid #f0d88a;background:#fffbeb;border-radius:10px;padding:13px;margin:12px 0;color:#13243a;display:flex;flex-direction:column;gap:4px}
+.hm-quoted-fare strong{font-size:1.3rem}
+.hm-quoted-fare span,.hm-quoted-fare small{color:#555f70}
+.hm-deals{padding:65px 0;background:#f8f7f3}
+.hm-deals::before{content:'OFFERS & DISCOUNTS';display:block;margin:0 auto 8px;text-align:center;font-size:.77rem;font-weight:800;letter-spacing:.22em;color:#98700a}
+.hm-deals::after{content:'Special savings on your next ride';display:block;position:absolute;left:-9999px}
+.hm-deals-grid{gap:18px;align-items:stretch}
+.hm-deal{display:flex;flex-direction:column;align-items:stretch;gap:15px;border:1px solid #e5e7eb;border-radius:16px;padding:28px;background:#fff;box-shadow:0 12px 35px rgba(13,34,59,.07);border-top:4px solid #ffca28}
+.hm-deal h3{font-size:1.25rem;color:#10233c;line-height:1.3}
+.hm-deal p,.hm-deal li{font-size:.95rem;line-height:1.65;color:#526174}
+.hm-deal-pct{background:#ffca28;color:#0b2942;border-radius:11px;width:105px;height:75px;font-size:1.7rem}
+.hm .btn.hm-deal-btn{align-self:start;background:#0b2942;color:#fff;border-radius:9px;padding:11px 20px}
+.hm-deal-list li{background:#fcfaf4;border-color:#efe1b6}
+.hm-deal-list a{color:#0b2942}
+@media(max-width:620px){.hm-deals{padding:42px 0}.hm-deal{padding:20px}.hm-booking-tabs{gap:6px;font-size:.76rem}}

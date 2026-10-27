@@ -27,10 +27,11 @@ const STATUS_LABELS = {
 export default function PassengerDashboard() {
   const { bookings, fetchMine, createBooking } = useBookingStore();
   const [stats, setStats] = useState(null);
-  const [pickup, setPickup] = useState(null);
-  const [drop, setDrop] = useState(null);
+  const [initialHomeQuote] = useState(() => { try { return JSON.parse(sessionStorage.getItem('easyride-home-quote') || 'null'); } catch { return null; } });
+  const [pickup, setPickup] = useState(initialHomeQuote?.pickup || null);
+  const [drop, setDrop] = useState(initialHomeQuote?.drop || null);
   const [stops, setStops] = useState([]);
-  const [scheduledFor, setScheduledFor] = useState(null);
+  const [scheduledFor, setScheduledFor] = useState(initialHomeQuote?.scheduledFor || null);
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [previousDrivers, setPreviousDrivers] = useState([]);
   const [driverCount, setDriverCount] = useState(null);
@@ -224,6 +225,7 @@ export default function PassengerDashboard() {
         scheduledFor,
         paymentMethod,
       });
+      sessionStorage.removeItem('easyride-home-quote');
       setPickup(null);
       setDrop(null);
       setStops([]);
@@ -278,7 +280,7 @@ export default function PassengerDashboard() {
         <div className="card">
           <h3>Book a ride</h3>
           <div key={formKey} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <AddressAutocomplete label="Pickup address" onSelect={setPickup} required allowLocate />
+            <AddressAutocomplete label="Pickup address" defaultValue={pickup?.label} onSelect={setPickup} required allowLocate />
 
             {stops.map((stop, i) => (
               <div key={stop.id} style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
@@ -290,8 +292,8 @@ export default function PassengerDashboard() {
             ))}
             <button type="button" className="btn secondary" style={{ alignSelf: 'flex-start' }} onClick={stopHandlers.add}>+ Add stop</button>
 
-            <AddressAutocomplete label="Drop address" onSelect={setDrop} required />
-            <ScheduleField onChange={setScheduledFor} />
+            <AddressAutocomplete label="Drop address" defaultValue={drop?.label} onSelect={setDrop} required />
+            <ScheduleField onChange={setScheduledFor} defaultValue={scheduledFor} />
 
             {vehicleSelectionEnabled && vehicleTypes.length > 0 && !preferredDriverId && (
               <div>
