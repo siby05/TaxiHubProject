@@ -26,7 +26,7 @@ const ROUTES={'np-akl':'New Plymouth → Auckland','akl-np':'Auckland → New Pl
 const SERVICES=[
   {title:'Airport Transfers',desc:'Reliable transfers to and from New Plymouth Airport.',icon:'✈',img:'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=1200&q=85',alt:'Passenger aeroplane',points:['Pre-book airport rides','Convenient pickup arrangements','Comfortable, stress-free travel'],link:'/airport-transfers'},
   {title:'Local Rides',desc:'Taxis for shopping, appointments, events and more.',icon:'⌖',img:'https://commons.wikimedia.org/wiki/Special:FilePath/New-plymouth-city-skyline-npdc.jpg?width=1200',alt:'New Plymouth with Mount Taranaki',points:['Quick and convenient','New Plymouth and nearby','Friendly local service'],link:'/register'},
-  {title:'Private Transport',desc:'Personalised transport for business, leisure or groups.',icon:'♧',img:'https://images.unsplash.com/photo-1551830820-330a71b99659?auto=format&fit=crop&w=1200&q=85',alt:'Vehicle on a scenic road',points:['Flexible scheduling','Comfortable vehicles','Great for tours and events'],link:'/about'}
+  {title:'Private Transport',desc:'Personalised transport for business, leisure or groups.',icon:'♧',img:'/images/byd-atto3.png',alt:'BYD Atto 3 electric SUV used for EasyRide private transport',points:['Flexible scheduling','Comfortable vehicles','Great for tours and events'],link:'/about'}
 ];
 function BookingPanel(){
   const navigate=useNavigate();
