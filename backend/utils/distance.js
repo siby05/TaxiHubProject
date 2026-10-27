@@ -87,7 +87,39 @@ function cleanStops(stops) {
   return (stops || []).map((s) => ({ address: s.address || '', lat: s.lat, lng: s.lng }));
 }
 
+// Production driving distance uses a configured OSRM-compatible routing service.
+// Never silently substitute straight-line distance when a configured router fails:
+// that would underquote journeys and create inconsistent booking prices.
+const drivingCache = new Map();
+async function drivingRouteDistanceKm(pickup, drop, stops = []) {
+  const base = process.env.ROUTING_OSRM_URL?.trim();
+  if (!base) throw Object.assign(new Error('Driving-distance pricing is not configured. Contact EasyRide support.'), { status: 503 });
+  const pts = [pickup, ...(stops || []), drop];
+  if (pts.length > 12 || pts.some(p => !Number.isFinite(Number(p.lat)) || !Number.isFinite(Number(p.lng)) || Math.abs(Number(p.lat)) > 90 || Math.abs(Number(p.lng)) > 180)) throw Object.assign(new Error('Invalid trip coordinates'), { status: 400 });
+  const coords = pts.map(p => `${Number(p.lng).toFixed(5)},${Number(p.lat).toFixed(5)}`).join(';');
+  const cached = drivingCache.get(coords);
+  if (cached && cached.expires > Date.now()) return cached.km;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 7000);
+  try {
+    const url = new URL(`route/v1/driving/${coords}`, base.replace(/\\/?$/, '/'));
+    url.searchParams.set('overview', 'false');
+    const response = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/json', 'User-Agent': 'EasyRideNZ/1.0 routing' } });
+    if (!response.ok) throw Error(`routing HTTP ${response.status}`);
+    const data = await response.json();
+    const metres = data?.routes?.[0]?.distance;
+    if (data.code !== 'Ok' || !Number.isFinite(metres) || metres < 0) throw Error('No drivable route found');
+    const km = Math.round(metres / 10) / 10000;
+    if (drivingCache.size > 1000) drivingCache.clear();
+    drivingCache.set(coords, { km, expires: Date.now() + 10 * 60 * 1000 });
+    return km;
+  } catch (err) {
+    console.error('[routing] driving route failed:', err.message);
+    throw Object.assign(new Error('Could not calculate driving distance. Please try again shortly.'), { status: 503 });
+  } finally { clearTimeout(timer); }
+}
+
 module.exports = {
-  haversineKm, calculateFare, calculateTripFare, calculateCardSurcharge, routeDistanceKm,
+  haversineKm, calculateFare, calculateTripFare, calculateCardSurcharge, routeDistanceKm, drivingRouteDistanceKm,
   invalidStopsError, cleanStops,
 };
