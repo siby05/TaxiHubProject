@@ -5,6 +5,14 @@
       "destination": "/new-plymouth-to-auckland/index.html"
     },
     {
+      "source": "/auckland-to-new-plymouth",
+      "destination": "/auckland-to-new-plymouth/index.html"
+    },
+    {
+      "source": "/new-plymouth-to-palmerston-north",
+      "destination": "/new-plymouth-to-palmerston-north/index.html"
+    },
+    {
       "source": "/airport-transfers",
       "destination": "/airport-transfers/index.html"
     },
