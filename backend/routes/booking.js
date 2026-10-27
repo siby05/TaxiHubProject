@@ -360,9 +360,9 @@ router.get('/driver-info/:id', auth, roleMiddleware(['passenger']), async (req, 
 // The admin's date-range promotion is included (see utils/discounts.js);
 // the same-day return-trip discount isn't known until a driver has the
 // trip, so it's applied - and the passenger told - after booking.
-function buildQuote(distanceKm, ratePerKm, paymentMethod, scheduledFor) {
+function buildQuote(distanceKm, ratePerKm, paymentMethod, scheduledFor, route) {
   const settings = getSettings();
-  const fare = priceWithPromo(calculateTripFare(distanceKm, ratePerKm, settings), scheduledFor ? new Date(scheduledFor) : new Date());
+  const fare = priceWithPromo(calculateTripFare(distanceKm, ratePerKm, settings), scheduledFor ? new Date(scheduledFor) : new Date(), route);
   const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(fare.estimatedFare) : 0;
   return {
     distanceKm, ...fare, cardSurchargeAmount,
@@ -403,7 +403,7 @@ router.post('/guest-quote', guestLimiter, async (req, res) => {
     }
     const distanceKm = routeDistanceKm({ lat: pickupLat, lng: pickupLng }, { lat: dropLat, lng: dropLng }, stops);
     res.json({
-      ...buildQuote(distanceKm, resolved.driver.ratePerKm, paymentMethod, scheduledFor),
+      ...buildQuote(distanceKm, resolved.driver.ratePerKm, paymentMethod, scheduledFor, { pickupLat, pickupLng, dropLat, dropLng }),
       usedFallback: resolved.usedFallback, requestedUnavailable: resolved.requestedUnavailable,
       requestedCashOnly: resolved.requestedCashOnly, requestedName: resolved.requestedName,
       requestedOffSchedule: resolved.requestedOffSchedule,
@@ -452,7 +452,7 @@ router.post('/quote', auth, roleMiddleware(['passenger', 'driver']), async (req,
       ({ driver, usedFallback, requestedUnavailable, requestedCashOnly, requestedName, nextAvailableTime, requestedOffSchedule } = await resolveDriver(driverId, paymentMethod, vehicleType, { lat: pickupLat, lng: pickupLng }, scheduledFor ? new Date(scheduledFor) : undefined));
       if (!driver) {
         const distanceKm = routeDistanceKm({ lat: pickupLat, lng: pickupLng }, { lat: dropLat, lng: dropLng }, stops);
-        return res.json({ ...buildQuote(distanceKm, Number(process.env.DEFAULT_RATE_PER_KM) || 1.8, paymentMethod, scheduledFor),
+        return res.json({ ...buildQuote(distanceKm, Number(process.env.DEFAULT_RATE_PER_KM) || 1.8, paymentMethod, scheduledFor, { pickupLat, pickupLng, dropLat, dropLng }),
           awaitingDriverConfirmation: true,
           availabilityMessage: 'No driver is currently scheduled for your requested time. You can still submit your booking request. We will check with our drivers and update you once availability is confirmed. Your booking is not confirmed yet.' });
       }
@@ -460,7 +460,7 @@ router.post('/quote', auth, roleMiddleware(['passenger', 'driver']), async (req,
 
     const distanceKm = routeDistanceKm({ lat: pickupLat, lng: pickupLng }, { lat: dropLat, lng: dropLng }, stops);
     res.json({
-      ...buildQuote(distanceKm, driver.ratePerKm, paymentMethod, scheduledFor),
+      ...buildQuote(distanceKm, driver.ratePerKm, paymentMethod, scheduledFor, { pickupLat, pickupLng, dropLat, dropLng }),
       usedFallback, requestedUnavailable, requestedCashOnly, requestedName, requestedOffSchedule,
     });
   } catch (err) {
@@ -538,7 +538,7 @@ router.post('/', auth, roleMiddleware(['passenger']), async (req, res) => {
 
     const awaitingDriverConfirmation = !targetDriverId && broadcastCandidates.length === 0;
     const bookingSettings = getSettings();
-    const fare = priceWithPromo(calculateTripFare(distanceKm, ratePerKmForEstimate, bookingSettings), requestedTime);
+    const fare = priceWithPromo(calculateTripFare(distanceKm, ratePerKmForEstimate, bookingSettings), requestedTime, { pickupLat, pickupLng, dropLat, dropLng });
     const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(fare.estimatedFare) : 0;
 
     // A QR-scan direct hail (see frontend/src/pages/passenger/BookDriver.jsx,
@@ -701,7 +701,7 @@ router.post('/guest', guestLimiter, async (req, res) => {
     }
 
     const bookingSettings = getSettings();
-    const fare = priceWithPromo(calculateTripFare(distanceKm, resolved.driver.ratePerKm, bookingSettings), scheduledFor ? new Date(scheduledFor) : new Date());
+    const fare = priceWithPromo(calculateTripFare(distanceKm, resolved.driver.ratePerKm, bookingSettings), scheduledFor ? new Date(scheduledFor) : new Date(), { pickupLat, pickupLng, dropLat, dropLng });
     const cardSurchargeAmount = paymentMethod === 'card' ? calculateCardSurcharge(fare.estimatedFare) : 0;
 
     const booking = await Booking.create({
@@ -846,7 +846,7 @@ router.put('/:id/edit', auth, roleMiddleware(['passenger']), async (req, res) =>
 
     // The return-trip discount is dropped here and re-applied by
     // refreshReturnTripInBackground() below if the edited trip still pairs.
-    const fare = priceWithPromo(calculateTripFare(distanceKm, ratePerKmForEstimate, bookingSettings), nextRequestedTime);
+    const fare = priceWithPromo(calculateTripFare(distanceKm, ratePerKmForEstimate, bookingSettings), nextRequestedTime, { pickupLat: nextPickupLat, pickupLng: nextPickupLng, dropLat: nextDropLat, dropLng: nextDropLng });
     const cardSurchargeAmount = nextPaymentMethod === 'card' ? calculateCardSurcharge(fare.estimatedFare) : 0;
 
     const updated = await Booking.findByIdAndUpdate(booking._id, {
@@ -939,7 +939,7 @@ router.put('/:id/driver-edit', auth, roleMiddleware(['driver']), async (req, res
     const requestedTime = next.scheduledFor ? new Date(next.scheduledFor) : new Date();
     // The return-trip discount is re-applied by refreshReturnTripInBackground()
     // below if the edited trip still pairs, same as the passenger's edit.
-    let fare = priceWithPromo(calculateTripFare(distanceKm, driver.ratePerKm, getSettings()), requestedTime);
+    let fare = priceWithPromo(calculateTripFare(distanceKm, driver.ratePerKm, getSettings()), requestedTime, { pickupLat: next.pickupLat, pickupLng: next.pickupLng, dropLat: next.dropLat, dropLng: next.dropLng });
     let fareSetByDriver = false;
     if (req.body.estimatedFare != null && req.body.estimatedFare !== '') {
       const { error: fareError, fare: custom } = parseFare(req.body.estimatedFare);
