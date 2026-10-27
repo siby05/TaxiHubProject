@@ -219,7 +219,7 @@
 .hm .hm-hero.hm-paused *, .hm .hm-hero.hm-paused *::before, .hm .hm-hero.hm-paused *::after { animation-play-state: paused !important; }
 
 /* Approved premium homepage */
-.hm-approved{background:linear-gradient(90deg,rgba(7,21,39,.94),rgba(7,21,39,.57)),url('/images/byd-atto3.png') center/cover no-repeat;min-height:520px}
+.hm-approved{background:linear-gradient(90deg,rgba(7,21,39,.82),rgba(7,21,39,.25) 58%,rgba(7,21,39,.34)),url('https://commons.wikimedia.org/wiki/Special:FilePath/Taranaki_banner_Mount_Taranaki_from_New_Plymouth.JPG?width=2100') center center/cover no-repeat;min-height:520px}
 .hm-approved .hm-hero-inner{padding:80px 16px 90px;grid-template-columns:1.1fr .9fr;gap:50px}
 .hm-approved-kicker{color:#ffca28;font-size:.8rem;letter-spacing:.2em;font-weight:800}
 .hm-approved h1{font-size:clamp(2.6rem,5vw,4rem);line-height:1.09;margin:19px 0}
@@ -268,3 +268,35 @@
 .hm-deal-list li{background:#fcfaf4;border-color:#efe1b6}
 .hm-deal-list a{color:#0b2942}
 @media(max-width:620px){.hm-deals{padding:42px 0}.hm-deal{padding:20px}.hm-booking-tabs{gap:6px;font-size:.76rem}}
+
+/* New Plymouth / Mount Taranaki panorama matching the approved sample's scenic hero */
+.hm-approved{background-position:center center;background-size:cover;min-height:540px}
+.hm-approved-copy{position:relative;z-index:1;text-shadow:0 2px 14px rgba(0,0,0,.27)}
+.hm-approved-booking{text-shadow:none}
+@media(max-width:790px){.hm-approved{background-position:52% center}.hm-approved .hm-hero-inner{background:linear-gradient(180deg,rgba(7,21,39,.12),rgba(7,21,39,.25))}}
+
+/* Responsive hero: laptop split view; tablets and phones prioritize the form. */
+.hm-approved .hm-hero-inner{max-width:1180px;grid-template-columns:minmax(0,1.1fr) minmax(340px,.9fr)}
+.hm-approved-copy,.hm-approved-booking{min-width:0}
+.hm-approved-booking{max-width:520px;width:100%;justify-self:end}
+.hm-approved .autocomplete-list{max-height:260px;overflow:auto}
+.hm-approved .hm-booking-fields input{font-size:16px}
+@media(max-width:900px){
+  .hm-approved .hm-hero-inner{grid-template-columns:minmax(0,1fr);max-width:680px;gap:24px;padding:34px 18px 48px}
+  .hm-approved{background-position:57% center}
+  .hm-approved-booking{max-width:100%;justify-self:stretch}
+  .hm-approved-copy h1{font-size:clamp(2.2rem,7vw,3.3rem)}
+}
+@media(max-width:480px){
+  .hm-approved{background-position:56% top}
+  .hm-approved .hm-hero-inner{padding:28px 14px 34px}
+  .hm-approved-copy h1{font-size:2.15rem}
+  .hm-approved-highlights{gap:8px 14px;font-size:.79rem}
+  .hm-approved-booking{padding:17px 14px;border-radius:13px}
+  .hm-approved-booking h2{font-size:1.2rem}
+  .hm-approved-booking .hm-booking-tabs{font-size:.76rem}
+  .hm-approved .hm-cta,.hm-approved-booking .btn{width:100%}
+}
+
+.hm-photo-credit{position:absolute;bottom:5px;right:14px;font-size:10px;z-index:2}
+.hm-photo-credit a{color:#e5e7eb;text-decoration:underline;text-underline-offset:2px}
