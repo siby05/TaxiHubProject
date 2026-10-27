@@ -219,7 +219,7 @@
 .hm .hm-hero.hm-paused *, .hm .hm-hero.hm-paused *::before, .hm .hm-hero.hm-paused *::after { animation-play-state: paused !important; }
 
 /* Approved premium homepage */
-.hm-approved{background:linear-gradient(90deg,rgba(7,21,39,.82),rgba(7,21,39,.25) 58%,rgba(7,21,39,.34)),url('https://commons.wikimedia.org/wiki/Special:FilePath/Taranaki_banner_Mount_Taranaki_from_New_Plymouth.JPG?width=2100') center center/cover no-repeat;min-height:520px}
+.hm-approved{background:linear-gradient(90deg,rgba(7,21,39,.82),rgba(7,21,39,.25) 58%,rgba(7,21,39,.34)),url('https://commons.wikimedia.org/wiki/Special:FilePath/MT_Taranaki_New_Plymouth.jpg?width=1920') center center/cover no-repeat;min-height:520px}
 .hm-approved .hm-hero-inner{padding:80px 16px 90px;grid-template-columns:1.1fr .9fr;gap:50px}
 .hm-approved-kicker{color:#ffca28;font-size:.8rem;letter-spacing:.2em;font-weight:800}
 .hm-approved h1{font-size:clamp(2.6rem,5vw,4rem);line-height:1.09;margin:19px 0}
@@ -300,3 +300,19 @@
 
 .hm-photo-credit{position:absolute;bottom:5px;right:14px;font-size:10px;z-index:2}
 .hm-photo-credit a{color:#e5e7eb;text-decoration:underline;text-underline-offset:2px}
+
+/* Fix nested autocomplete wrappers being styled as fake input containers. */
+.hm-approved-booking .hm-booking-fields > .autocomplete-wrap,
+.hm-approved-booking .hm-booking-fields > div {padding:0!important;border:0!important;background:transparent!important;min-width:0!important}
+.hm-approved-booking .autocomplete-wrap > div:not(.autocomplete-list) {display:flex!important;align-items:stretch!important;gap:8px!important;padding:0!important;background:transparent!important;border:0!important;width:100%;min-width:0}
+.hm-approved-booking .autocomplete-wrap > div:not(.autocomplete-list) > input{display:block!important;width:100%!important;flex:1 1 0!important;min-width:0!important;height:48px!important;box-sizing:border-box!important}
+.hm-approved-booking .autocomplete-wrap > div:not(.autocomplete-list) > button{display:inline-flex!important;width:auto!important;max-width:130px!important;flex:0 0 auto!important;padding:10px 12px!important;min-height:48px!important;white-space:nowrap!important;font-size:.84rem!important}
+.hm-approved-booking .autocomplete-wrap .autocomplete-list{position:absolute;z-index:45;width:100%;background:white;border:1px solid #d8e0e8;border-radius:10px;box-shadow:0 12px 24px #0002}
+.hm-approved-booking .hm-booking-fields .autocomplete-wrap{position:relative}
+.hm-approved-booking .hm-primary{background:#ffca28!important;color:#102033!important}
+@media(max-width:500px){
+ .hm-approved-booking .autocomplete-wrap > div:not(.autocomplete-list){flex-wrap:wrap!important}
+ .hm-approved-booking .autocomplete-wrap > div:not(.autocomplete-list) > input{flex:1 1 100%!important}
+ .hm-approved-booking .autocomplete-wrap > div:not(.autocomplete-list) > button{width:100%!important;max-width:none!important;min-height:40px!important}
+ .hm-approved .hm-hero-inner{padding-top:34px}
+}
