@@ -753,6 +753,11 @@ export default function AdminDashboard() {
             </div>
 
             <div>
+              <label>Global minimum rate per km (NZ$)</label>
+              <input type="number" min="0.01" step="0.05" placeholder="Use individual driver rates" value={settings.globalRatePerKm ?? ''} onChange={(e) => setSettings((old) => ({ ...old, globalRatePerKm: e.target.value }))} />
+              <p className="muted">Sets a minimum per-km rate for all new trip estimates. Higher driver rates remain effective. Leave blank to use driver rates. Discounts still apply.</p>
+            </div>
+            <div>
               <label>Long-distance rate</label>
               <p className="muted" style={{ marginTop: 0 }}>
                 Trips longer than the distance below are charged at this per-km rate for the whole trip (or the
