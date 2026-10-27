@@ -351,14 +351,14 @@ function buildInvoiceHtml(booking, passenger, driver, driverName, { forPrint = f
         <table style="border-collapse:collapse;" cellpadding="0" cellspacing="0" role="presentation">
           <tr>
             <td style="width:40px;vertical-align:middle;">
-              <!-- CSS-only badge (no external/attached image - the one asset guaranteed to render in every mail client, including ones that block remote images by default), matching frontend/src/components/Logo.jsx's chevron-in-a-badge mark. -->
-              <table bgcolor="#38BDF8" style="border-collapse:separate;background:#38BDF8;border-radius:9px;" cellpadding="0" cellspacing="0" role="presentation">
-                <tr><td style="width:34px;height:34px;text-align:center;vertical-align:middle;line-height:34px;color:#ffffff;font-size:18px;font-weight:800;font-family:Georgia,serif;">&rsaquo;</td></tr>
+              <!-- Simplified brand car icon without external assets for reliable email rendering. -->
+              <table bgcolor="#0B2942" style="border-collapse:separate;background:#0B2942;border:2px solid #FFCA28;border-radius:9px;" cellpadding="0" cellspacing="0" role="presentation">
+                <tr><td style="width:34px;height:34px;text-align:center;vertical-align:middle;line-height:34px;color:#ffffff;font-size:18px;font-weight:800;font-family:Georgia,serif;">&#128663;</td></tr>
               </table>
             </td>
             <td style="vertical-align:middle;padding-left:10px;">
-              <span style="font-size:22px;font-weight:800;"><span style="color:#ffffff;">Easy</span><span style="color:#38BDF8;">Ride</span></span>
-              <div style="color:#94a3b8;font-size:11px;letter-spacing:0.08em;margin-top:2px;">PREMIUM TRANSPORT · NEW PLYMOUTH, NZ</div>
+              <span style="font-size:22px;font-weight:800;"><span style="color:#ffffff;">Easy</span><span style="color:#FFCA28;">Ride</span></span>
+              <div style="color:#94a3b8;font-size:11px;letter-spacing:0.08em;margin-top:2px;">TAXI & PRIVATE TRANSFERS</div>
             </td>
           </tr>
         </table>

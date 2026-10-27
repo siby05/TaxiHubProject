@@ -89,8 +89,12 @@ function discountedFare(baseFare, promoPercent = 0, returnTripPercent = 0) {
 // Price for a new/edited trip: the promotion only. The return-trip
 // discount is applied afterwards by reconcileReturnTripDiscounts(), once
 // the trip is saved with its driver.
-function priceWithPromo(baseFare, when) {
-  return discountedFare(baseFare, promoPercentFor(when), 0);
+function priceWithPromo(baseFare, when, route) {
+  const direction = route ? tripDirection(route) : null;
+  const key = direction ? directionKey(direction.city, direction.leg) : null;
+  const offer = (getSettings().routeDiscounts || []).find((r) => r.enabled && r.direction === key);
+  const routePercent = offer ? Number(offer.percent) : 0;
+  return discountedFare(baseFare, Math.max(promoPercentFor(when), routePercent), 0);
 }
 
 const baseFareOf = (b) => b.fareBeforeDiscount ?? b.estimatedFare;
@@ -350,7 +354,8 @@ async function publicPromotions() {
       openings: [...openings.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(0, 6),
     };
   }
-  return { promo, returnTrip };
+  const routeDiscounts = (settings.routeDiscounts || []).filter((r) => r.enabled && r.percent > 0).map(({direction, percent}) => ({ direction, percent }));
+  return { promo, returnTrip, routeDiscounts };
 }
 
 module.exports = {

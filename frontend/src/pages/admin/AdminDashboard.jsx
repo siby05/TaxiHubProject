@@ -722,6 +722,14 @@ export default function AdminDashboard() {
               <input type="number" step="1" min="0" value={settings.outstandingFeeLimit} onChange={(e) => setSettings((s) => ({ ...s, outstandingFeeLimit: e.target.value }))} />
               <p className="muted" style={{ marginTop: 4 }}>A driver whose unpaid balance exceeds this is blocked from going online (auto-disabled if it happens mid-session). Override per driver from their report page.</p>
             </div>
+            <div style={{marginTop:18}}>
+              <h4>Route-specific discounts</h4><p className="muted">Discount individual directions, independent of the existing date promotion and return-trip offers. The highest eligible discount applies; percentages never stack.</p>
+              {[[ 'np-akl','New Plymouth → Auckland'],['akl-np','Auckland → New Plymouth'],['np-pmr','New Plymouth → Palmerston North'],['pmr-np','Palmerston North → New Plymouth']].map(([direction,label]) => {
+                const r = (settings.routeDiscounts || []).find((d) => d.direction === direction) || {direction,enabled:false,percent:10};
+                const change = (patch) => setSettings((prev) => ({...prev,routeDiscounts:[...(prev.routeDiscounts||[]).filter((d)=>d.direction!==direction),{...r,...patch}]}));
+                return <div key={direction} style={{display:'flex',alignItems:'center',gap:10,marginBottom:9,flexWrap:'wrap'}}><label style={{display:'flex',alignItems:'center',gap:6,flex:1,minWidth:220}}><input type="checkbox" style={{width:'auto'}} checked={!!r.enabled} onChange={(e)=>change({enabled:e.target.checked})}/>{label}</label><input aria-label={`${label} discount percent`} type="number" min="1" max="99" step="1" style={{width:75}} value={r.percent} onChange={(e)=>change({percent:e.target.value})}/><span>% off</span></div>;
+              })}
+            </div>
             {settingsMsg && <p className="muted">{settingsMsg}</p>}
             <button className="btn">Save</button>
           </form>
@@ -1016,6 +1024,7 @@ export default function AdminDashboard() {
                     <strong>{f.name}</strong>{f.email && <span className="muted"> · {f.email}</span>}
                     {f.rating ? <span> · {'★'.repeat(f.rating)}{'☆'.repeat(5 - f.rating)}</span> : ''}
                     <div className="muted">{f.message}</div>
+                    {f.rating && <button type="button" className="btn secondary" style={{marginTop:8}} onClick={async () => { try { await client.put(`/admin/feedback/${f._id}/publish`, {published: !f.published}); load(); } catch (err) { setError(err.response?.data?.error || 'Could not update testimonial'); } }}>{f.published ? 'Remove from homepage' : 'Approve for homepage'}</button>}
                   </td>
                   <td className="muted">{formatNzDateTime(f.createdAt)}</td>
                 </tr>

@@ -34,6 +34,16 @@ function withCompliance(driver) {
 
 router.use(auth, roleMiddleware(['admin']));
 
+// Publishing requires an explicit admin action; private feedback stays private.
+router.put('/feedback/:id/publish', async (req, res) => {
+  if (typeof req.body.published !== 'boolean') return res.status(400).json({ error: 'published must be a boolean' });
+  const feedback = await Feedback.findById(req.params.id);
+  if (!feedback) return res.status(404).json({ error: 'Feedback not found' });
+  if (req.body.published && (!feedback.rating || !feedback.message?.trim())) return res.status(400).json({ error: 'Only written, rated feedback can be published' });
+  const updated = await Feedback.findByIdAndUpdate(feedback._id, { published: req.body.published });
+  res.json(updated);
+});
+
 function publicUser(user) {
   const { password, ...rest } = user;
   return rest;
@@ -538,7 +548,7 @@ router.put('/settings', async (req, res) => {
   const {
     commissionType, commissionPercent, weeklyFlatFee, outstandingFeeLimit, minimumFare, fareRanges,
     longDistanceThresholdKm, longDistanceRatePerKm, driverSignupEnabled, vehicleSelectionEnabled, tempPasswordVisible, adminEmail, adminMobile, backupFrequency, tripRetentionDays,
-    promoDiscount, returnTripDiscount, dbStorageLimitMb, dbCleanupAtPercent,
+    promoDiscount, returnTripDiscount, routeDiscounts, dbStorageLimitMb, dbCleanupAtPercent,
   } = req.body;
   try {
     if (adminEmail != null && adminEmail && !/^\S+@\S+\.\S+$/.test(adminEmail)) {
@@ -567,7 +577,8 @@ router.put('/settings', async (req, res) => {
       ...(promoDiscount && {
         promoDiscount: { ...promoDiscount, percent: Number(promoDiscount.percent), startDate: promoDiscount.startDate || null, endDate: promoDiscount.endDate || null },
       }),
-      ...(returnTripDiscount && { returnTripDiscount: { ...returnTripDiscount, percent: Number(returnTripDiscount.percent) } }),    });
+      ...(returnTripDiscount && { returnTripDiscount: { ...returnTripDiscount, percent: Number(returnTripDiscount.percent) } }),
+      ...(routeDiscounts !== undefined && { routeDiscounts }),    });
     // Turning the return-trip discount on/off or changing its percent
     // re-prices already-booked pairs (and tells those passengers).
     if (returnTripDiscount) runInBackground('return-trip discount repricing', () => repriceUpcomingReturnTrips(req.app.get('io')));

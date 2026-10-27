@@ -5,6 +5,13 @@ const Feedback = require('../models/Feedback');
 const { notifyAdmins } = require('../utils/notify');
 const { rateLimit } = require('../middleware/rateLimit');
 
+// Public testimonials contain only approved display fields, never email or account IDs.
+router.get('/testimonials', async (req, res) => {
+  const approved = await Feedback.find({ published: true });
+  res.json(approved.filter((f) => !!f.rating && !!f.message)
+    .slice(0, 6).map((f) => ({ name: f.name || 'EasyRide passenger', rating: f.rating, message: f.message })));
+});
+
 // POST /api/feedback - public (works whether or not the sender is logged
 // in; attaches userId when a valid token is present, but doesn't require
 // one - the About/Contact page is reachable before signing in).

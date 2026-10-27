@@ -4,6 +4,8 @@ import { useAuthStore } from '../store/authStore';
 import { useDriverSignupEnabled } from '../hooks/useDriverSignupEnabled';
 import NotificationBell from './NotificationBell';
 import Logo from './Logo';
+import client from '../api/client';
+import { waLink } from '../utils/whatsapp';
 
 const ROLE_LINKS = {
   passenger: [
@@ -39,6 +41,8 @@ export default function Navbar() {
   const { pathname } = useLocation();
   const driverSignupEnabled = useDriverSignupEnabled();
   const [open, setOpen] = useState(false);
+  const [contactMobile, setContactMobile] = useState(null);
+  useEffect(() => { if (!user) client.get('/booking/admin-contact').then((r) => setContactMobile(r.data?.mobile || null)).catch(() => {}); }, [user]);
 
   const home = user?.role === 'admin' ? '/admin' : user?.role === 'driver' ? '/driver' : '/passenger';
 
@@ -95,6 +99,7 @@ export default function Navbar() {
       {!user && (
         <nav className="navbar-inline" aria-label="Main">
           <NavLink to="/login" end>Log in</NavLink>
+          {contactMobile && <a className="hm-nav-contact" href={waLink(contactMobile, 'Hi EasyRide, I would like to enquire about booking a ride.')} target="_blank" rel="noreferrer">Contact</a>}
         </nav>
       )}
 

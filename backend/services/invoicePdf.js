@@ -47,10 +47,13 @@ function buildInvoicePdf(booking, passenger, driver, driverName) {
 
     // Header band
     doc.rect(0, 0, pageW, 96).fill(NAVY);
-    doc.roundedRect(left, 31, 34, 34, 9).fill(ACCENT);
-    doc.font('Bold').fontSize(20).fillColor('#ffffff').text('›', left, 34, { width: 34, align: 'center' });
-    doc.fontSize(22).fillColor('#ffffff').text('Easy', left + 44, 32, { continued: true }).fillColor(ACCENT).text('Ride');
-    doc.font('Regular').fontSize(8.5).fillColor('#94a3b8').text('PREMIUM TRANSPORT · NEW PLYMOUTH, NZ', left + 44, 62, { characterSpacing: 1 });
+    // The car badge and gold wordmark match the approved website mark.
+    doc.lineWidth(2).strokeColor('#ffffff').roundedRect(left + 2, 40, 34, 16, 4).stroke();
+    doc.moveTo(left + 7, 40).lineTo(left + 13, 31).lineTo(left + 27, 31).lineTo(left + 34, 40).stroke();
+    doc.circle(left + 10, 58, 3).fill('#ffffff');
+    doc.circle(left + 28, 58, 3).fill('#ffffff');
+    doc.fontSize(22).fillColor('#ffffff').text('Easy', left + 44, 32, { continued: true }).fillColor('#FFCA28').text('Ride');
+    doc.font('Regular').fontSize(8.5).fillColor('#94a3b8').text('TAXI & PRIVATE TRANSFERS', left + 44, 62, { characterSpacing: 1 });
 
     // Title row
     let y = 130;
