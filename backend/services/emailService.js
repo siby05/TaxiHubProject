@@ -626,15 +626,16 @@ You'll get another email as soon as a driver accepts. Track it here: ${appUrl('/
   // can take it and the request has been closed.
   sendBookingDeclined: (to, booking, passedOn) =>
     send(to,
-      passedOn ? `Finding you another driver for ${booking.bookingId}` : `No driver available for ${booking.bookingId}`,
+      passedOn ? `ACTION UPDATE: Driver declined - finding another driver (${booking.bookingId})`
+        : `IMPORTANT: Your booking request was cancelled (${booking.bookingId})`,
       passedOn
-        ? `Your driver couldn't take your trip from ${booking.pickupAddress} to ${booking.dropAddress}, so we've sent it to other available drivers. We'll let you know when one accepts.\nOpen the app: ${appUrl('/passenger')}`
-        : `Sorry - your driver can't take your trip from ${booking.pickupAddress} to ${booking.dropAddress}${booking.scheduledFor ? ` on ${formatNzDateTime(booking.scheduledFor)}` : ''}, and no other driver is available, so the request has been closed.${booking.paymentStatus === 'paid' ? ' We\'ll arrange a refund of what you paid.' : ' You haven\'t been charged.'}\nPlease book again for a different time: ${appUrl('/passenger')}`),
+        ? `IMPORTANT BOOKING UPDATE - DRIVER DECLINED\n\nYour original driver cannot take booking ${booking.bookingId}. We are checking for another available driver. Your ride is NOT confirmed until a driver accepts.\nPickup: ${booking.pickupAddress}\nDestination: ${booking.dropAddress}\n${booking.scheduledFor ? `Requested time: ${formatNzDateTime(booking.scheduledFor)}\n` : ''}We will update you when a driver confirms. Check your booking: ${appUrl('/passenger')}`
+        : `IMPORTANT: BOOKING REQUEST CANCELLED\n\nYour booking ${booking.bookingId} has been cancelled because the driver declined and no other driver is currently available. Please do not rely on this booking for your travel.\nPickup: ${booking.pickupAddress}\nDestination: ${booking.dropAddress}\n${booking.scheduledFor ? `Requested time: ${formatNzDateTime(booking.scheduledFor)}\n` : ''}${booking.paymentStatus === 'paid' ? 'Payment has already been recorded. Please contact support to arrange or confirm your refund.' : 'No payment has been recorded for this booking.'}\n\nYou may submit a new booking request for a different time: ${appUrl('/passenger')}`),
 
   sendBookingCancelledByDriver: (to, booking, reason) =>
-    send(to, `Your driver cancelled trip ${booking.bookingId}`,
-      `Your trip from ${booking.pickupAddress} to ${booking.dropAddress} was cancelled by the driver.` +
-      `${reason ? `\nReason: ${reason}` : ''}\nPlease rebook in the app when you're ready.`),
+    send(to, `IMPORTANT: Your confirmed trip was cancelled (${booking.bookingId})`,
+      `IMPORTANT: TRIP CANCELLED\n\nYour driver cancelled booking ${booking.bookingId}. Your trip is no longer confirmed. Please arrange alternative transport if needed.\nPickup: ${booking.pickupAddress}\nDestination: ${booking.dropAddress}`
+      + `${reason ? `\nReason: ${reason}` : ''}\nCheck your booking: ${appUrl('/passenger')}`),
 
   sendComplaintAcknowledgement: (to, complaint) =>
     send(to, `Complaint received (${complaint.complaintId})`, `We've received your complaint and will investigate. Reference: ${complaint.complaintId}.${complaintLink('/passenger/complaints')}`),
