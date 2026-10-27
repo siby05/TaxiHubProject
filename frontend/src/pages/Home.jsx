@@ -224,12 +224,13 @@ function Deals() {
     client.get('/booking/promotions').then((r) => { if (!cancelled) setDeals(r.data); }).catch(() => {});
     return () => { cancelled = true; };
   }, []);
-  const { promo, returnTrip } = deals || {};
-  if (!promo && !returnTrip) return null;
+  const { promo, returnTrip, routeDiscounts } = deals || {};
+  if (!promo && !returnTrip && !routeDiscounts?.length) return null;
 
   return (
     <section className="hm-deals">
       <div className="container hm-deals-grid">
+        {routeDiscounts?.length > 0 && <div className="hm-deal"><div><h3>Selected route offers</h3><p>Special fares configured by EasyRide for these journeys:</p><ul>{routeDiscounts.map((r)=><li key={r.direction}>{DIRECTION_LABEL[r.direction]} — {r.percent}% off</li>)}</ul><Link className="btn hm-deal-btn" to="/register">Request a ride</Link></div></div>}
         {promo && (
           <div className="hm-deal">
             <div className="hm-deal-pct">{promo.percent}%<small>off</small></div>
