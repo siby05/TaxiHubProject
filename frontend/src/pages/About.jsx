@@ -62,9 +62,9 @@ export default function About() {
         </div>
       </div>
 
-      <div className="card" style={{ marginTop: 24, maxWidth: 480 }}>
-        <h3 style={{ marginTop: 0 }}>Send us feedback</h3>
-        <p className="muted">Compliment, complaint about the app itself, or a suggestion - we read every one.</p>
+      <div id="feedback" className="card" style={{ marginTop: 24, maxWidth: 480, scrollMarginTop: 90 }}>
+        <h3 style={{ marginTop: 0 }}>Share your experience with EasyRide</h3>
+        <p className="muted">Leave a passenger review, star rating or suggestion. Reviews are checked by our team before any are shown on our homepage.</p>
         {sent ? (
           <p className="muted" style={{ color: 'var(--success)' }}>Thanks - your feedback has been sent.</p>
         ) : (
