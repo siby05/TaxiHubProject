@@ -156,20 +156,24 @@ export default function DriverBookForPassenger() {
         )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
-          <AddressAutocomplete label="Pickup address" onSelect={setPickup} required allowLocate />
+          <AddressAutocomplete label="Pickup address" onSelect={setPickup} required allowLocate allowManualPin />
 
           {stops.map((stop, i) => (
             <div key={stop.id} style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
               <div style={{ flex: 1 }}>
-                <AddressAutocomplete label={`Stop ${i + 1}`} onSelect={(sel) => stopHandlers.update(stop.id, sel)} required />
+                <AddressAutocomplete label={`Stop ${i + 1}`} onSelect={(sel) => stopHandlers.update(stop.id, sel)} required allowManualPin />
               </div>
               <button type="button" className="btn danger" style={{ marginBottom: 1 }} onClick={() => stopHandlers.remove(stop.id)}>Remove</button>
             </div>
           ))}
           <button type="button" className="btn secondary" style={{ alignSelf: 'flex-start' }} onClick={stopHandlers.add}>+ Add stop</button>
 
-          <AddressAutocomplete label="Drop address" onSelect={setDrop} required />
-          {(!pickup || !drop) && <p className="muted">Enter both pickup and drop address (pick a suggestion from the list) to see the fare and confirm.</p>}
+          <AddressAutocomplete label="Drop address" onSelect={setDrop} required allowManualPin />
+          {(!pickup || !drop) && <p className="muted">Choose the pickup and drop from suggestions, or set the exact locations using the map if address search is unavailable.</p>}
+          {(pickup?.manualPin || drop?.manualPin || stops.some((s) => s.selection?.manualPin)) &&
+            <p className="muted" role="status" style={{ background: '#fff8e4', border: '1px solid #f0c65f', borderRadius: 9, padding: 11 }}>
+              <strong>Manual location selected:</strong> Please check the pin and full address with the passenger before confirming this booking. The map position is used to calculate the estimated fare.
+            </p>}
           <ScheduleField onChange={setScheduledFor} />
           <p className="muted" style={{ margin: '-3px 0 0', fontSize: '0.85rem' }}>
             Your schedule is for automatic trip matching. When you book directly for a passenger,
