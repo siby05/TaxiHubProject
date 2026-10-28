@@ -97,6 +97,26 @@ function photonLabel(p) {
   return parts.filter(Boolean).join(', ');
 }
 
+async function geoapifySearch(q, near) {
+  const key = process.env.GEOAPIFY_API_KEY;
+  if (!key) throw new Error('GEOAPIFY_API_KEY not configured');
+  const params = new URLSearchParams({
+    text: q, filter: 'countrycode:nz', bias: `proximity:${near.lng},${near.lat}`,
+    limit: String(FETCH_LIMIT), format: 'json', apiKey: key,
+  });
+  const response = await fetch('https://api.geoapify.com/v1/geocode/autocomplete?' + params, {
+    signal: AbortSignal.timeout(6500),
+  });
+  if (!response.ok) throw new Error('Geoapify responded ' + response.status);
+  const data = await response.json();
+  return (data.results || [])
+    .map(r => ({
+      label: r.formatted || [r.address_line1, r.address_line2].filter(Boolean).join(', '),
+      lat: Number(r.lat), lng: Number(r.lon),
+    }))
+    .filter(r => r.label && inNz(r.lat, r.lng));
+}
+
 async function photonSearch(q, near) {
   const url = `https://photon.komoot.io/api/?limit=${FETCH_LIMIT}&lang=en&bbox=${NZ_BBOX}&lat=${near.lat}&lon=${near.lng}&q=${encodeURIComponent(q)}`;
   const response = await fetch(url, { headers: NOMINATIM_HEADERS, signal: AbortSignal.timeout(6000) });
@@ -170,31 +190,32 @@ router.get('/search', async (req, res) => {
   let results = [];
   let aliasResults = [];
   let failures = 0;
-  if (alias) {
-    try {
-      aliasResults = await photonSearch(alias, near);
-    } catch (err) {
-      console.error(`[geocode] photon alias search failed: ${err.message}`);
-    }
+  // Geoapify is the primary provider when configured. If unavailable,
+  // automatically try Photon, then Nominatim. No map selection needed.
+  if (process.env.GEOAPIFY_API_KEY) {
+    try { results = await geoapifySearch(alias || q, near); }
+    catch (err) { failures++; console.warn('[geocode] Geoapify unavailable: ' + err.message); }
   }
-  try {
-    results = await photonSearch(q, near);
-  } catch (err) {
-    failures++;
-    console.error(`[geocode] photon search failed: ${err.message}`);
-  }
-  if (results.length === 0 && aliasResults.length === 0) {
+  if (results.length === 0) {
     try {
-      results = await nominatimSearch(alias || q, near);
+      results = await photonSearch(alias || q, near);
     } catch (err) {
       failures++;
-      console.error(`[geocode] nominatim search failed: ${err.message}`);
+      console.warn('[geocode] Photon unavailable: ' + err.message);
     }
   }
-  // 503, not 502: a 502 is what Render's proxy returns while the server is
-  // still asleep, and the frontend treats that as "waking up".
-  if (failures === 2) return res.status(503).json({ error: 'Address lookup failed, try again' });
-
+  if (results.length === 0) {
+    try { results = await nominatimSearch(alias || q, near); }
+    catch (err) {
+      failures++;
+      console.warn('[geocode] Nominatim unavailable: ' + err.message);
+    }
+  }
+  // Don't cache a transient outage as an empty address result.
+  if (results.length === 0 && failures > 0) {
+    return res.status(503).json({ error: 'Address providers temporarily unavailable. Please try again.' });
+  }
+  if (alias && results.length) aliasResults = results;
   // An airport code's own results stay on top (the user asked for that
   // airport); everything else is ranked New Plymouth first.
   results = dedupeByLabel([...aliasResults, ...rankLocalFirst(results, near)]).slice(0, 6);
