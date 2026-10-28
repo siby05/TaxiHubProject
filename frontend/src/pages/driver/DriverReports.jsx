@@ -43,10 +43,19 @@ export default function DriverReports() {
         <button className={section === 'complaints' ? 'active' : ''} onClick={() => setSection('complaints')}>Complaints ({filteredComplaints.length})</button>
       </div>
 
-      <div className="card" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <div><label>From</label><input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} /></div>
-        <div><label>To</label><input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} /></div>
-        <div><label>Passenger name</label><input value={passengerFilter} onChange={(e) => setPassengerFilter(e.target.value)} placeholder="Filter by passenger" /></div>
+      <div className="card driver-report-filters">
+        <div className="report-filter-field">
+          <label htmlFor="report-date-from">From</label>
+          <input id="report-date-from" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+        </div>
+        <div className="report-filter-field">
+          <label htmlFor="report-date-to">To</label>
+          <input id="report-date-to" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+        </div>
+        <div className="report-filter-field report-filter-passenger">
+          <label htmlFor="report-passenger-filter">Passenger name</label>
+          <input id="report-passenger-filter" value={passengerFilter} onChange={(e) => setPassengerFilter(e.target.value)} placeholder="Filter by passenger" />
+        </div>
         {(dateFrom || dateTo || passengerFilter) && (
           <button className="btn secondary" onClick={() => { setDateFrom(''); setDateTo(''); setPassengerFilter(''); }}>Clear</button>
         )}
