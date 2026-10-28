@@ -646,7 +646,7 @@ export default function AdminDashboard() {
               <button key={s || 'all'} className={tripFilter === s ? 'active' : ''} onClick={() => setTripFilter(s)}>{s === 'open' ? 'Open (accepted/in-progress)' : (s || 'All')}</button>
             ))}
           </div>
-          <div className="card" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <div className="card admin-trip-date-filters">
             <div>
               <label>Driver</label>
               <select value={tripDriverFilter} onChange={(e) => setTripDriverFilter(e.target.value)}>
