@@ -150,7 +150,7 @@ export default function DriverBookForPassenger() {
             <p className="muted">This creates a new passenger account on the spot - no email verification or password needed to book right now.</p>
             <div><label>Full name</label><input value={newPassenger.name} onChange={(e) => setNewPassenger((p) => ({ ...p, name: e.target.value }))} required /></div>
             <PhoneField value={newPassenger.mobile} onChange={(v) => setNewPassenger((p) => ({ ...p, mobile: v }))} required hint="Their booking confirmation is sent here on WhatsApp." />
-            <AddressAutocomplete label="Address" placeholder="For trip records" onSelect={(r) => setNewPassenger((p) => ({ ...p, address: r ? r.label : '' }))} required />
+            <div><label htmlFor="driver-new-passenger-address">Passenger address (for trip records)</label><input id="driver-new-passenger-address" placeholder="Street address, suburb, city" autoComplete="street-address" value={newPassenger.address} onChange={(e) => setNewPassenger((p) => ({ ...p, address: e.target.value }))} required /><p className="muted" style={{ fontSize: '0.8rem', margin: '4px 0 0' }}>Type this address directly. A map lookup is not required for the passenger's contact record.</p></div>
             <div><label>Email (optional)</label><input type="email" value={newPassenger.email} onChange={(e) => setNewPassenger((p) => ({ ...p, email: e.target.value }))} /></div>
           </div>
         )}
