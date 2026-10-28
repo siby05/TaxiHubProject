@@ -150,26 +150,30 @@ export default function DriverBookForPassenger() {
             <p className="muted">This creates a new passenger account on the spot - no email verification or password needed to book right now.</p>
             <div><label>Full name</label><input value={newPassenger.name} onChange={(e) => setNewPassenger((p) => ({ ...p, name: e.target.value }))} required /></div>
             <PhoneField value={newPassenger.mobile} onChange={(v) => setNewPassenger((p) => ({ ...p, mobile: v }))} required hint="Their booking confirmation is sent here on WhatsApp." />
-            <AddressAutocomplete label="Address" placeholder="For trip records" onSelect={(r) => setNewPassenger((p) => ({ ...p, address: r ? r.label : '' }))} required />
+            <div><label htmlFor="driver-new-passenger-address">Passenger address (for trip records)</label><input id="driver-new-passenger-address" placeholder="Street address, suburb, city" autoComplete="street-address" value={newPassenger.address} onChange={(e) => setNewPassenger((p) => ({ ...p, address: e.target.value }))} required /><p className="muted" style={{ fontSize: '0.8rem', margin: '4px 0 0' }}>Type this address directly. A map lookup is not required for the passenger's contact record.</p></div>
             <div><label>Email (optional)</label><input type="email" value={newPassenger.email} onChange={(e) => setNewPassenger((p) => ({ ...p, email: e.target.value }))} /></div>
           </div>
         )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
-          <AddressAutocomplete label="Pickup address" onSelect={setPickup} required allowLocate />
+          <AddressAutocomplete label="Pickup address" onSelect={setPickup} required allowLocate allowManualPin />
 
           {stops.map((stop, i) => (
             <div key={stop.id} style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
               <div style={{ flex: 1 }}>
-                <AddressAutocomplete label={`Stop ${i + 1}`} onSelect={(sel) => stopHandlers.update(stop.id, sel)} required />
+                <AddressAutocomplete label={`Stop ${i + 1}`} onSelect={(sel) => stopHandlers.update(stop.id, sel)} required allowManualPin />
               </div>
               <button type="button" className="btn danger" style={{ marginBottom: 1 }} onClick={() => stopHandlers.remove(stop.id)}>Remove</button>
             </div>
           ))}
           <button type="button" className="btn secondary" style={{ alignSelf: 'flex-start' }} onClick={stopHandlers.add}>+ Add stop</button>
 
-          <AddressAutocomplete label="Drop address" onSelect={setDrop} required />
-          {(!pickup || !drop) && <p className="muted">Enter both pickup and drop address (pick a suggestion from the list) to see the fare and confirm.</p>}
+          <AddressAutocomplete label="Drop address" onSelect={setDrop} required allowManualPin />
+          {(!pickup || !drop) && <p className="muted">Choose the pickup and drop from suggestions, or set the exact locations using the map if address search is unavailable.</p>}
+          {(pickup?.manualPin || drop?.manualPin || stops.some((s) => s.selection?.manualPin)) &&
+            <p className="muted" role="status" style={{ background: '#fff8e4', border: '1px solid #f0c65f', borderRadius: 9, padding: 11 }}>
+              <strong>Manual location selected:</strong> Please check the pin and full address with the passenger before confirming this booking. The map position is used to calculate the estimated fare.
+            </p>}
           <ScheduleField onChange={setScheduledFor} />
           <p className="muted" style={{ margin: '-3px 0 0', fontSize: '0.85rem' }}>
             Your schedule is for automatic trip matching. When you book directly for a passenger,

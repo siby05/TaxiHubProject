@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { haversineKm } = require('../utils/distance');
-const NOMINATIM_HEADERS = { 'User-Agent': 'EasyRide/1.0 (demo project)' };
+const NOMINATIM_HEADERS = { 'User-Agent': 'EasyRideNZ/1.0 (https://easyridenz.com; contact: easyridenz@gmail.com)' };
 
 // Nominatim's display_name is the full administrative chain (e.g. "50,
 // Karamea Street, Whalers Gate, New Plymouth, New Plymouth District,
@@ -203,24 +203,46 @@ router.get('/search', async (req, res) => {
   res.json(results);
 });
 
-// GET /api/geocode/reverse?lat=&lng= - turns "use my current location" GPS
-// coordinates into a human-readable address for the pickup field. Public,
-// same reasoning as /search above.
+// GET /api/geocode/reverse?lat=&lng= - reverse address lookup.
+const reverseCache = new Map();
 router.get('/reverse', async (req, res) => {
-  const { lat, lng } = req.query;
-  if (lat == null || lng == null) return res.status(400).json({ error: 'lat and lng are required' });
+  const lat = Number(req.query.lat), lng = Number(req.query.lng);
+  if (req.query.lat == null || req.query.lng == null || !Number.isFinite(lat) || !Number.isFinite(lng) || !inNz(lat, lng)) {
+    return res.status(400).json({ error: 'Valid New Zealand lat and lng are required' });
+  }
+  const cacheKey = lat.toFixed(5) + ',' + lng.toFixed(5);
+  const cached = reverseCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < 24 * 60 * 60 * 1000) return res.json(cached.result);
 
+  let label = null;
   try {
     const url = `https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}`;
     const response = await fetch(url, { headers: NOMINATIM_HEADERS, signal: AbortSignal.timeout(8000) });
     if (!response.ok) throw new Error(`Nominatim responded ${response.status}`);
     const result = await response.json();
-    if (!result || result.error) return res.status(404).json({ error: 'Could not resolve an address for this location' });
-    res.json({ label: shortLabel(result), lat: Number(lat), lng: Number(lng) });
+    if (!result || result.error) throw new Error('Nominatim found no address');
+    label = shortLabel(result);
   } catch (err) {
-    console.error(`[geocode] reverse failed: ${err.message}`);
-    res.status(503).json({ error: 'Reverse lookup failed, try again' });
+    // A Nominatim timeout or 429 should not throw away the user's GPS fix.
+    // Photon also offers reverse lookup with its OpenStreetMap index.
+    console.warn(`[geocode] Nominatim reverse unavailable: ${err.message}`);
+    try {
+      const url = `https://photon.komoot.io/reverse?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}&lang=en`;
+      const response = await fetch(url, { headers: NOMINATIM_HEADERS, signal: AbortSignal.timeout(6000) });
+      if (!response.ok) throw new Error(`Photon responded ${response.status}`);
+      const json = await response.json();
+      const features = json.features || [];
+      const nearby = features.find((f) => f?.properties && f.geometry?.coordinates?.length >= 2);
+      if (nearby) label = photonLabel(nearby.properties);
+    } catch (photonError) {
+      console.warn(`[geocode] Photon reverse unavailable: ${photonError.message}`);
+    }
   }
+  if (!label) return res.status(503).json({ error: 'Reverse lookup temporarily unavailable. GPS coordinates can still be selected.' });
+  const result = { label, lat, lng };
+  if (reverseCache.size >= 200) reverseCache.delete(reverseCache.keys().next().value);
+  reverseCache.set(cacheKey, { at: Date.now(), result });
+  return res.json(result);
 });
 
 module.exports = router;

@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test tests/*.test.js",
+    "prebuild": "npm test"
   },
   "dependencies": {
     "@stripe/react-stripe-js": "^2.8.1",
