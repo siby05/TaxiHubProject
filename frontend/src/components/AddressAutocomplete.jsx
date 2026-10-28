@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import client from '../api/client';
+import MapPinPicker from './MapPinPicker';
 
 // Free-text address search backed by the backend's Nominatim (OpenStreetMap)
 // proxy, restricted to New Zealand - no Google Maps key needed. Calls
@@ -26,7 +27,7 @@ function locateErrorMessage(err) {
   return 'Finding your location took too long - try again, or type the address.';
 }
 
-export default function AddressAutocomplete({ label, placeholder, onSelect, required, allowLocate, compactLocate = false, defaultValue }) {
+export default function AddressAutocomplete({ label, placeholder, onSelect, required, allowLocate, compactLocate = false, allowManualPin = false, defaultValue }) {
   const [query, setQuery] = useState(defaultValue || '');
 
   // defaultValue only seeded the initial state above - a caller that
@@ -44,6 +45,8 @@ export default function AddressAutocomplete({ label, placeholder, onSelect, requ
   const [locateError, setLocateError] = useState('');
   const [searchError, setSearchError] = useState('');
   const [highlight, setHighlight] = useState(-1);
+  const [showManualPin, setShowManualPin] = useState(false);
+  const [manualNotice, setManualNotice] = useState('');
   const timer = useRef(null);
   const inflight = useRef(null);
   const wrapRef = useRef(null);
@@ -71,6 +74,8 @@ export default function AddressAutocomplete({ label, placeholder, onSelect, requ
     cancelPending();
     setHighlight(-1);
     setSearchError('');
+    setLocateError('');
+    setManualNotice('');
     if (value.trim().length < 3) {
       setResults([]);
       setLoading(false);
@@ -94,7 +99,8 @@ export default function AddressAutocomplete({ label, placeholder, onSelect, requ
       } catch (err) {
         if (inflight.current !== controller || err.code === 'ERR_CANCELED') return;
         setResults([]);
-        setSearchError(err.response?.data?.error || 'Address lookup failed - check your connection and try again');
+        setSearchError(err.response?.data?.error || 'Address search is temporarily unavailable. Try again or choose the location on the map.');
+        setOpen(false);
       }
       inflight.current = null;
       setLoading(false);
@@ -110,6 +116,10 @@ export default function AddressAutocomplete({ label, placeholder, onSelect, requ
     setResults([]);
     setOpen(false);
     setHighlight(-1);
+    setShowManualPin(false);
+    setSearchError('');
+    setLocateError('');
+    setManualNotice(result.manualPin ? 'Location chosen manually. Check the pin and street address before confirming.' : '');
     if (Number.isFinite(result.lat) && Number.isFinite(result.lng)) lastPicked = { lat: result.lat, lng: result.lng };
     onSelect(result);
   }
@@ -133,6 +143,8 @@ export default function AddressAutocomplete({ label, placeholder, onSelect, requ
 
   async function useCurrentLocation() {
     setLocateError('');
+    setSearchError('');
+    setOpen(false);
     if (!navigator.geolocation) {
       setLocateError('Location isn\'t supported in this browser - type the address instead');
       return;
@@ -162,7 +174,12 @@ export default function AddressAutocomplete({ label, placeholder, onSelect, requ
       const { data } = await client.get('/geocode/reverse', { params: { lat: pos.coords.latitude, lng: pos.coords.longitude } });
       pick(data);
     } catch {
-      setLocateError('Could not find an address for your location - type it instead');
+      // The phone has supplied a real GPS fix, even if the reverse-address
+      // service is offline. Keep the coordinates rather than discarding the
+      // pickup entirely. Do not pretend a street address was verified.
+      const lat = pos.coords.latitude, lng = pos.coords.longitude;
+      pick({ label: `Current GPS position (${lat.toFixed(5)}, ${lng.toFixed(5)})`, lat, lng, manualPin: true });
+      setManualNotice('Your GPS coordinates were selected, but the street address could not be verified. Please check the pickup location before booking.');
     } finally {
       setLocating(false);
     }
@@ -187,13 +204,13 @@ export default function AddressAutocomplete({ label, placeholder, onSelect, requ
           </button>
         )}
       </div>
-      {locateError && <p className="error-text" style={{ margin: '4px 0 0' }}>{locateError}</p>}
-      {open && (
+      {locateError && <p className="error-text" role="status" style={{ margin: '6px 0 0' }}>{locateError}</p>}
+      {manualNotice && <p className="muted" role="status" style={{ margin: '6px 0 0', fontSize: '0.83rem' }}>{manualNotice}</p>}
+      {searchError && <p className="error-text" role="status" style={{ margin: '6px 0 0' }}>{searchError}</p>}
+      {open && (loading || results.length > 0) && (
         <div className="autocomplete-list">
           {loading && <div className="autocomplete-item muted">Searching...</div>}
-          {!loading && searchError && <div className="autocomplete-item error">{searchError}</div>}
-          {!loading && !searchError && results.length === 0 && <div className="autocomplete-item muted">No matches - try adding the suburb or town</div>}
-          {results.map((r, i) => (
+          {!loading && results.map((r, i) => (
             // mousedown (with preventDefault) rather than click: on phones
             // the tap otherwise first blurs the input and closes the
             // keyboard, the list shifts, and the click can miss the item.
@@ -208,6 +225,12 @@ export default function AddressAutocomplete({ label, placeholder, onSelect, requ
           ))}
         </div>
       )}
+      {allowManualPin && <div className="address-manual-fallback">
+        <button type="button" className="address-map-open" onClick={() => { setShowManualPin(v => !v); setOpen(false); }}>
+          {showManualPin ? 'Close map' : 'Can’t find the address? Set the pin on a map'}
+        </button>
+        {showManualPin && <MapPinPicker address={query} near={lastPicked} onPick={pick} onCancel={() => setShowManualPin(false)} />}
+      </div>}
     </div>
   );
 }
