@@ -64,8 +64,7 @@ function BookingPanel(){
           <Icon.calendar/><span id="er-schedule-display">{scheduleLabel}</span><span className="er-date-chevron" aria-hidden="true">{datePickerOpen?'▴':'▾'}</span>
         </button>
         {datePickerOpen&&<div id="er-date-controls" className="er-date-controls">
-          <div><label htmlFor="er-pickup-date">Pickup date</label><input id="er-pickup-date" type="date" value={pickupDate} min={todayNz()} onChange={e=>setPickupDate(e.target.value)}/></div>
-          <div><label htmlFor="er-pickup-time">Pickup time</label><input id="er-pickup-time" type="time" value={pickupTime} onChange={e=>setPickupTime(e.target.value)}/></div>
+          <div><label htmlFor="er-pickup-datetime">Pickup date &amp; time</label><input id="er-pickup-datetime" type="datetime-local" value={pickupDate&&pickupTime?`${pickupDate}T${pickupTime}`:''} min={`${todayNz()}T00:00`} onChange={e=>{const [date='',time='']=e.target.value.split('T');setPickupDate(date);setPickupTime(time);}}/></div>
           <div className="er-date-actions"><button type="button" onClick={()=>{setPickupDate('');setPickupTime('');setDatePickerOpen(false);}}>Book as soon as possible</button><button type="button" onClick={()=>setDatePickerOpen(false)}>Done</button></div>
         </div>}
         <small>Leave blank for the earliest available pickup</small>
