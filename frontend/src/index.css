@@ -453,6 +453,52 @@ img, video { max-width: 100%; height: auto; }
 .autocomplete-item { padding: 8px 12px; cursor: pointer; font-size: 0.9rem; }
 .autocomplete-item:hover, .autocomplete-item.active { background: #f0f9ff; }
 .autocomplete-item.error { color: #b91c1c; cursor: default; }
+/* Driver-only, geocoder-independent map pin. Its positioning is normal-flow,
+   not an autocomplete popover, so errors and GPS notices cannot cover stops. */
+.address-manual-fallback { position: relative; margin-top: 8px; }
+.address-map-open {
+  border: 0; background: transparent; padding: 5px 0; cursor: pointer;
+  color: #176aa9; font: inherit; font-size: .83rem; text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.address-map-open:focus-visible,.map-pin-picker button:focus-visible { outline: 2px solid #0e7490; outline-offset: 3px; }
+.map-pin-picker {
+  width: 100%; max-width: 100%; box-sizing: border-box;
+  padding: 12px; margin-top: 8px; border: 1px solid #b8cee0;
+  border-radius: 12px; background: #f8fafc; min-width: 0;
+}
+.map-pin-picker .map-pin-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.map-pin-picker .map-pin-heading strong { font-size: .94rem; color: #0b2942; }
+.map-pin-picker .map-pin-heading button {
+  background: #fff; border: 1px solid #cbd5e1; padding: 5px 10px; border-radius: 6px;
+  font-size: 16px; cursor: pointer;
+}
+.map-pin-picker p { font-size: .81rem; margin: 9px 0; line-height: 1.5; }
+.map-pin-map {
+  position: relative; width: 100%; overflow: hidden; cursor: crosshair;
+  touch-action: none; user-select: none; background: #d5e4ea;
+  border: 1px solid #b2c3d3; border-radius: 8px;
+}
+.map-pin-center {
+  position: absolute; top: 50%; left: 50%; z-index: 2; pointer-events: none;
+  transform: translate(-50%, -96%); font-size: 32px; line-height: 1;
+  filter: drop-shadow(0 1px 2px #0008);
+}
+.map-pin-attribution {
+  position: absolute; z-index: 3; right: 2px; bottom: 2px; pointer-events: auto;
+  background: #ffffffde; padding: 2px 4px; border-radius: 3px; font-size: 10px;
+}
+.map-pin-attribution a { color: #19577b; }
+.map-pin-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 11px 0 6px; }
+.map-pin-zoom { display: flex; gap: 6px; }
+.map-pin-zoom button {
+  cursor: pointer; width: 40px; height: 40px; border: 1px solid #becbd8;
+  border-radius: 7px; background: #fff; color: #0b2942; font-size: 22px; font-weight: 700;
+}
+.map-pin-actions .btn { min-height: 41px; padding: 8px 12px; max-width: 100%; }
+.map-pin-actions .btn:disabled { opacity: .6; cursor: not-allowed; }
+.map-pin-picker > small { display: block; line-height: 1.45; }
+
 
 .fare-confirm { background: #f0f9ff; border: 1px solid var(--primary); }
 
