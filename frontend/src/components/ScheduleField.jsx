@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import TimeSelect from './TimeSelect';
 import { nzWallTimeToISO, isoToNzDateTimeInputs, todayNz } from '../utils/nzTime';
 
 // Optional "book for later" toggle. Reports the combined date+time as an
@@ -16,18 +15,16 @@ import { nzWallTimeToISO, isoToNzDateTimeInputs, todayNz } from '../utils/nzTime
 export default function ScheduleField({ onChange, defaultValue }) {
   const initial = defaultValue ? isoToNzDateTimeInputs(defaultValue) : null;
   const [enabled, setEnabled] = useState(!!initial);
-  const [date, setDate] = useState(initial?.date || '');
-  const [time, setTime] = useState(initial?.time || '');
+  const [dateTime, setDateTime] = useState(initial ? `${initial.date}T${initial.time}` : '');
 
   function toggle(checked) {
     setEnabled(checked);
-    onChange(checked && date && time ? nzWallTimeToISO(date, time) : null);
+    onChange(checked && dateTime ? nzWallTimeToISO(...dateTime.split('T')) : null);
   }
 
-  function update(nextDate, nextTime) {
-    setDate(nextDate);
-    setTime(nextTime);
-    onChange(enabled && nextDate && nextTime ? nzWallTimeToISO(nextDate, nextTime) : null);
+  function update(value) {
+    setDateTime(value);
+    onChange(enabled && value ? nzWallTimeToISO(...value.split('T')) : null);
   }
 
   const today = todayNz();
@@ -46,16 +43,10 @@ export default function ScheduleField({ onChange, defaultValue }) {
         Schedule for later (instead of now)
       </label>
       {enabled && (
-        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
-          <div style={{ minWidth: 0 }}>
-            <label>Date</label>
-            <input type="date" min={today} value={date} required onChange={(e) => update(e.target.value, time)}
-              style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }} />
-          </div>
-          <div style={{ minWidth: 0 }}>
-            <label>Time</label>
-            <TimeSelect value={time} required ariaLabel="Time" onChange={(t) => update(date, t)} />
-          </div>
+        <div style={{ marginTop: 8, minWidth: 0 }}>
+          <label htmlFor="scheduled-pickup-datetime" style={{ display: 'block', marginBottom: 4 }}>Scheduled date &amp; time</label>
+          <input id="scheduled-pickup-datetime" type="datetime-local" min={`${today}T00:00`} value={dateTime} required onChange={(e) => update(e.target.value)}
+            style={{ display: 'block', width: '100%', minWidth: 0, maxWidth: '100%', boxSizing: 'border-box' }} />
         </div>
       )}
     </div>
