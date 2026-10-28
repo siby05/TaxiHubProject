@@ -1,38 +1,39 @@
+import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import ServerWakeBanner from './components/ServerWakeBanner';
 import ProtectedRoute from './components/ProtectedRoute';
 import RouteMeta from './components/RouteMeta';
 import Home from './pages/Home';
-import About from './pages/About';
-import AirportTransfers from './pages/AirportTransfers';
-import NewPlymouthToAuckland from './pages/NewPlymouthToAuckland';
-import TransferRoutes from './pages/TransferRoutes';
-import Login from './pages/Login';
-import ForgotPassword from './pages/ForgotPassword';
-import ResetPassword from './pages/ResetPassword';
-import Register from './pages/Register';
-import DriverSignup from './pages/DriverSignup';
-import Terms from './pages/Terms';
-import PassengerDashboard from './pages/passenger/PassengerDashboard';
-import PassengerProfile from './pages/passenger/PassengerProfile';
-import LodgeComplaint from './pages/passenger/LodgeComplaint';
-import MyComplaints from './pages/passenger/MyComplaints';
-import BookDriver from './pages/passenger/BookDriver';
-import PayBooking from './pages/passenger/PayBooking';
-import DriverDashboard from './pages/driver/DriverDashboard';
-import DriverComplaints from './pages/driver/DriverComplaints';
-import DriverSchedule from './pages/driver/DriverSchedule';
-import DriverQrCode from './pages/driver/DriverQrCode';
-import DriverSettings from './pages/driver/DriverSettings';
-import DriverBookForPassenger from './pages/driver/DriverBookForPassenger';
-import DriverAddPassenger from './pages/driver/DriverAddPassenger';
-import DriverReports from './pages/driver/DriverReports';
-import DriverDocuments from './pages/driver/DriverDocuments';
-import DriverExpenses from './pages/driver/DriverExpenses';
-import AdminDashboard from './pages/admin/AdminDashboard';
-import AdminComplaints from './pages/admin/AdminComplaints';
-import AdminDriverReport from './pages/admin/AdminDriverReport';
+const About = lazy(() => import('./pages/About'));
+const AirportTransfers = lazy(() => import('./pages/AirportTransfers'));
+const NewPlymouthToAuckland = lazy(() => import('./pages/NewPlymouthToAuckland'));
+const TransferRoutes = lazy(() => import('./pages/TransferRoutes'));
+const Login = lazy(() => import('./pages/Login'));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword'));
+const Register = lazy(() => import('./pages/Register'));
+const DriverSignup = lazy(() => import('./pages/DriverSignup'));
+const Terms = lazy(() => import('./pages/Terms'));
+const PassengerDashboard = lazy(() => import('./pages/passenger/PassengerDashboard'));
+const PassengerProfile = lazy(() => import('./pages/passenger/PassengerProfile'));
+const LodgeComplaint = lazy(() => import('./pages/passenger/LodgeComplaint'));
+const MyComplaints = lazy(() => import('./pages/passenger/MyComplaints'));
+const BookDriver = lazy(() => import('./pages/passenger/BookDriver'));
+const PayBooking = lazy(() => import('./pages/passenger/PayBooking'));
+const DriverDashboard = lazy(() => import('./pages/driver/DriverDashboard'));
+const DriverComplaints = lazy(() => import('./pages/driver/DriverComplaints'));
+const DriverSchedule = lazy(() => import('./pages/driver/DriverSchedule'));
+const DriverQrCode = lazy(() => import('./pages/driver/DriverQrCode'));
+const DriverSettings = lazy(() => import('./pages/driver/DriverSettings'));
+const DriverBookForPassenger = lazy(() => import('./pages/driver/DriverBookForPassenger'));
+const DriverAddPassenger = lazy(() => import('./pages/driver/DriverAddPassenger'));
+const DriverReports = lazy(() => import('./pages/driver/DriverReports'));
+const DriverDocuments = lazy(() => import('./pages/driver/DriverDocuments'));
+const DriverExpenses = lazy(() => import('./pages/driver/DriverExpenses'));
+const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
+const AdminComplaints = lazy(() => import('./pages/admin/AdminComplaints'));
+const AdminDriverReport = lazy(() => import('./pages/admin/AdminDriverReport'));
 import { useAuthStore } from './store/authStore';
 
 export default function App() {
@@ -44,6 +45,7 @@ export default function App() {
       <RouteMeta />
       <Navbar />
       <ServerWakeBanner />
+      <Suspense fallback={null}>
       <Routes>
         <Route path="/" element={user ? <Navigate to={home} replace /> : <Home />} />
         <Route path="/about" element={<About />} />
@@ -82,6 +84,7 @@ export default function App() {
 
         <Route path="*" element={<Navigate to={home} replace />} />
       </Routes>
+      </Suspense>
     </>
   );
 }
