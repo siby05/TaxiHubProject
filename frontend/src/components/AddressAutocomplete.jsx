@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import client from '../api/client';
-import MapPinPicker from './MapPinPicker';
 
 // Free-text address search backed by the backend's Nominatim (OpenStreetMap)
 // proxy, restricted to New Zealand - no Google Maps key needed. Calls
@@ -27,7 +26,7 @@ function locateErrorMessage(err) {
   return 'Finding your location took too long - try again, or type the address.';
 }
 
-export default function AddressAutocomplete({ label, placeholder, onSelect, required, allowLocate, compactLocate = false, allowManualPin = false, defaultValue }) {
+export default function AddressAutocomplete({ label, placeholder, onSelect, required, allowLocate, compactLocate = false, defaultValue }) {
   const [query, setQuery] = useState(defaultValue || '');
 
   // defaultValue only seeded the initial state above - a caller that
@@ -45,7 +44,6 @@ export default function AddressAutocomplete({ label, placeholder, onSelect, requ
   const [locateError, setLocateError] = useState('');
   const [searchError, setSearchError] = useState('');
   const [highlight, setHighlight] = useState(-1);
-  const [showManualPin, setShowManualPin] = useState(false);
   const [manualNotice, setManualNotice] = useState('');
   const timer = useRef(null);
   const inflight = useRef(null);
@@ -99,7 +97,7 @@ export default function AddressAutocomplete({ label, placeholder, onSelect, requ
       } catch (err) {
         if (inflight.current !== controller || err.code === 'ERR_CANCELED') return;
         setResults([]);
-        setSearchError(err.response?.data?.error || 'Address search is temporarily unavailable. Try again or choose the location on the map.');
+        setSearchError(err.response?.data?.error || 'Address search is temporarily unavailable. Please try again.');
         setOpen(false);
       }
       inflight.current = null;
@@ -116,7 +114,6 @@ export default function AddressAutocomplete({ label, placeholder, onSelect, requ
     setResults([]);
     setOpen(false);
     setHighlight(-1);
-    setShowManualPin(false);
     setSearchError('');
     setLocateError('');
     setManualNotice(result.manualPin ? 'Location chosen manually. Check the pin and street address before confirming.' : '');
@@ -225,12 +222,6 @@ export default function AddressAutocomplete({ label, placeholder, onSelect, requ
           ))}
         </div>
       )}
-      {allowManualPin && <div className="address-manual-fallback">
-        <button type="button" className="address-map-open" onClick={() => { setShowManualPin(v => !v); setOpen(false); }}>
-          {showManualPin ? 'Close map' : 'Can’t find the address? Set the pin on a map'}
-        </button>
-        {showManualPin && <MapPinPicker address={query} near={lastPicked} onPick={pick} onCancel={() => setShowManualPin(false)} />}
-      </div>}
     </div>
   );
 }
