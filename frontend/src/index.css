@@ -677,3 +677,10 @@ a:focus-visible,.btn:focus-visible{outline:2px solid #d4a315;outline-offset:3px}
   .driver-report-filters { grid-template-columns: minmax(0, 1fr); }
   .driver-report-filters .report-filter-passenger { grid-column: auto; }
 }
+
+/* Keep admin report date and driver filters usable on small screens. */
+.admin-trip-date-filters{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px}
+.admin-trip-date-filters>div{flex:1 1 190px;min-width:0}
+.admin-trip-date-filters>div label{display:block;margin-bottom:4px}
+.admin-trip-date-filters input,.admin-trip-date-filters select{width:100%;min-width:0}
+@media(max-width:480px){.admin-trip-date-filters>div{flex-basis:100%}}
