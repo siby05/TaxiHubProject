@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { Routes, Route, Navigate, useParams } from 'react-router-dom';
+import { Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import ServerWakeBanner from './components/ServerWakeBanner';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -44,6 +44,8 @@ function QrHomeRedirect() {
 
 export default function App() {
   const { user } = useAuthStore();
+  const location = useLocation();
+  const isQrHome = new URLSearchParams(location.search).has('qrDriver');
   const home = user ? (user.role === 'admin' ? '/admin' : user.role === 'driver' ? '/driver' : '/passenger') : '/login';
 
   return (
@@ -53,7 +55,7 @@ export default function App() {
       <ServerWakeBanner />
       <Suspense fallback={null}>
       <Routes>
-        <Route path="/" element={user ? <Navigate to={home} replace /> : <Home />} />
+        <Route path="/" element={user && !isQrHome ? <Navigate to={home} replace /> : <Home />} />
         <Route path="/about" element={<About />} />
         <Route path="/airport-transfers" element={<AirportTransfers />} />
         <Route path="/new-plymouth-to-auckland" element={<NewPlymouthToAuckland />} />
