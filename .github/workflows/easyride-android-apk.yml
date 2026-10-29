@@ -3,6 +3,8 @@ on:
   push:
     branches: [feature/easyride-android-apk]
     paths: ['android-app/**', '.github/workflows/easyride-android-apk.yml']
+  pull_request:
+    paths: ['android-app/**', '.github/workflows/easyride-android-apk.yml']
   workflow_dispatch:
 jobs:
   apk:
