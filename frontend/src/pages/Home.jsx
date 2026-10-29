@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import AddressAutocomplete from '../components/AddressAutocomplete';
 import { nzWallTimeToISO, todayNz } from '../utils/nzTime';
 import client from '../api/client';
@@ -30,6 +30,8 @@ const SERVICES=[
 ];
 function BookingPanel(){
   const navigate=useNavigate();
+  const [params]=useSearchParams();
+  const qrDriver=params.get('qrDriver');
   const [mode,setMode]=useState('ride');
   const [pickup,setPickup]=useState(null),[drop,setDrop]=useState(null);
   const [pickupDate,setPickupDate]=useState(''),[pickupTime,setPickupTime]=useState('');
@@ -49,8 +51,11 @@ function BookingPanel(){
     catch(err){setError(err.response?.data?.error||'Unable to calculate a fare. Please try again.');}
     finally{setLoading(false);}
   }
-  function continueBooking(){sessionStorage.setItem('easyride-home-quote',JSON.stringify({pickup,drop,scheduledFor}));navigate('/register');}
+  function continueBooking(){sessionStorage.setItem('easyride-home-quote',JSON.stringify({pickup,drop,scheduledFor}));navigate(qrDriver ? `/book-direct/${encodeURIComponent(qrDriver)}` : '/register');}
   return <form className="er-booking" id="book-ride" onSubmit={getQuote}>
+    {qrDriver && <div role="status" style={{ padding: "10px 14px", borderRadius: 8, background: "#fff7df", color: "#24354a", marginBottom: 10 }}>
+      You scanned a driver QR code. <Link to={`/book-direct/${encodeURIComponent(qrDriver)}`}>Book this driver directly</Link> or check your fare below.
+    </div>}
     <div className="er-tabs" role="tablist" aria-label="Booking type">
       <button type="button" role="tab" aria-selected={mode==='ride'} className={mode==='ride'?'active':''} onClick={()=>setMode('ride')}><Icon.car/><span><strong>Book a Ride</strong><small>Local &amp; Private</small></span></button>
       <button type="button" role="tab" aria-selected={mode==='airport'} className={mode==='airport'?'active':''} onClick={()=>setMode('airport')}><Icon.plane/><span><strong>Airport Transfer</strong><small>To / From Airport</small></span></button>
