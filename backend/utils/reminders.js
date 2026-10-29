@@ -3,7 +3,7 @@ const User = require('../models/User');
 const Driver = require('../models/Driver');
 const { emailService } = require('../services/emailService');
 const { notifyUser } = require('./notify');
-const { formatNzDateTime } = require('./nzTime');
+const { formatNzDateTime, nzDateKey } = require('./nzTime');
 
 const HOUR = 60 * 60 * 1000;
 
@@ -12,7 +12,7 @@ const HOUR = 60 * 60 * 1000;
 // the "leave now / plan your run" nudge, which the passenger doesn't need
 // on top of their 24h and 1h ones.
 const REMINDERS = [
-  { flag: 'reminderDayEmailSent', within: 24 * HOUR, label: 'tomorrow', to: ['passenger', 'driver'] },
+  { flag: 'reminderDayEmailSent', within: 24 * HOUR, label: 'within 24 hours', to: ['passenger', 'driver'] },
   { flag: 'reminderTwoHourDriverEmailSent', within: 2 * HOUR, label: 'in about 2 hours', to: ['driver'] },
   { flag: 'reminderHourEmailSent', within: HOUR, label: 'in about 1 hour', to: ['passenger', 'driver'] },
 ];
@@ -36,6 +36,9 @@ async function checkReminders() {
     if (msUntil <= 0) continue;
 
     const due = REMINDERS.filter((r) => msUntil <= r.within && !booking[r.flag]);
+    // The 24-hour window can include a pickup later TODAY in New Zealand.
+    // Derive calendar wording from Pacific/Auckland, not the server's UTC day.
+    const nzDayLabel = nzDateKey(booking.scheduledFor) === nzDateKey(now) ? 'today' : 'tomorrow';
     if (!due.length) continue;
 
     const [passenger, driver] = await Promise.all([
@@ -52,10 +55,11 @@ async function checkReminders() {
         const recipient = byRole[role];
         if (!recipient || sentTo.has(role)) continue;
         sentTo.add(role);
-        await emailService.sendTripReminder(recipient.email, booking, r.label);
+        const label = r.flag === 'reminderDayEmailSent' ? nzDayLabel : r.label;
+        await emailService.sendTripReminder(recipient.email, booking, label);
         notifyUser(recipient._id, {
           type: 'trip-reminder',
-          title: `Trip reminder - ${r.label}`,
+          title: `Trip reminder - ${label}`,
           message: `${booking.pickupAddress} → ${booking.dropAddress} at ${formatNzDateTime(booking.scheduledFor)}`,
           link: role === 'passenger' ? '/passenger' : '/driver',
         });
