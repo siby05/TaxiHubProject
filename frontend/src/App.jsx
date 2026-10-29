@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import ServerWakeBanner from './components/ServerWakeBanner';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -36,8 +36,16 @@ const AdminComplaints = lazy(() => import('./pages/admin/AdminComplaints'));
 const AdminDriverReport = lazy(() => import('./pages/admin/AdminDriverReport'));
 import { useAuthStore } from './store/authStore';
 
+// Keep existing printed QR URLs valid while opening the homepage first.
+function QrHomeRedirect() {
+  const { driverId } = useParams();
+  return <Navigate to={`/?qrDriver=${encodeURIComponent(driverId)}`} replace />;
+}
+
 export default function App() {
   const { user } = useAuthStore();
+  const location = useLocation();
+  const isQrHome = new URLSearchParams(location.search).has('qrDriver');
   const home = user ? (user.role === 'admin' ? '/admin' : user.role === 'driver' ? '/driver' : '/passenger') : '/login';
 
   return (
@@ -47,7 +55,7 @@ export default function App() {
       <ServerWakeBanner />
       <Suspense fallback={null}>
       <Routes>
-        <Route path="/" element={user ? <Navigate to={home} replace /> : <Home />} />
+        <Route path="/" element={user && !isQrHome ? <Navigate to={home} replace /> : <Home />} />
         <Route path="/about" element={<About />} />
         <Route path="/airport-transfers" element={<AirportTransfers />} />
         <Route path="/new-plymouth-to-auckland" element={<NewPlymouthToAuckland />} />
@@ -64,7 +72,8 @@ export default function App() {
         <Route path="/passenger/profile" element={<ProtectedRoute roles={['passenger']}><PassengerProfile /></ProtectedRoute>} />
         <Route path="/passenger/complaints" element={<ProtectedRoute roles={['passenger']}><MyComplaints /></ProtectedRoute>} />
         <Route path="/passenger/complaints/new" element={<ProtectedRoute roles={['passenger']}><LodgeComplaint /></ProtectedRoute>} />
-        <Route path="/book/:driverId" element={<BookDriver />} />
+        <Route path="/book/:driverId" element={<QrHomeRedirect />} />
+        <Route path="/book-direct/:driverId" element={<BookDriver />} />
         <Route path="/pay/:bookingId" element={<ProtectedRoute roles={['passenger']}><PayBooking /></ProtectedRoute>} />
 
         <Route path="/driver" element={<ProtectedRoute roles={['driver']}><DriverDashboard /></ProtectedRoute>} />
