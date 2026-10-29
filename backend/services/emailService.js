@@ -628,14 +628,14 @@ You'll get another email as soon as a driver accepts. Track it here: ${appUrl('/
 
   // The driver changed a trip before it started (routes/booking.js
   // PUT /:id/driver-edit) - new route/time/fare for the passenger.
-  sendTripChangedByDriver: (to, booking, oldFare) =>
+  sendTripChangedByDriver: (to, booking) =>
     send(to, `Your trip ${booking.bookingId} has been updated by your driver`,
       `Your driver has updated your trip:\n` +
       `Pickup: ${booking.pickupAddress}\n` +
       `${(booking.stops || []).map((s, i) => `Stop ${i + 1}: ${s.address}\n`).join('')}` +
       `Drop-off: ${booking.dropAddress}\n` +
       `When: ${booking.scheduledFor ? formatNzDateTime(booking.scheduledFor) : 'Now'}\n` +
-      `Estimated fare: $${Number(booking.estimatedFare).toFixed(2)}${oldFare != null && oldFare !== booking.estimatedFare ? ` (was $${Number(oldFare).toFixed(2)})` : ''}\n` +
+      `Estimated fare: $${Number(booking.estimatedFare).toFixed(2)}\n` +
       `Payment: ${booking.paymentMethod === 'card' ? `pay online by card${booking.cardSurchargeAmount ? ` (+ $${Number(booking.cardSurchargeAmount).toFixed(2)} card fee)` : ''}` : 'cash to the driver'}\n` +
       `If anything looks wrong, contact your driver or reply in the app: ${appUrl('/passenger')}`),
 

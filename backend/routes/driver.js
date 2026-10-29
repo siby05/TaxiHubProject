@@ -311,6 +311,42 @@ router.get('/passengers/search', auth, roleMiddleware(['driver']), async (req, r
   res.json(matches);
 });
 
+// Recent routes for a passenger, visible only to the driver who served them.
+// A selected existing passenger can reuse pickup/drop coordinates without geocoding.
+router.get('/passengers/:passengerId/recent-routes', auth, roleMiddleware(['driver']), async (req, res) => {
+  try {
+    const driver = await Driver.findOne({ userId: req.user.id });
+    if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
+    const passenger = await User.findById(req.params.passengerId);
+    if (!passenger || passenger.role !== 'passenger') return res.status(404).json({ error: 'Passenger not found' });
+    const bookings = await Booking.find({ passengerId: passenger._id, driverId: driver._id });
+    const sorted = bookings
+      .filter(b => !['cancelled', 'expired'].includes(b.status))
+      .filter(b => b.pickupAddress && b.dropAddress &&
+        [b.pickupLat, b.pickupLng, b.dropLat, b.dropLng].every(v => v != null && Number.isFinite(Number(v))))
+      .sort((a, b) => new Date(b.completedAt || b.requestedAt || 0) - new Date(a.completedAt || a.requestedAt || 0));
+    const seen = new Set();
+    const routes = [];
+    for (const b of sorted) {
+      const stops = Array.isArray(b.stops) ? b.stops : [];
+      if (stops.some(s => !s.address || !Number.isFinite(Number(s.lat)) || !Number.isFinite(Number(s.lng)))) continue;
+      const key = JSON.stringify([b.pickupAddress, b.dropAddress, stops.map(s => s.address)].map(x => typeof x === 'string' ? x.toLowerCase().trim() : x));
+      if (seen.has(key)) continue;
+      seen.add(key);
+      routes.push({
+        pickup: { label: b.pickupAddress, lat: Number(b.pickupLat), lng: Number(b.pickupLng) },
+        drop: { label: b.dropAddress, lat: Number(b.dropLat), lng: Number(b.dropLng) },
+        stops: stops.map(s => ({ label: s.address, lat: Number(s.lat), lng: Number(s.lng) })),
+      });
+      if (routes.length === 5) break;
+    }
+    res.json(routes);
+  } catch (err) {
+    console.error('[driver] recent passenger routes failed:', err);
+    res.status(500).json({ error: 'Could not load previous routes' });
+  }
+});
+
 // POST /api/driver/passengers - driver registers a passenger ahead of
 // time (e.g. a regular who books by phone), same as the admin's POST
 // /api/admin/passengers: name + mobile required, email and address

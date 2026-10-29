@@ -18,6 +18,10 @@ export default function DriverBookForPassenger() {
   const [query, setQuery] = useState(preselected?.name || '');
   const [matches, setMatches] = useState([]);
   const [selected, setSelected] = useState(preselected);
+  const [recentRoutes, setRecentRoutes] = useState([]);
+  const [routesLoading, setRoutesLoading] = useState(false);
+  const [routeError, setRouteError] = useState('');
+  const [routeSelectionVersion, setRouteSelectionVersion] = useState(0);
   const [newPassenger, setNewPassenger] = useState({ name: '', mobile: '', email: '', address: '' });
   const timer = useRef(null);
 
@@ -45,6 +49,31 @@ export default function DriverBookForPassenger() {
       const { data } = await client.get('/driver/passengers/search', { params: { q: value } });
       setMatches(data);
     }, 350);
+  }
+
+  useEffect(() => {
+    if (mode !== 'search' || !selected?._id) {
+      setRecentRoutes([]);
+      setRouteError('');
+      return;
+    }
+    let active = true;
+    setRecentRoutes([]);
+    setRoutesLoading(true);
+    setRouteError('');
+    client.get('/driver/passengers/' + encodeURIComponent(selected._id) + '/recent-routes')
+      .then(({ data }) => { if (active) setRecentRoutes(data); })
+      .catch(() => { if (active) setRouteError('Previous trips are unavailable. Enter addresses normally.'); })
+      .finally(() => { if (active) setRoutesLoading(false); });
+    return () => { active = false; };
+  }, [mode, selected?._id]);
+
+  function reuseRoute(route) {
+    setPickup(route.pickup);
+    setDrop(route.drop);
+    setStops(route.stops.map((selection, i) => ({ id: 'repeat-' + Date.now() + '-' + i, selection })));
+    setRouteSelectionVersion(v => v + 1);
+    setQuote(null);
   }
 
   useEffect(() => {
@@ -155,20 +184,42 @@ export default function DriverBookForPassenger() {
           </div>
         )}
 
+        {mode === 'search' && selected && (
+          <div style={{ marginTop: 12 }}>
+            {routesLoading && <p className="muted">Loading previous trips...</p>}
+            {routeError && <p className="muted" role="status">{routeError}</p>}
+            {recentRoutes.length > 0 && (
+              <div>
+                <label>Repeat a previous trip</label>
+                <p className="muted" style={{ fontSize: '0.83rem', marginTop: 2 }}>Tap a route to fill pickup and drop-off. You can edit either address before booking.</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {recentRoutes.map((route, i) => (
+                    <button key={i} type="button" className="btn secondary"
+                      style={{ textAlign: 'left', whiteSpace: 'normal', height: 'auto' }}
+                      onClick={() => reuseRoute(route)}>
+                      {route.pickup.label} → {route.drop.label}{route.stops.length ? ' (via ' + route.stops.length + ' stop(s))' : ''}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
-          <AddressAutocomplete label="Pickup address" onSelect={setPickup} required allowLocate />
+          <AddressAutocomplete key={"pickup-" + routeSelectionVersion} label="Pickup address" defaultValue={pickup?.label || ""} onSelect={setPickup} required allowLocate />
 
           {stops.map((stop, i) => (
             <div key={stop.id} style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
               <div style={{ flex: 1 }}>
-                <AddressAutocomplete label={`Stop ${i + 1}`} onSelect={(sel) => stopHandlers.update(stop.id, sel)} required />
+                <AddressAutocomplete key={stop.id + "-" + routeSelectionVersion} label={`Stop ${i + 1}`} defaultValue={stop.selection?.label || ""} onSelect={(sel) => stopHandlers.update(stop.id, sel)} required />
               </div>
               <button type="button" className="btn danger" style={{ marginBottom: 1 }} onClick={() => stopHandlers.remove(stop.id)}>Remove</button>
             </div>
           ))}
           <button type="button" className="btn secondary" style={{ alignSelf: 'flex-start' }} onClick={stopHandlers.add}>+ Add stop</button>
 
-          <AddressAutocomplete label="Drop address" onSelect={setDrop} required />
+          <AddressAutocomplete key={"drop-" + routeSelectionVersion} label="Drop address" defaultValue={drop?.label || ""} onSelect={setDrop} required />
           {(!pickup || !drop) && <p className="muted">Enter pickup and drop addresses and choose a suggestion from the list to calculate the fare.</p>}
           {(pickup?.manualPin || drop?.manualPin || stops.some((s) => s.selection?.manualPin)) &&
             <p className="muted" role="status" style={{ background: '#fff8e4', border: '1px solid #f0c65f', borderRadius: 9, padding: 11 }}>
