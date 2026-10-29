@@ -311,7 +311,7 @@ export default function PassengerDashboard() {
                   onClick={() => reuseTrip(b)}>{b.pickupAddress} → {b.dropAddress}</button>
               ))}
             </div>
-          )
+          )}
           <div key={formKey} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <AddressAutocomplete key={"pickup-" + routeKey} label="Pickup address" defaultValue={pickup?.label} onSelect={setPickup} required allowLocate />
 
