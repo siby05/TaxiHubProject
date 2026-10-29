@@ -39,6 +39,7 @@ export default function PassengerDashboard() {
   const [vehicleTypes, setVehicleTypes] = useState([]);
   const [vehicleType, setVehicleType] = useState('');
   const [vehicleSelectionEnabled, setVehicleSelectionEnabled] = useState(true);
+  const [routeKey, setRouteKey] = useState(0);
   const [formKey, setFormKey] = useState(0); // bump to reset the autocomplete inputs after booking
   const [payingId, setPayingId] = useState(null);
   const [payError, setPayError] = useState('');
@@ -66,6 +67,27 @@ export default function PassengerDashboard() {
 
   const stopHandlers = makeStopHandlers(setStops);
   const editStopHandlers = makeStopHandlers(setEditStops);
+
+  const seenRoutes = new Set();
+  const recentRoutes = [...bookings].filter((b) => b.status === 'completed' &&
+    b.pickupAddress && b.dropAddress &&
+    [b.pickupLat, b.pickupLng, b.dropLat, b.dropLng].every((v) => v != null && Number.isFinite(Number(v))) &&
+    (b.stops || []).every((v) => v.address && v.lat != null && v.lng != null))
+    .sort((a, b) => new Date(b.completedAt || b.requestedAt || 0) - new Date(a.completedAt || a.requestedAt || 0))
+    .filter((b) => {
+      const key = JSON.stringify([b.pickupAddress, b.dropAddress, (b.stops || []).map((v) => v.address)].map((v) => typeof v === 'string' ? v.trim().toLowerCase() : v));
+      if (seenRoutes.has(key)) return false;
+      seenRoutes.add(key);
+      return true;
+    }).slice(0, 5);
+
+  function reuseTrip(b) {
+    setPickup({ label: b.pickupAddress, lat: b.pickupLat, lng: b.pickupLng });
+    setDrop({ label: b.dropAddress, lat: b.dropLat, lng: b.dropLng });
+    setStops((b.stops || []).map((v) => ({ id: newStopId(), selection: { label: v.address, lat: v.lat, lng: v.lng } })));
+    setRouteKey((n) => n + 1);
+    setQuote(null);
+  }
 
   function refresh() {
     fetchMine();
@@ -279,20 +301,31 @@ export default function PassengerDashboard() {
       <div className="grid cols-2">
         <div className="card">
           <h3>Book a ride</h3>
+          {recentRoutes.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <label>Previous trips</label>
+              <p className="muted">Choose a previous route to fill the addresses. You can still edit them.</p>
+              {recentRoutes.map((b) => (
+                <button key={b._id} type="button" className="btn secondary"
+                  style={{ display: 'block', width: '100%', textAlign: 'left', whiteSpace: 'normal', height: 'auto', marginBottom: 6 }}
+                  onClick={() => reuseTrip(b)}>{b.pickupAddress} → {b.dropAddress}</button>
+              ))}
+            </div>
+          )
           <div key={formKey} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <AddressAutocomplete label="Pickup address" defaultValue={pickup?.label} onSelect={setPickup} required allowLocate />
+            <AddressAutocomplete key={"pickup-" + routeKey} label="Pickup address" defaultValue={pickup?.label} onSelect={setPickup} required allowLocate />
 
             {stops.map((stop, i) => (
               <div key={stop.id} style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
                 <div style={{ flex: 1 }}>
-                  <AddressAutocomplete label={`Stop ${i + 1}`} onSelect={(sel) => stopHandlers.update(stop.id, sel)} required />
+                  <AddressAutocomplete label={`Stop ${i + 1}`} defaultValue={stop.selection?.label} onSelect={(sel) => stopHandlers.update(stop.id, sel)} required />
                 </div>
                 <button type="button" className="btn danger" style={{ marginBottom: 1 }} onClick={() => stopHandlers.remove(stop.id)}>Remove</button>
               </div>
             ))}
             <button type="button" className="btn secondary" style={{ alignSelf: 'flex-start' }} onClick={stopHandlers.add}>+ Add stop</button>
 
-            <AddressAutocomplete label="Drop address" defaultValue={drop?.label} onSelect={setDrop} required />
+            <AddressAutocomplete key={"drop-" + routeKey} label="Drop address" defaultValue={drop?.label} onSelect={setDrop} required />
             <ScheduleField onChange={setScheduledFor} defaultValue={scheduledFor} />
 
             {vehicleSelectionEnabled && vehicleTypes.length > 0 && !preferredDriverId && (
