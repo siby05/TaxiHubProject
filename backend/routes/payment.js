@@ -228,4 +228,71 @@ router.post('/confirm', auth, roleMiddleware(['passenger']), async (req, res) =>
   }
 });
 
+
+// Optional driver tips are charged separately from the trip fare so they can
+// be given either before or after completion, including on cash bookings.
+// A tip is never treated as a paid fare or as platform commission.
+const TIP_AMOUNTS = [200, 500, 1000]; // NZ cents
+async function tipBooking(req, res) {
+  const booking = await Booking.findById(req.body.bookingId);
+  if (!booking) { res.status(404).json({ error: 'Booking not found' }); return null; }
+  if (String(booking.passengerId) !== String(req.user.id)) { res.status(403).json({ error: 'Not your booking' }); return null; }
+  if (!['accepted', 'in-progress', 'completed'].includes(booking.status) || !booking.driverId) {
+    res.status(400).json({ error: 'Tips are available after a driver accepts the trip' }); return null;
+  }
+  return booking;
+}
+
+// Create a new, independent Stripe PaymentIntent for a voluntary tip.
+router.post('/tip/start', auth, roleMiddleware(['passenger']), async (req, res) => {
+  try {
+    if (!stripe) return res.status(503).json({ error: 'Online tips are unavailable until Stripe is configured' });
+    const booking = await tipBooking(req, res);
+    if (!booking) return;
+    const amount = Number(req.body.amount);
+    if (!Number.isSafeInteger(amount) || !TIP_AMOUNTS.includes(amount)) {
+      return res.status(400).json({ error: 'Choose a supported tip amount' });
+    }
+    const driver = await Driver.findById(booking.driverId);
+    if (!driver?.stripeAccountId || !driver.stripeChargesEnabled) {
+      return res.status(400).json({ error: 'Driver is not ready to receive online tips' });
+    }
+    const intent = await stripe.paymentIntents.create({
+      amount, currency: CURRENCY,
+      automatic_payment_methods: { enabled: true },
+      transfer_data: { destination: driver.stripeAccountId },
+      metadata: { kind: 'driver_tip', bookingId: String(booking._id), passengerId: String(req.user.id), driverId: String(driver._id) },
+    }, { idempotencyKey: req.headers['idempotency-key'] || undefined });
+    return res.json({ clientSecret: intent.client_secret, paymentIntentId: intent.id, amount, currency: CURRENCY });
+  } catch (err) { serverError(res, err, req); }
+});
+
+// Reconcile a Stripe-confirmed tip; never trust a success response from the
+// browser. Repeated calls do not double-count the same PaymentIntent.
+router.post('/tip/confirm', auth, roleMiddleware(['passenger']), async (req, res) => {
+  try {
+    if (!stripe) return res.status(503).json({ error: 'Online tips are unavailable' });
+    const booking = await tipBooking(req, res);
+    if (!booking) return;
+    const id = req.body.paymentIntentId;
+    if (typeof id !== 'string' || !/^pi_[a-zA-Z0-9]+$/.test(id)) return res.status(400).json({ error: 'Invalid payment reference' });
+    const intent = await stripe.paymentIntents.retrieve(id);
+    if (intent.status !== 'succeeded' || intent.currency !== CURRENCY ||
+        intent.metadata?.kind !== 'driver_tip' ||
+        intent.metadata?.bookingId !== String(booking._id) ||
+        intent.metadata?.passengerId !== String(req.user.id) ||
+        intent.metadata?.driverId !== String(booking.driverId) ||
+        !TIP_AMOUNTS.includes(intent.amount_received)) {
+      return res.status(402).json({ error: 'Tip payment has not been verified' });
+    }
+    // Atomic conditional update: even simultaneous confirmations count once.
+    await Booking.updateOne(
+      { _id: booking._id, 'tipPayments.intentId': { $ne: id } },
+      { $push: { tipPayments: { intentId: id, amount: intent.amount_received / 100, paidAt: new Date() } } },
+    );
+    const updated = await Booking.findById(booking._id);
+    return res.json({ paid: true, totalTips: (updated.tipPayments || []).reduce((sum, tip) => sum + tip.amount, 0) });
+  } catch (err) { serverError(res, err, req); }
+});
+
 module.exports = router;
