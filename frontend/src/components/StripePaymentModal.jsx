@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { loadStripe } from '@stripe/stripe-js';
-import { Elements, PaymentElement, ExpressCheckoutElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import client from '../api/client';
 import Modal from './Modal';
 
@@ -80,11 +80,10 @@ function PayForm({ bookingId, onSuccess, onClose, tipOnly = false }) {
       </fieldset>}
       <div style={{ display: card ? 'none' : 'block' }}>
         <div style={{ marginBottom: 16 }}>
-          <ExpressCheckoutElement
-            onConfirm={() => reviewCard()}
-            onCancel={() => setError('')}
-            options={{ buttonHeight: 48, paymentMethods: { applePay: 'auto', googlePay: 'auto', link: 'never' } }}
-          />
+          {/* Wallet checkout is disabled until the server-calculated tip-inclusive
+              total can be shown in the native sheet before authorization.
+              Card checkout below still displays and charges the verified total. */}
+          <p className="muted">Apple Pay and Google Pay are temporarily unavailable while we improve payment amount verification. Please use a card below.</p>
         </div>
         <PaymentElement options={{ wallets: { applePay: 'never', googlePay: 'never' } }} />
       </div>

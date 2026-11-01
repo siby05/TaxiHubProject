@@ -117,6 +117,10 @@ router.post('/start', auth, roleMiddleware(['passenger']), async (req, res) => {
       return res.json({ mock: false, amount: toCents(fareOf(booking)), currency: CURRENCY });
     }
 
+    // Never record fictional payments in a live environment.
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(503).json({ error: 'Online payments are temporarily unavailable. Please contact support or choose cash.' });
+    }
     const mockId = `mock_pi_${Date.now()}`;
     await Booking.findByIdAndUpdate(booking._id, { paymentIntentId: mockId, paymentStatus: 'paid' });
     emailPaidReceipt(booking._id);
