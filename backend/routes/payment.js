@@ -237,4 +237,95 @@ router.post('/confirm', auth, roleMiddleware(['passenger']), async (req, res) =>
   }
 });
 
+ // Separate voluntary tips are allowed once the original fare is paid,
+ // including after trip completion and for cash-paid rides.
+async function loadTipBooking(req, res) {
+  const booking = await Booking.findById(req.body.bookingId);
+  if (!booking) { res.status(404).json({ error: 'Booking not found' }); return null; }
+  if (String(booking.passengerId) !== String(req.user.id)) { res.status(403).json({ error: 'Not your booking' }); return null; }
+  if (booking.status === 'cancelled' || booking.status === 'pending' || !booking.driverId) {
+    res.status(400).json({ error: 'A confirmed driver is required to tip' }); return null;
+  }
+  if (booking.paymentStatus !== 'paid') { res.status(400).json({ error: 'Pay your fare first to add a separate tip' }); return null; }
+  if (booking.tipPaymentIntentId) {
+    const previous = await stripe.paymentIntents.retrieve(booking.tipPaymentIntentId);
+    if (previous.status === 'succeeded' || previous.status === 'processing') {
+      res.status(409).json({ error: 'A separate tip is already paid or processing for this ride' }); return null;
+    }
+  }
+  return booking;
+}
+
+router.post('/tip/start', auth, roleMiddleware(['passenger']), async (req, res) => {
+  try {
+    if (!stripe) return res.status(400).json({ error: 'Online tips are not configured' });
+    const booking = await loadTipBooking(req, res);
+    if (!booking) return;
+    res.json({ amount: 500, currency: CURRENCY });
+  } catch (err) { serverError(res, err, req); }
+});
+
+router.post('/tip/fee', auth, roleMiddleware(['passenger']), async (req, res) => {
+  try {
+    if (!stripe) return res.status(400).json({ error: 'Online tips are not configured' });
+    const booking = await loadTipBooking(req, res);
+    if (!booking) return;
+    const tip = tipCents(req.body.tipAmount) / 100;
+    if (!tip) return res.status(400).json({ error: 'Select a tip above $0' });
+    const pm = await stripe.paymentMethods.retrieve(req.body.paymentMethodId);
+    if (pm.type !== 'card') return res.status(400).json({ error: 'Only card payments are supported' });
+    const cardSurchargeAmount = calculateCardSurcharge(tip, pm.card.country);
+    res.json({ fare: 0, tip, cardSurchargeAmount, total: Math.round((tip + cardSurchargeAmount) * 100) / 100, cardRegion: cardRegion(pm.card.country), brand: pm.card.brand, last4: pm.card.last4 });
+  } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
+});
+
+router.post('/tip/pay', auth, roleMiddleware(['passenger']), async (req, res) => {
+  try {
+    if (!stripe) return res.status(400).json({ error: 'Online tips are not configured' });
+    const booking = await loadTipBooking(req, res);
+    if (!booking) return;
+    const tip = tipCents(req.body.tipAmount) / 100;
+    if (!tip) return res.status(400).json({ error: 'Select a tip above $0' });
+    const pm = await stripe.paymentMethods.retrieve(req.body.paymentMethodId);
+    if (pm.type !== 'card') return res.status(400).json({ error: 'Only card payments are supported' });
+    const cardSurchargeAmount = calculateCardSurcharge(tip, pm.card.country);
+    const driver = await Driver.findById(booking.driverId);
+    if (!driver?.stripeAccountId || !driver.stripeChargesEnabled) return res.status(400).json({ error: 'Driver cannot receive online tips yet' });
+    const opts = {
+      amount: toCents(tip + cardSurchargeAmount), currency: CURRENCY,
+      payment_method: req.body.paymentMethodId, payment_method_types: ['card'],
+      confirm: true, use_stripe_sdk: true,
+      application_fee_amount: toCents(cardSurchargeAmount),
+      transfer_data: { destination: driver.stripeAccountId },
+      metadata: { bookingId: String(booking._id), type: 'driver_tip', tipAmount: String(tip) },
+    };
+    // Cancel an abandoned 3DS attempt before allowing a new one.
+    if (booking.tipPaymentIntentId) {
+      const previous = await stripe.paymentIntents.retrieve(booking.tipPaymentIntentId);
+      if (previous.status !== 'canceled') await stripe.paymentIntents.cancel(previous.id);
+    }
+    const intent = await stripe.paymentIntents.create(opts, { idempotencyKey: `easyride-tip-${booking._id}-${req.body.paymentMethodId}-${toCents(tip)}` });
+    await Booking.findByIdAndUpdate(booking._id, { tipPaymentIntentId: intent.id, tipSeparateAmount: tip, tipSeparateSurchargeAmount: cardSurchargeAmount });
+    if (intent.status === 'succeeded') await Booking.findByIdAndUpdate(booking._id, { tipSeparatePaid: true });
+    res.json({ status: intent.status, clientSecret: intent.client_secret });
+  } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
+});
+
+router.post('/tip/confirm', auth, roleMiddleware(['passenger']), async (req, res) => {
+  try {
+    if (!stripe) return res.status(400).json({ error: 'Online tips are not configured' });
+    const booking = await Booking.findById(req.body.bookingId);
+    if (!booking) return res.status(404).json({ error: 'Booking not found' });
+    if (String(booking.passengerId) !== String(req.user.id)) return res.status(403).json({ error: 'Not your booking' });
+    if (!booking.tipPaymentIntentId) return res.status(400).json({ error: 'No tip payment started' });
+    const intent = await stripe.paymentIntents.retrieve(booking.tipPaymentIntentId);
+    const expected = toCents((booking.tipSeparateAmount || 0) + (booking.tipSeparateSurchargeAmount || 0));
+    if (intent.status !== 'succeeded' || intent.amount_received < expected || intent.metadata?.bookingId !== String(booking._id) || intent.metadata?.type !== 'driver_tip') {
+      return res.status(402).json({ error: 'Tip payment has not completed' });
+    }
+    await Booking.findByIdAndUpdate(booking._id, { tipSeparatePaid: true });
+    res.json({ status: 'succeeded' });
+  } catch (err) { serverError(res, err, req); }
+});
+
 module.exports = router;
