@@ -20,6 +20,13 @@ if (process.env.STRIPE_SECRET_KEY) {
 const CURRENCY = 'nzd';
 const toCents = (dollars) => Math.round(dollars * 100);
 const fareOf = (booking) => booking.actualFare || booking.estimatedFare;
+const tipCents = (value) => {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount < 0 || amount > 200 || Math.round(amount * 100) !== amount * 100) {
+    throw Object.assign(new Error('Tip must be between $0 and $200, in whole cents'), { status: 400 });
+  }
+  return Math.round(amount * 100);
+};
 
 // Receipts are issued only after payment has been recorded and the trip is complete.
 function emailPaidReceipt(bookingId) {
@@ -54,16 +61,18 @@ async function loadPayableBooking(req, res) {
 // The card surcharge is Stripe's own fee for *this* card (see
 // utils/stripeFees.js), so it's worked out from the PaymentMethod the
 // passenger just entered - never from anything the client sends.
-async function feeForCard(booking, paymentMethodId) {
+async function feeForCard(booking, paymentMethodId, tipAmount = 0) {
   if (!paymentMethodId) throw Object.assign(new Error('paymentMethodId is required'), { status: 400 });
   const pm = await stripe.paymentMethods.retrieve(paymentMethodId);
   if (pm.type !== 'card') throw Object.assign(new Error('Only card payments are supported'), { status: 400 });
   const fare = fareOf(booking);
-  const cardSurchargeAmount = calculateCardSurcharge(fare, pm.card.country);
+  const tip = tipCents(tipAmount) / 100;
+  const cardSurchargeAmount = calculateCardSurcharge(fare + tip, pm.card.country);
   return {
     fare,
+    tip,
     cardSurchargeAmount,
-    total: Math.round((fare + cardSurchargeAmount) * 100) / 100,
+    total: Math.round((fare + tip + cardSurchargeAmount) * 100) / 100,
     cardRegion: cardRegion(pm.card.country),
     brand: pm.card.brand,
     last4: pm.card.last4,
@@ -119,7 +128,7 @@ router.post('/card-fee', auth, roleMiddleware(['passenger']), async (req, res) =
     if (!stripe) return res.status(400).json({ error: 'Online payments are not configured' });
     const booking = await loadPayableBooking(req, res);
     if (!booking) return;
-    res.json(await feeForCard(booking, req.body.paymentMethodId));
+    res.json(await feeForCard(booking, req.body.paymentMethodId, req.body.tipAmount ?? 0));
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
   }
@@ -153,8 +162,8 @@ router.post('/pay', auth, roleMiddleware(['passenger']), async (req, res) => {
       if (previous.status !== 'canceled') await stripe.paymentIntents.cancel(previous.id).catch(() => {});
     }
 
-    const { fare, cardSurchargeAmount, total } = await feeForCard(booking, req.body.paymentMethodId);
-    await Booking.findByIdAndUpdate(booking._id, { cardSurchargeAmount });
+    const { fare, tip, cardSurchargeAmount, total } = await feeForCard(booking, req.body.paymentMethodId, req.body.tipAmount ?? 0);
+    await Booking.findByIdAndUpdate(booking._id, { cardSurchargeAmount, tipAmount: tip });
 
     const intentOptions = {
       amount: toCents(total),
@@ -163,14 +172,14 @@ router.post('/pay', auth, roleMiddleware(['passenger']), async (req, res) => {
       payment_method_types: ['card'],
       confirm: true,
       use_stripe_sdk: true,
-      metadata: { bookingId: String(booking._id), cardSurchargeAmount: String(cardSurchargeAmount) },
+      metadata: { bookingId: String(booking._id), cardSurchargeAmount: String(cardSurchargeAmount), tipAmount: String(tip) },
     };
 
     const driver = await Driver.findById(booking.driverId);
     if (driver?.stripeAccountId && driver.stripeChargesEnabled) {
       const settings = getEffectiveCommissionSettings(driver);
       const feePercent = settings.commissionType === 'per-trip-percent' ? settings.commissionPercent : 0;
-      intentOptions.application_fee_amount = Math.round(toCents(fare) * (feePercent / 100)) + toCents(cardSurchargeAmount);
+      intentOptions.application_fee_amount = Math.round(toCents(fare) * (feePercent / 100)) + toCents(cardSurchargeAmount); // Tip goes to driver, not platform commission.
       intentOptions.transfer_data = { destination: driver.stripeAccountId };
     }
 
@@ -211,7 +220,7 @@ router.post('/confirm', auth, roleMiddleware(['passenger']), async (req, res) =>
     if (stripe) {
       if (!booking.paymentIntentId) return res.status(400).json({ error: 'No payment has been started for this booking' });
       const intent = await stripe.paymentIntents.retrieve(booking.paymentIntentId);
-      const expected = toCents(fareOf(booking) + (booking.cardSurchargeAmount || 0));
+      const expected = toCents(fareOf(booking) + (booking.tipAmount || 0) + (booking.cardSurchargeAmount || 0));
       if (intent.status !== 'succeeded' || intent.amount_received < expected) {
         return res.status(402).json({ error: `Payment not completed (status: ${intent.status})` });
       }
