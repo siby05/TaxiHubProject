@@ -674,6 +674,11 @@ router.post('/guest', guestLimiter, async (req, res) => {
     if (stopsError) return res.status(400).json({ error: stopsError });
 
     let passenger = await User.findOne({ role: 'passenger', mobile: passengerMobile });
+    // A phone number alone does not establish ownership of an existing account.
+    // Never mint an account-wide session for an unauthenticated returning guest.
+    if (passenger && paymentMethod === 'card') {
+      return res.status(403).json({ error: 'For online payment with an existing phone number, please sign in to your account first. You can also choose cash for guest checkout.' });
+    }
     if (passenger) {
       // Same record-keeping requirement as a brand-new guest below - an
       // older account created before this was required might still have
