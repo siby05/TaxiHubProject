@@ -1,6 +1,5 @@
 import SwiftUI
 import WebKit
-import CoreLocation
 import UIKit
 
 struct DriverWebView: UIViewRepresentable {
@@ -25,7 +24,6 @@ struct DriverWebView: UIViewRepresentable {
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         weak var webView: WKWebView?
-        private let locationManager = CLLocationManager()
 
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                      decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
@@ -44,13 +42,6 @@ struct DriverWebView: UIViewRepresentable {
                 return
             }
             decisionHandler(.allow)
-        }
-
-        func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters,
-                     initiatedByFrame frame: WKFrameInfo,
-                     completionHandler: @escaping ([URL]?) -> Void) {
-            // WKWebView's built-in upload UI is available on modern iOS.
-            completionHandler(nil)
         }
 
         func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin,
