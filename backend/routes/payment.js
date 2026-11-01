@@ -73,7 +73,8 @@ async function feeForCard(booking, paymentMethodId, tipAmount = 0) {
       throw Object.assign(new Error('This driver cannot receive online tips yet'), { status: 400 });
     }
   }
-  const cardSurchargeAmount = calculateCardSurcharge(fare + tip, pm.card.country);
+  const wallet = ['apple_pay', 'google_pay'].includes(pm.card?.wallet?.type);
+  const cardSurchargeAmount = wallet ? 0 : calculateCardSurcharge(fare + tip, pm.card.country);
   return {
     fare,
     tip,
@@ -284,7 +285,7 @@ router.post('/tip/fee', auth, roleMiddleware(['passenger']), async (req, res) =>
     if (!tip) return res.status(400).json({ error: 'Select a tip above $0' });
     const pm = await stripe.paymentMethods.retrieve(req.body.paymentMethodId);
     if (pm.type !== 'card') return res.status(400).json({ error: 'Only card payments are supported' });
-    const cardSurchargeAmount = calculateCardSurcharge(tip, pm.card.country);
+    const cardSurchargeAmount = ['apple_pay', 'google_pay'].includes(pm.card?.wallet?.type) ? 0 : calculateCardSurcharge(tip, pm.card.country);
     res.json({ fare: 0, tip, cardSurchargeAmount, total: Math.round((tip + cardSurchargeAmount) * 100) / 100, cardRegion: cardRegion(pm.card.country), brand: pm.card.brand, last4: pm.card.last4 });
   } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });

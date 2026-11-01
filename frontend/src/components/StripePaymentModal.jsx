@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { loadStripe } from '@stripe/stripe-js';
-import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import { Elements, PaymentElement, ExpressCheckoutElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import client from '../api/client';
 import Modal from './Modal';
 
@@ -17,16 +17,24 @@ const money = (n) => `$${n.toFixed(2)}`;
 // see backend utils/stripeFees.js): the passenger enters their card, the
 // backend works out the exact card fee for it, and only once they've seen
 // that total do they confirm. Charging happens server-side in /payment/pay.
-function PayForm({ bookingId, onSuccess, onClose, tipOnly = false }) {
+function PayForm({ bookingId, onSuccess, onClose, tipOnly = false, baseAmount }) {
   const stripe = useStripe();
   const elements = useElements();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [tipAmount, setTipAmount] = useState(tipOnly ? 5 : 0);
   const [customTip, setCustomTip] = useState('');
-  const [card, setCard] = useState(null); // { paymentMethodId, fare, cardSurchargeAmount, total, cardRegion, brand, last4 }
+  const [card, setCard] = useState(null);
+  const [walletBusy, setWalletBusy] = useState(false);
+  // Wallets display exactly fare + selected tip. Processing fees are absorbed
+  // by the platform for wallets, so the authorized sheet never understates the charge.
+  useEffect(() => {
+    if (elements && Number.isFinite(tipAmount) && tipAmount >= 0 && tipAmount <= 200) {
+      elements.update({ amount: (tipOnly ? 0 : baseAmount) + Math.round(tipAmount * 100) });
+    }
+  }, [elements, baseAmount, tipAmount, tipOnly]); // { paymentMethodId, fare, cardSurchargeAmount, total, cardRegion, brand, last4 }
 
-  async function reviewCard(e) {
+  async function reviewCard(e, wallet = false) {
     e?.preventDefault();
     if (!stripe || !elements) return;
     setLoading(true);
@@ -37,7 +45,11 @@ function PayForm({ bookingId, onSuccess, onClose, tipOnly = false }) {
       const { error: pmError, paymentMethod } = await stripe.createPaymentMethod({ elements });
       if (pmError) throw new Error(pmError.message);
       const { data } = await client.post(tipOnly ? '/payment/tip/fee' : '/payment/card-fee', { bookingId, paymentMethodId: paymentMethod.id, tipAmount });
-      setCard({ ...data, paymentMethodId: paymentMethod.id });
+      if (wallet) {
+        const shown = (tipOnly ? 0 : baseAmount) + Math.round(tipAmount * 100);
+        if (Math.round(data.total * 100) !== shown) throw new Error('Wallet total changed. No payment was taken; please try again.');
+        await completePayment({ ...data, paymentMethodId: paymentMethod.id });
+      } else setCard({ ...data, paymentMethodId: paymentMethod.id });
     } catch (err) {
       setError(err.response?.data?.error || err.message || 'Could not check this card');
     } finally {
@@ -45,11 +57,11 @@ function PayForm({ bookingId, onSuccess, onClose, tipOnly = false }) {
     }
   }
 
-  async function pay() {
+  async function completePayment(selectedCard) {
     setLoading(true);
     setError('');
     try {
-      const { data } = await client.post(tipOnly ? '/payment/tip/pay' : '/payment/pay', { bookingId, paymentMethodId: card.paymentMethodId, tipAmount: card.tip });
+      const { data } = await client.post(tipOnly ? '/payment/tip/pay' : '/payment/pay', { bookingId, paymentMethodId: selectedCard.paymentMethodId, tipAmount: selectedCard.tip });
       if (data.status === 'requires_action') {
         // 3D Secure - Stripe shows its own challenge, then we re-check.
         const { error: actionError, paymentIntent } = await stripe.handleNextAction({ clientSecret: data.clientSecret });
@@ -66,6 +78,8 @@ function PayForm({ bookingId, onSuccess, onClose, tipOnly = false }) {
     }
   }
 
+  async function pay() { await completePayment(card); }
+
   return (
     <form onSubmit={reviewCard}>
       {!card && <fieldset style={{ border: '1px solid #cbd5e1', borderRadius: 12, padding: 12, marginBottom: 16 }}>
@@ -80,10 +94,11 @@ function PayForm({ bookingId, onSuccess, onClose, tipOnly = false }) {
       </fieldset>}
       <div style={{ display: card ? 'none' : 'block' }}>
         <div style={{ marginBottom: 16 }}>
-          {/* Wallet checkout is disabled until the server-calculated tip-inclusive
-              total can be shown in the native sheet before authorization.
-              Card checkout below still displays and charges the verified total. */}
-          <p className="muted">Apple Pay and Google Pay are temporarily unavailable while we improve payment amount verification. Please use a card below.</p>
+          <ExpressCheckoutElement
+            onConfirm={() => reviewCard(undefined, true)}
+            options={{ buttonHeight: 48, paymentMethods: { applePay: 'auto', googlePay: 'auto', link: 'never' } }}
+          />
+          <p className="muted">Wallet payments include your selected tip. No additional card processing fee is charged for Apple Pay or Google Pay.</p>
         </div>
         <PaymentElement options={{ wallets: { applePay: 'never', googlePay: 'never' } }} />
       </div>
@@ -135,9 +150,9 @@ export default function StripePaymentModal({ bookingId, amount, currency, onClos
   // exists, because the final amount depends on the card itself.
   const options = { mode: 'payment', amount, currency, paymentMethodCreation: 'manual', paymentMethodTypes: ['card'] };
   return (
-    <Modal title="Pay for your trip" onClose={onClose}>
+    <Modal title={tipOnly ? 'Thank your driver' : 'Pay for your trip'} onClose={onClose}>
       <Elements stripe={stripePromise} options={options}>
-        <PayForm bookingId={bookingId} onSuccess={onSuccess} onClose={onClose} tipOnly={tipOnly} />
+        <PayForm bookingId={bookingId} onSuccess={onSuccess} onClose={onClose} tipOnly={tipOnly} baseAmount={amount} />
       </Elements>
     </Modal>
   );

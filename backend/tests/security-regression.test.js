@@ -13,7 +13,9 @@ test('unauthenticated returning card guest cannot receive an account token', () 
   const src = read('routes/booking.js');
   assert.match(src, /passenger && paymentMethod === 'card'[\s\S]*?return res\.status\(403\)/);
 });
-test('native wallet buttons are blocked until correct tip-inclusive amounts can be authorized', () => {
+test('native wallet checkout validates tip-inclusive authorized total before payment', () => {
   const src = fs.readFileSync(path.join(__dirname, '../../frontend/src/components/StripePaymentModal.jsx'), 'utf8');
-  assert.doesNotMatch(src, /<ExpressCheckoutElement/);
+  assert.match(src, /<ExpressCheckoutElement/);
+  assert.match(src, /Math\.round\(data\.total \* 100\) !== shown/);
+  assert.match(src, /elements\.update\(\{ amount:/);
 });
