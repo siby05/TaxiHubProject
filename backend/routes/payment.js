@@ -22,7 +22,7 @@ const toCents = (dollars) => Math.round(dollars * 100);
 const fareOf = (booking) => booking.actualFare || booking.estimatedFare;
 const tipCents = (value) => {
   const amount = Number(value);
-  if (!Number.isFinite(amount) || amount < 0 || amount > 200 || Math.round(amount * 100) !== amount * 100) {
+  if (!Number.isFinite(amount) || amount < 0 || amount > 200 || Math.abs(Math.round(amount * 100) - amount * 100) > 1e-7) {
     throw Object.assign(new Error('Tip must be between $0 and $200, in whole cents'), { status: 400 });
   }
   return Math.round(amount * 100);
@@ -304,7 +304,7 @@ router.post('/tip/pay', auth, roleMiddleware(['passenger']), async (req, res) =>
       const previous = await stripe.paymentIntents.retrieve(booking.tipPaymentIntentId);
       if (previous.status !== 'canceled') await stripe.paymentIntents.cancel(previous.id);
     }
-    const intent = await stripe.paymentIntents.create(opts, { idempotencyKey: `easyride-tip-${booking._id}-${req.body.paymentMethodId}-${toCents(tip)}` });
+    const intent = await stripe.paymentIntents.create(opts, { idempotencyKey: `easyride-tip-${booking._id}-${booking.tipPaymentIntentId || 'first'}-${req.body.paymentMethodId}-${toCents(tip)}` });
     await Booking.findByIdAndUpdate(booking._id, { tipPaymentIntentId: intent.id, tipSeparateAmount: tip, tipSeparateSurchargeAmount: cardSurchargeAmount });
     if (intent.status === 'succeeded') await Booking.findByIdAndUpdate(booking._id, { tipSeparatePaid: true });
     res.json({ status: intent.status, clientSecret: intent.client_secret });
@@ -324,6 +324,11 @@ router.post('/tip/confirm', auth, roleMiddleware(['passenger']), async (req, res
       return res.status(402).json({ error: 'Tip payment has not completed' });
     }
     await Booking.findByIdAndUpdate(booking._id, { tipSeparatePaid: true });
+    if (!booking.tipReceiptSent) {
+      await Booking.findByIdAndUpdate(booking._id, { tipReceiptSent: true });
+      const passenger = await User.findById(booking.passengerId);
+      if (hasRealEmail(passenger)) runInBackground('email separate tip receipt', () => emailService.sendTipReceipt(passenger.email, booking, intent));
+    }
     res.json({ status: 'succeeded' });
   } catch (err) { serverError(res, err, req); }
 });
