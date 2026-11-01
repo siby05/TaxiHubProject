@@ -22,6 +22,8 @@ function PayForm({ bookingId, onSuccess, onClose }) {
   const elements = useElements();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [tipAmount, setTipAmount] = useState(0);
+  const [customTip, setCustomTip] = useState('');
   const [card, setCard] = useState(null); // { paymentMethodId, fare, cardSurchargeAmount, total, cardRegion, brand, last4 }
 
   async function reviewCard(e) {
@@ -34,7 +36,7 @@ function PayForm({ bookingId, onSuccess, onClose }) {
       if (submitError) throw new Error(submitError.message);
       const { error: pmError, paymentMethod } = await stripe.createPaymentMethod({ elements });
       if (pmError) throw new Error(pmError.message);
-      const { data } = await client.post('/payment/card-fee', { bookingId, paymentMethodId: paymentMethod.id });
+      const { data } = await client.post('/payment/card-fee', { bookingId, paymentMethodId: paymentMethod.id, tipAmount });
       setCard({ ...data, paymentMethodId: paymentMethod.id });
     } catch (err) {
       setError(err.response?.data?.error || err.message || 'Could not check this card');
@@ -47,7 +49,7 @@ function PayForm({ bookingId, onSuccess, onClose }) {
     setLoading(true);
     setError('');
     try {
-      const { data } = await client.post('/payment/pay', { bookingId, paymentMethodId: card.paymentMethodId });
+      const { data } = await client.post('/payment/pay', { bookingId, paymentMethodId: card.paymentMethodId, tipAmount: card.tip });
       if (data.status === 'requires_action') {
         // 3D Secure - Stripe shows its own challenge, then we re-check.
         const { error: actionError, paymentIntent } = await stripe.handleNextAction({ clientSecret: data.clientSecret });
@@ -66,6 +68,16 @@ function PayForm({ bookingId, onSuccess, onClose }) {
 
   return (
     <form onSubmit={reviewCard}>
+      {!card && <fieldset style={{ border: '1px solid #cbd5e1', borderRadius: 12, padding: 12, marginBottom: 16 }}>
+        <legend style={{ fontWeight: 700 }}>Would you like to thank your driver with a tip?</legend>
+        <p className="muted" style={{ marginTop: 0 }}>Optional — tips go to your driver.</p>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {[0, 5, 10, 20].map((n) => <button key={n} type="button" className={`btn ${tipAmount === n && customTip === '' ? '' : 'secondary'}`} onClick={() => { setTipAmount(n); setCustomTip(''); }}>{n === 0 ? 'No tip' : `${n}`}</button>)}
+        </div>
+        <label style={{ display: 'block', marginTop: 12 }}>Custom tip (NZD)
+          <input type="number" min="0" max="200" step="0.01" inputMode="decimal" placeholder="Enter amount" value={customTip} onChange={(e) => { setCustomTip(e.target.value); setTipAmount(e.target.value === '' ? 0 : Number(e.target.value)); }} style={{ width: '100%', marginTop: 4 }} />
+        </label>
+      </fieldset>}
       <div style={{ display: card ? 'none' : 'block' }}>
         <div style={{ marginBottom: 16 }}>
           <ExpressCheckoutElement
@@ -85,6 +97,7 @@ function PayForm({ bookingId, onSuccess, onClose }) {
           <table style={{ width: '100%' }}>
             <tbody>
               <tr><td>Fare</td><td style={{ textAlign: 'right' }}>{money(card.fare)}</td></tr>
+              <tr><td>Driver tip (optional)</td><td style={{ textAlign: 'right' }}>{money(card.tip)}</td></tr>
               <tr><td>Card processing fee (Stripe)</td><td style={{ textAlign: 'right' }}>{money(card.cardSurchargeAmount)}</td></tr>
               <tr><td><strong>Total</strong></td><td style={{ textAlign: 'right' }}><strong>{money(card.total)}</strong></td></tr>
             </tbody>
@@ -100,7 +113,7 @@ function PayForm({ bookingId, onSuccess, onClose }) {
             <button type="button" className="btn secondary" onClick={() => { setCard(null); setError(''); }} disabled={loading}>Use a different card</button>
           </>
         ) : (
-          <button className="btn" disabled={!stripe || loading}>{loading ? 'Checking...' : 'Continue'}</button>
+          <button className="btn" disabled={!stripe || loading || !Number.isFinite(tipAmount) || tipAmount < 0 || tipAmount > 200}>{loading ? 'Checking...' : 'Continue'}</button>
         )}
         <button type="button" className="btn secondary" onClick={onClose}>Cancel</button>
       </div>
