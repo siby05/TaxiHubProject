@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { loadStripe } from '@stripe/stripe-js';
-import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import { Elements, PaymentElement, ExpressCheckoutElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import client from '../api/client';
 import Modal from './Modal';
 
@@ -25,7 +25,7 @@ function PayForm({ bookingId, onSuccess, onClose }) {
   const [card, setCard] = useState(null); // { paymentMethodId, fare, cardSurchargeAmount, total, cardRegion, brand, last4 }
 
   async function reviewCard(e) {
-    e.preventDefault();
+    e?.preventDefault();
     if (!stripe || !elements) return;
     setLoading(true);
     setError('');
@@ -67,7 +67,14 @@ function PayForm({ bookingId, onSuccess, onClose }) {
   return (
     <form onSubmit={reviewCard}>
       <div style={{ display: card ? 'none' : 'block' }}>
-        <PaymentElement />
+        <div style={{ marginBottom: 16 }}>
+          <ExpressCheckoutElement
+            onConfirm={() => reviewCard()}
+            onCancel={() => setError('')}
+            options={{ buttonHeight: 48, paymentMethods: { applePay: 'auto', googlePay: 'auto', link: 'never' } }}
+          />
+        </div>
+        <PaymentElement options={{ wallets: { applePay: 'never', googlePay: 'never' } }} />
       </div>
 
       {card && (
@@ -112,7 +119,7 @@ export default function StripePaymentModal({ bookingId, amount, currency, onClos
       </Modal>
     );
   }
-  // Deferred-intent mode: the card is collected before any PaymentIntent
+  // Express Checkout displays supported wallets above the card fallback.\n  // Deferred-intent mode: the payment method is collected before any PaymentIntent
   // exists, because the final amount depends on the card itself.
   const options = { mode: 'payment', amount, currency, paymentMethodCreation: 'manual', paymentMethodTypes: ['card'] };
   return (
