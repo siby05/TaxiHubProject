@@ -28,7 +28,7 @@ function buildInvoicePdf(booking, passenger, driver, driverName) {
   return new Promise((resolve, reject) => {
     const settings = getSettings();
     const fare = booking.actualFare ?? booking.estimatedFare;
-    const total = fare + (booking.cardSurchargeAmount || 0);
+    const total = fare + (booking.tipAmount || 0) + (booking.cardSurchargeAmount || 0);
     const vehicleMake = [driver?.vehicleBrand, driver?.vehicleModel].filter(Boolean).join(' ');
     const vehicleType = vehicleMake ? `${vehicleMake} (${driver.vehicleType})` : driver?.vehicleType;
     const vehicleLabel = [vehicleType, driver?.vehicleNumber].filter(Boolean).join(' · ');
