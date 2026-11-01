@@ -348,7 +348,7 @@ function invoiceRow(label, value) {
 function buildInvoiceHtml(booking, passenger, driver, driverName, { forPrint = false } = {}) {
   const settings = getSettings();
   const fare = booking.actualFare ?? booking.estimatedFare;
-  const total = fare + (booking.cardSurchargeAmount || 0);
+  const total = fare + (booking.tipAmount || 0) + (booking.cardSurchargeAmount || 0);
   const vLabel = vehicleLabel(driver);
   const stopsRows = (booking.stops || []).map((s, i) => invoiceRow(`Stop ${i + 1}`, s.address)).join('');
 
@@ -406,6 +406,7 @@ function buildInvoiceHtml(booking, passenger, driver, driverName, { forPrint = f
         <td style="padding:4px 0;color:#64748b;font-size:13px;">Fare</td>
         <td style="padding:4px 0;color:#0f172a;font-size:13px;text-align:right;">$${fare.toFixed(2)}</td>
       </tr>
+      ${booking.tipAmount > 0 ? `<tr><td style="padding:4px 0;color:#64748b;font-size:13px;">Driver tip</td><td style="text-align:right;">${booking.tipAmount.toFixed(2)}</td></tr>` : ''}
       ${booking.cardSurchargeAmount > 0 ? `<tr><td style="padding:4px 0;color:#64748b;font-size:13px;">Card fee</td><td style="padding:4px 0;color:#0f172a;font-size:13px;text-align:right;">$${booking.cardSurchargeAmount.toFixed(2)}</td></tr>` : ''}
       <tr>
         <td style="padding:12px 0 0;color:#0f172a;font-size:16px;font-weight:700;">Total</td>
@@ -534,15 +535,15 @@ function buildReceiptPage(booking, passenger, driver, driverName, pdfUrl) {
 function buildInvoiceText(booking, passenger, driver, driverName) {
   const settings = getSettings();
   const fare = booking.actualFare ?? booking.estimatedFare;
-  const total = fare + (booking.cardSurchargeAmount || 0);
+  const total = fare + (booking.tipAmount || 0) + (booking.cardSurchargeAmount || 0);
   const vLabel = vehicleLabel(driver);
   return `Invoice for trip ${booking.bookingId}\n` +
     `${passenger?.name ? `Billed to: ${passenger.name}${passenger.address ? `, ${passenger.address}` : ''}\n` : ''}` +
     `Pickup: ${booking.pickupAddress}\nDrop-off: ${booking.dropAddress}\nDistance: ${booking.distanceKm} km\n` +
     `${driverName ? `Driver: ${driverName}\n` : ''}${vLabel ? `Vehicle: ${vLabel}\n` : ''}` +
     `Payment: ${paymentLabel(booking)}, ${booking.paymentStatus === 'paid' ? 'paid' : 'unpaid'}\n` +
-    `Fare: $${fare.toFixed(2)}${booking.cardSurchargeAmount > 0 ? `\nCard fee: $${booking.cardSurchargeAmount.toFixed(2)}` : ''}\n` +
-    `Total: $${total.toFixed(2)}\n\n` +
+    `Fare: ${fare.toFixed(2)}${booking.tipAmount > 0 ? `\nDriver tip: ${booking.tipAmount.toFixed(2)}` : ''}${booking.cardSurchargeAmount > 0 ? `\nCard fee: $${booking.cardSurchargeAmount.toFixed(2)}` : ''}\n` +
+    `Total: ${total.toFixed(2)}\n\n` +
     `EasyRide${settings.adminEmail ? ` - ${settings.adminEmail}` : ''}${settings.adminMobile ? ` - ${settings.adminMobile}` : ''}`;
 }
 
