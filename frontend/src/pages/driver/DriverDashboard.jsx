@@ -113,6 +113,7 @@ export default function DriverDashboard() {
   const [alert, setAlert] = useState('');
   const [availError, setAvailError] = useState('');
   const [showAllTrips, setShowAllTrips] = useState(false);
+  const [tripFilter, setTripFilter] = useState('attention');
   const [notifPermission, setNotifPermission] = useState(notificationPermission());
   // Cancelling is the one trip-lifecycle action with no data-derived way
   // to tell "I just cancelled this" after the fact (the booking is just
@@ -386,9 +387,35 @@ export default function DriverDashboard() {
   const markPaidCardFee = useCardFee(markPaidFor ? (markPaidFor.booking.actualFare ?? markPaidFor.booking.estimatedFare) : null,
     markPaidFor?.method === 'card');
 
+  const tripCounts = {
+    attention: bookings.filter((b) => b.status === 'pending').length,
+    active: bookings.filter((b) => ['accepted', 'in-progress'].includes(b.status)).length,
+    completed: bookings.filter((b) => b.status === 'completed').length,
+    all: bookings.length,
+  };
+  const visibleTrips = bookings.filter((b) => {
+    if (tripFilter === 'attention') return b.status === 'pending';
+    if (tripFilter === 'active') return ['accepted', 'in-progress'].includes(b.status);
+    if (tripFilter === 'completed') return b.status === 'completed';
+    return true;
+  }).sort((a, b) => {
+    if (tripFilter === 'active') return new Date(a.scheduledFor || a.createdAt || 0) - new Date(b.scheduledFor || b.createdAt || 0);
+    return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+  });
+
   return (
     <div className="container">
-      <h1>Driver dashboard</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 18 }}>
+        <div><h1 style={{ margin: 0 }}>Driver dashboard</h1><p className="muted" style={{ margin: '5px 0 0' }}>Your rides and earnings at a glance</p></div>
+        <span role="status" style={{ borderRadius: 999, padding: '9px 15px', fontWeight: 700, background: profile?.isAvailable ? '#dcfce7' : '#f1f5f9', color: profile?.isAvailable ? '#166534' : '#475569' }}>{profile?.isAvailable ? '● Available for bookings' : '● Not accepting new bookings'}</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 145px), 1fr))', gap: 10, marginBottom: 16 }}>
+        {[["New requests", tripCounts.attention, 'attention'], ["Active rides", tripCounts.active, 'active'], ["Completed", tripCounts.completed, 'completed']].map(([label, count, filter]) => (
+          <button key={filter} type="button" onClick={() => setTripFilter(filter)} aria-pressed={tripFilter === filter} style={{ textAlign: 'left', padding: 16, minHeight: 84, borderRadius: 14, border: tripFilter === filter ? '2px solid #b48b44' : '1px solid #dce3ea', background: 'var(--surface, #fff)', color: 'inherit', cursor: 'pointer' }}>
+            <span style={{ display: 'block', fontSize: 26, fontWeight: 800 }}>{count}</span><span style={{ fontSize: 13 }}>{label}</span>
+          </button>
+        ))}
+      </div>
       {tracking && (
         <div className="card" style={{ background: gpsError ? '#fef3c7' : '#ecfdf5' }}>
           {gpsError || '📡 GPS tracking is on for your current trip. The route is kept for 7 days.'}
@@ -436,8 +463,13 @@ export default function DriverDashboard() {
           <h3 style={{ margin: 0 }}>Bookings {!showAllTrips && <span className="muted" style={{ fontWeight: 400 }}>(last 30 days)</span>}</h3>
           <button className="btn secondary" onClick={() => setShowAllTrips((v) => !v)}>{showAllTrips ? 'Show last 30 days' : 'Show all history'}</button>
         </div>
-        {bookings.length === 0 && <p className="muted">No bookings yet.</p>}
-        {bookings.map((b) => (
+        <div role="group" aria-label="Filter bookings" style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '14px 0 8px' }}>
+          {[["Requests", 'attention'], ["Active", 'active'], ["Completed", 'completed'], ["All trips", 'all']].map(([label, value]) => (
+            <button key={value} type="button" className={`btn ${tripFilter === value ? '' : 'secondary'}`} aria-pressed={tripFilter === value} onClick={() => setTripFilter(value)} style={{ flexShrink: 0, minHeight: 42 }}>{label} ({tripCounts[value]})</button>
+          ))}
+        </div>
+        {visibleTrips.length === 0 && <p className="muted" role="status">{bookings.length === 0 ? 'No bookings yet.' : 'No trips in this category.'}</p>}
+        {visibleTrips.map((b) => (
           <div className="booking-row" key={b._id}>
             <div className="booking-row-top">
               <div>
