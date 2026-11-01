@@ -67,6 +67,12 @@ async function feeForCard(booking, paymentMethodId, tipAmount = 0) {
   if (pm.type !== 'card') throw Object.assign(new Error('Only card payments are supported'), { status: 400 });
   const fare = fareOf(booking);
   const tip = tipCents(tipAmount) / 100;
+  if (tip > 0) {
+    const driver = await Driver.findById(booking.driverId);
+    if (!driver?.stripeAccountId || !driver.stripeChargesEnabled) {
+      throw Object.assign(new Error('This driver cannot receive online tips yet'), { status: 400 });
+    }
+  }
   const cardSurchargeAmount = calculateCardSurcharge(fare + tip, pm.card.country);
   return {
     fare,
