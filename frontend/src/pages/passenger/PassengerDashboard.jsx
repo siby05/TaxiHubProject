@@ -267,6 +267,16 @@ export default function PassengerDashboard() {
   // routes/payment.js /start). A real Stripe key configured opens
   // an actual card-entry form (mock:false); without one, the backend
   // auto-marks it paid immediately so the flow still works for testing.
+  async function tipNow(booking) {
+    setPayError('');
+    setPayingId(booking._id);
+    try {
+      const { data } = await client.post('/payment/tip/start', { bookingId: booking._id });
+      setPayModal({ bookingId: booking._id, amount: data.amount, currency: data.currency, tipOnly: true });
+    } catch (err) { setPayError(err.response?.data?.error || 'Could not start tip payment'); }
+    finally { setPayingId(null); }
+  }
+
   async function payNow(booking) {
     setPayError('');
     setPayingId(booking._id);
@@ -451,6 +461,12 @@ export default function PassengerDashboard() {
                     {payingId === b._id ? 'Paying...' : 'Pay now'}
                   </button>
                 )}
+                {b.paymentStatus === 'paid' && b.driverId && b.status !== 'cancelled' && !b.tipSeparatePaid && !b.tipPaymentIntentId && (
+                  <button className="btn secondary" onClick={() => tipNow(b)} disabled={payingId === b._id}>
+                    {payingId === b._id ? 'Loading...' : 'Tip your driver'}
+                  </button>
+                )}
+                {b.tipSeparatePaid && <span className="muted">Thank you for tipping your driver!</span>}
                 {b.paymentStatus !== 'paid' && !['completed', 'cancelled'].includes(b.status) && (
                   <button className="btn secondary" onClick={() => changePaymentMethod(b)}>
                     Switch to {b.paymentMethod === 'card' ? 'cash' : 'card'}
@@ -475,6 +491,7 @@ export default function PassengerDashboard() {
           bookingId={payModal.bookingId}
           amount={payModal.amount}
           currency={payModal.currency}
+          tipOnly={payModal.tipOnly || false}
           onClose={() => setPayModal(null)}
           onSuccess={() => { setPayModal(null); refresh(); }}
         />

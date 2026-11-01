@@ -17,11 +17,13 @@ const money = (n) => `$${n.toFixed(2)}`;
 // see backend utils/stripeFees.js): the passenger enters their card, the
 // backend works out the exact card fee for it, and only once they've seen
 // that total do they confirm. Charging happens server-side in /payment/pay.
-function PayForm({ bookingId, onSuccess, onClose }) {
+function PayForm({ bookingId, onSuccess, onClose, tipOnly = false }) {
   const stripe = useStripe();
   const elements = useElements();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [tipAmount, setTipAmount] = useState(tipOnly ? 5 : 0);
+  const [customTip, setCustomTip] = useState('');
   const [card, setCard] = useState(null); // { paymentMethodId, fare, cardSurchargeAmount, total, cardRegion, brand, last4 }
 
   async function reviewCard(e) {
@@ -34,7 +36,7 @@ function PayForm({ bookingId, onSuccess, onClose }) {
       if (submitError) throw new Error(submitError.message);
       const { error: pmError, paymentMethod } = await stripe.createPaymentMethod({ elements });
       if (pmError) throw new Error(pmError.message);
-      const { data } = await client.post('/payment/card-fee', { bookingId, paymentMethodId: paymentMethod.id });
+      const { data } = await client.post(tipOnly ? '/payment/tip/fee' : '/payment/card-fee', { bookingId, paymentMethodId: paymentMethod.id, tipAmount });
       setCard({ ...data, paymentMethodId: paymentMethod.id });
     } catch (err) {
       setError(err.response?.data?.error || err.message || 'Could not check this card');
@@ -47,7 +49,7 @@ function PayForm({ bookingId, onSuccess, onClose }) {
     setLoading(true);
     setError('');
     try {
-      const { data } = await client.post('/payment/pay', { bookingId, paymentMethodId: card.paymentMethodId });
+      const { data } = await client.post(tipOnly ? '/payment/tip/pay' : '/payment/pay', { bookingId, paymentMethodId: card.paymentMethodId, tipAmount: card.tip });
       if (data.status === 'requires_action') {
         // 3D Secure - Stripe shows its own challenge, then we re-check.
         const { error: actionError, paymentIntent } = await stripe.handleNextAction({ clientSecret: data.clientSecret });
@@ -56,7 +58,7 @@ function PayForm({ bookingId, onSuccess, onClose }) {
       } else if (data.status !== 'succeeded') {
         throw new Error('Payment did not complete - try again.');
       }
-      await client.post('/payment/confirm', { bookingId });
+      await client.post(tipOnly ? '/payment/tip/confirm' : '/payment/confirm', { bookingId });
       onSuccess();
     } catch (err) {
       setError(err.response?.data?.error || err.message || 'Payment failed');
@@ -66,6 +68,16 @@ function PayForm({ bookingId, onSuccess, onClose }) {
 
   return (
     <form onSubmit={reviewCard}>
+      {!card && <fieldset style={{ border: '1px solid #cbd5e1', borderRadius: 12, padding: 12, marginBottom: 16 }}>
+        <legend style={{ fontWeight: 700 }}>Would you like to thank your driver with a tip?</legend>
+        <p className="muted" style={{ marginTop: 0 }}>Optional — tips go to your driver.</p>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {(tipOnly ? [5, 10, 20] : [0, 5, 10, 20]).map((n) => <button key={n} type="button" className={`btn ${tipAmount === n && customTip === '' ? '' : 'secondary'}`} onClick={() => { setTipAmount(n); setCustomTip(''); }}>{n === 0 ? 'No tip' : `${n}`}</button>)}
+        </div>
+        <label style={{ display: 'block', marginTop: 12 }}>Custom tip (NZD)
+          <input type="number" min="0" max="200" step="0.01" inputMode="decimal" placeholder="Enter amount" value={customTip} onChange={(e) => { setCustomTip(e.target.value); setTipAmount(e.target.value === '' ? 0 : Number(e.target.value)); }} style={{ width: '100%', marginTop: 4 }} />
+        </label>
+      </fieldset>}
       <div style={{ display: card ? 'none' : 'block' }}>
         <div style={{ marginBottom: 16 }}>
           <ExpressCheckoutElement
@@ -85,6 +97,7 @@ function PayForm({ bookingId, onSuccess, onClose }) {
           <table style={{ width: '100%' }}>
             <tbody>
               <tr><td>Fare</td><td style={{ textAlign: 'right' }}>{money(card.fare)}</td></tr>
+              <tr><td>Driver tip (optional)</td><td style={{ textAlign: 'right' }}>{money(card.tip)}</td></tr>
               <tr><td>Card processing fee (Stripe)</td><td style={{ textAlign: 'right' }}>{money(card.cardSurchargeAmount)}</td></tr>
               <tr><td><strong>Total</strong></td><td style={{ textAlign: 'right' }}><strong>{money(card.total)}</strong></td></tr>
             </tbody>
@@ -100,7 +113,7 @@ function PayForm({ bookingId, onSuccess, onClose }) {
             <button type="button" className="btn secondary" onClick={() => { setCard(null); setError(''); }} disabled={loading}>Use a different card</button>
           </>
         ) : (
-          <button className="btn" disabled={!stripe || loading}>{loading ? 'Checking...' : 'Continue'}</button>
+          <button className="btn" disabled={!stripe || loading || !Number.isFinite(tipAmount) || tipAmount < 0 || tipAmount > 200 || (tipOnly && tipAmount === 0)}>{loading ? 'Checking...' : 'Continue'}</button>
         )}
         <button type="button" className="btn secondary" onClick={onClose}>Cancel</button>
       </div>
@@ -108,12 +121,12 @@ function PayForm({ bookingId, onSuccess, onClose }) {
   );
 }
 
-export default function StripePaymentModal({ bookingId, amount, currency, onClose, onSuccess }) {
+export default function StripePaymentModal({ bookingId, amount, currency, onClose, onSuccess, tipOnly = false }) {
   // The backend has a Stripe key (it said mock:false) but this build has
   // no publishable key - say so rather than silently doing nothing.
   if (!stripePromise) {
     return (
-      <Modal title="Pay for your trip" onClose={onClose}>
+      <Modal title={tipOnly ? 'Thank your driver' : 'Pay for your trip'} onClose={onClose}>
         <p className="error-text">Online payment isn't available right now (payment setup incomplete). Please pay the driver in cash or try again later.</p>
         <button type="button" className="btn secondary" onClick={onClose}>Close</button>
       </Modal>
@@ -125,7 +138,7 @@ export default function StripePaymentModal({ bookingId, amount, currency, onClos
   return (
     <Modal title="Pay for your trip" onClose={onClose}>
       <Elements stripe={stripePromise} options={options}>
-        <PayForm bookingId={bookingId} onSuccess={onSuccess} onClose={onClose} />
+        <PayForm bookingId={bookingId} onSuccess={onSuccess} onClose={onClose} tipOnly={tipOnly} />
       </Elements>
     </Modal>
   );

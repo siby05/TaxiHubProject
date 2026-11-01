@@ -36,6 +36,15 @@ export default function PayBooking() {
     return () => clearInterval(poll);
   }, [booking?.status]);
 
+  async function tipNow() {
+    setError(''); setPaying(true);
+    try {
+      const { data } = await client.post('/payment/tip/start', { bookingId });
+      setPayModal({ amount: data.amount, currency: data.currency, tipOnly: true });
+    } catch (err) { setError(err.response?.data?.error || 'Could not start tip payment'); }
+    finally { setPaying(false); }
+  }
+
   async function payNow() {
     setError('');
     setPaying(true);
@@ -89,6 +98,10 @@ export default function PayBooking() {
           </>
         )}
 
+        {booking.paymentStatus === 'paid' && booking.driverId && !booking.tipSeparatePaid && !booking.tipPaymentIntentId && (
+          <button className="btn secondary" onClick={tipNow} disabled={paying}>{paying ? 'Loading...' : 'Tip your driver'}</button>
+        )}
+        {booking.tipSeparatePaid && <p className="muted">Thank you for tipping your driver!</p>}
         <div style={{ marginTop: 16 }}>
           <Link className="btn secondary" to="/passenger">Go to my bookings</Link>
         </div>
@@ -99,6 +112,7 @@ export default function PayBooking() {
           bookingId={bookingId}
           amount={payModal.amount}
           currency={payModal.currency}
+          tipOnly={payModal.tipOnly || false}
           onClose={() => setPayModal(null)}
           onSuccess={() => { setPayModal(null); load(); }}
         />
