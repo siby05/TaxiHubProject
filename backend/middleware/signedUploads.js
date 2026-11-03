@@ -47,8 +47,14 @@ function serveSignedUpload(uploadsRoot) {
       return res.status(401).type('text').send('This file link has expired - open it again from the app.');
     }
     if (payload.f !== `/uploads${req.path}`) return res.status(403).type('text').send('This link is for a different file.');
-    const abs = path.join(uploadsRoot, req.path);
-    if (!abs.startsWith(uploadsRoot)) return res.status(400).end();
+    // Resolve and validate directory boundaries, not just string prefixes.
+    // A sibling such as /uploads-private must never pass a /uploads check.
+    const root = path.resolve(uploadsRoot);
+    const abs = path.resolve(root, `.${req.path}`);
+    const relative = path.relative(root, abs);
+    if (relative === '' || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+      return res.status(400).end();
+    }
     res.sendFile(abs, (err) => { if (err) res.status(err.statusCode || 404).type('text').send('File not found'); });
   };
 }
