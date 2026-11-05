@@ -425,7 +425,7 @@ export default function DriverDashboard() {
       </div>
       <nav aria-label="Driver dashboard sections" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 5, marginBottom: 18, position: 'sticky', top: 0, zIndex: 5, background: 'var(--background, #fff)', padding: '8px 0' }}>
         {[[ 'jobs', 'My Jobs' ], [ 'requests', 'Job Pool' ], [ 'history', 'History' ], [ 'earnings', 'Earnings' ], [ 'profile', 'Profile' ]].map(([view, label]) => (
-          <button key={view} type="button" onClick={() => setDashboardView(view)} aria-current={dashboardView === view ? 'page' : undefined} style={{ minWidth: 0, padding: '12px 2px', fontSize: '0.78rem', borderRadius: 12, border: '1px solid #dce5df', background: dashboardView === view ? '#e2f1e9' : '#fff', color: dashboardView === view ? '#145b3d' : '#334155', fontWeight: dashboardView === view ? 750 : 500 }}>{label}{view === 'requests' && tripCounts.attention > 0 ? ` (\${tripCounts.attention})` : ''}</button>
+          <button key={view} type="button" onClick={() => setDashboardView(view)} aria-current={dashboardView === view ? 'page' : undefined} style={{ minWidth: 0, padding: '12px 2px', fontSize: '0.78rem', borderRadius: 12, border: '1px solid #dce5df', background: dashboardView === view ? '#e2f1e9' : '#fff', color: dashboardView === view ? '#145b3d' : '#334155', fontWeight: dashboardView === view ? 750 : 500 }}>{label}{view === 'requests' && tripCounts.attention > 0 ? ` (${tripCounts.attention})` : ''}</button>
         ))}
       </nav>
       {dashboardView === 'profile' && <div className="card"><h3>Driver tools</h3><div className="btn-grid"><Link className="btn secondary" to="/driver/settings">Settings</Link><Link className="btn secondary" to="/driver/schedule">Schedule</Link><Link className="btn secondary" to="/driver/documents">Documents</Link><Link className="btn secondary" to="/driver/qr-code">My QR code</Link><Link className="btn secondary" to="/driver/book">Book for passenger</Link></div></div>}
@@ -477,7 +477,7 @@ export default function DriverDashboard() {
           <h3 style={{ margin: 0 }}>{dashboardView === 'jobs' ? 'My assigned jobs' : dashboardView === 'requests' ? 'Available requests' : 'Trip history'} {!showAllTrips && <span className="muted" style={{ fontWeight: 400 }}>(last 30 days)</span>}</h3>
           <button className="btn secondary" onClick={() => setShowAllTrips((v) => !v)}>{showAllTrips ? 'Show last 30 days' : 'Show all history'}</button>
         </div>
-        <div role="group" aria-label="Filter bookings" style={{ display: 'none' }} data-legacy-filters style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '14px 0 8px' }}>
+        <div role="group" aria-label="Filter bookings" style={{ display: 'none' }}>
           {[["Requests", 'attention'], ["Active", 'active'], ["Completed", 'completed'], ["All trips", 'all']].map(([label, value]) => (
             <button key={value} type="button" className={`btn ${tripFilter === value ? '' : 'secondary'}`} aria-pressed={tripFilter === value} onClick={() => setTripFilter(value)} style={{ flexShrink: 0, minHeight: 42 }}>{label} ({tripCounts[value]})</button>
           ))}
