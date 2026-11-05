@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import client, { API_URL } from '../../api/client';
 import { useBookingStore } from '../../store/bookingStore';
 import { useSocket } from '../../hooks/useSocket';
@@ -28,6 +29,9 @@ function isTripOnTheGo(b) {
 }
 
 export default function DriverDashboard() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const dashboardView = ['jobs', 'requests', 'history', 'earnings', 'profile'].includes(searchParams.get('view')) ? searchParams.get('view') : 'jobs';
+  const setDashboardView = (view) => setSearchParams(view === 'jobs' ? {} : { view });
   const { bookings, fetchDriverBookings } = useBookingStore();
   const [profile, setProfile] = useState(null);
   const [earnings, setEarnings] = useState(null);
@@ -394,6 +398,9 @@ export default function DriverDashboard() {
     all: bookings.length,
   };
   const visibleTrips = bookings.filter((b) => {
+    if (dashboardView === 'jobs') return ['accepted', 'in-progress'].includes(b.status);
+    if (dashboardView === 'requests') return b.status === 'pending';
+    if (dashboardView === 'history') return ['completed', 'cancelled'].includes(b.status);
     if (tripFilter === 'attention') return b.status === 'pending';
     if (tripFilter === 'active') return ['accepted', 'in-progress'].includes(b.status);
     if (tripFilter === 'completed') return b.status === 'completed';
@@ -411,11 +418,18 @@ export default function DriverDashboard() {
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 145px), 1fr))', gap: 10, marginBottom: 16 }}>
         {[["New requests", tripCounts.attention, 'attention'], ["Active rides", tripCounts.active, 'active'], ["Completed", tripCounts.completed, 'completed']].map(([label, count, filter]) => (
-          <button key={filter} type="button" onClick={() => setTripFilter(filter)} aria-pressed={tripFilter === filter} style={{ textAlign: 'left', padding: 16, minHeight: 84, borderRadius: 14, border: tripFilter === filter ? '2px solid #b48b44' : '1px solid #dce3ea', background: 'var(--surface, #fff)', color: 'inherit', cursor: 'pointer' }}>
+          <button key={filter} type="button" onClick={() => setDashboardView(filter === 'attention' ? 'requests' : filter === 'active' ? 'jobs' : 'history')} aria-pressed={(filter === 'attention' ? dashboardView === 'requests' : filter === 'active' ? dashboardView === 'jobs' : dashboardView === 'history')} style={{ textAlign: 'left', padding: 16, minHeight: 84, borderRadius: 14, border: tripFilter === filter ? '2px solid #b48b44' : '1px solid #dce3ea', background: 'var(--surface, #fff)', color: 'inherit', cursor: 'pointer' }}>
             <span style={{ display: 'block', fontSize: 26, fontWeight: 800 }}>{count}</span><span style={{ fontSize: 13 }}>{label}</span>
           </button>
         ))}
       </div>
+      <nav aria-label="Driver dashboard sections" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 5, marginBottom: 18, position: 'sticky', top: 0, zIndex: 5, background: 'var(--background, #fff)', padding: '8px 0' }}>
+        {[[ 'jobs', 'My Jobs' ], [ 'requests', 'Job Pool' ], [ 'history', 'History' ], [ 'earnings', 'Earnings' ], [ 'profile', 'Profile' ]].map(([view, label]) => (
+          <button key={view} type="button" onClick={() => setDashboardView(view)} aria-current={dashboardView === view ? 'page' : undefined} style={{ minWidth: 0, padding: '12px 2px', fontSize: '0.78rem', borderRadius: 12, border: '1px solid #dce5df', background: dashboardView === view ? '#e2f1e9' : '#fff', color: dashboardView === view ? '#145b3d' : '#334155', fontWeight: dashboardView === view ? 750 : 500 }}>{label}{view === 'requests' && tripCounts.attention > 0 ? ` (${tripCounts.attention})` : ''}</button>
+        ))}
+      </nav>
+      {dashboardView === 'profile' && <div className="card"><h3>Driver tools</h3><div className="btn-grid"><Link className="btn secondary" to="/driver/settings">Settings</Link><Link className="btn secondary" to="/driver/schedule">Schedule</Link><Link className="btn secondary" to="/driver/documents">Documents</Link><Link className="btn secondary" to="/driver/qr-code">My QR code</Link><Link className="btn secondary" to="/driver/book">Book for passenger</Link></div></div>}
+      {dashboardView === 'earnings' && <div className="card"><h3>Earnings and reports</h3><p className="muted">Trip fares exclude card processing charges. GST is shown separately.</p><div className="btn-grid"><Link className="btn secondary" to="/driver/reports">Reports</Link><Link className="btn secondary" to="/driver/expenses">Expenses</Link></div></div>}
       {tracking && (
         <div className="card" style={{ background: gpsError ? '#fef3c7' : '#ecfdf5' }}>
           {gpsError || '📡 GPS tracking is on for your current trip. The route is kept for 7 days.'}
@@ -428,7 +442,7 @@ export default function DriverDashboard() {
         </div>
       )}
 
-      {profile && (
+      {(dashboardView === 'profile' || dashboardView === 'jobs') && profile && (
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
             <div>
@@ -449,7 +463,7 @@ export default function DriverDashboard() {
         </div>
       )}
 
-      {earnings && (
+      {dashboardView === 'earnings' && earnings && (
         <div className="grid cols-4">
           <div className="card stat"><div className="value">{earnings.totalTrips}</div><div className="label">Trips</div></div>
           <div className="card stat"><div className="value">${earnings.totalEarnings.toFixed(2)}</div><div className="label">Gross earnings</div></div>
@@ -458,17 +472,17 @@ export default function DriverDashboard() {
         </div>
       )}
 
-      <div className="card">
+      {['jobs', 'requests', 'history'].includes(dashboardView) && <div className="card">
         <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ margin: 0 }}>Bookings {!showAllTrips && <span className="muted" style={{ fontWeight: 400 }}>(last 30 days)</span>}</h3>
+          <h3 style={{ margin: 0 }}>{dashboardView === 'jobs' ? 'My assigned jobs' : dashboardView === 'requests' ? 'Available requests' : 'Trip history'} {!showAllTrips && <span className="muted" style={{ fontWeight: 400 }}>(last 30 days)</span>}</h3>
           <button className="btn secondary" onClick={() => setShowAllTrips((v) => !v)}>{showAllTrips ? 'Show last 30 days' : 'Show all history'}</button>
         </div>
-        <div role="group" aria-label="Filter bookings" style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '14px 0 8px' }}>
+        <div role="group" aria-label="Filter bookings" style={{ display: 'none' }}>
           {[["Requests", 'attention'], ["Active", 'active'], ["Completed", 'completed'], ["All trips", 'all']].map(([label, value]) => (
             <button key={value} type="button" className={`btn ${tripFilter === value ? '' : 'secondary'}`} aria-pressed={tripFilter === value} onClick={() => setTripFilter(value)} style={{ flexShrink: 0, minHeight: 42 }}>{label} ({tripCounts[value]})</button>
           ))}
         </div>
-        {visibleTrips.length === 0 && <p className="muted" role="status">{bookings.length === 0 ? 'No bookings yet.' : 'No trips in this category.'}</p>}
+        {visibleTrips.length === 0 && <p className="muted" role="status">{dashboardView === 'jobs' ? 'No active assigned jobs.' : dashboardView === 'requests' ? 'No new booking requests.' : 'No completed or cancelled trips in this period.'}</p>}
         {visibleTrips.map((b) => (
           <div className="booking-row" key={b._id}>
             <div className="booking-row-top">
@@ -580,7 +594,7 @@ export default function DriverDashboard() {
             )}
           </div>
         ))}
-      </div>
+      </div>}
 
       {markPaidFor && (
         <Modal title="Mark as paid" onClose={() => setMarkPaidFor(null)}>
