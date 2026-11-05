@@ -594,7 +594,7 @@ export default function DriverDashboard() {
             )}
           </div>
         ))}
-      </div>
+      </div>}
 
       {markPaidFor && (
         <Modal title="Mark as paid" onClose={() => setMarkPaidFor(null)}>
