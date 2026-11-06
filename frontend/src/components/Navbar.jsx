@@ -15,7 +15,6 @@ const ROLE_LINKS = {
   ],
   driver: [
     { to: '/driver', label: 'Trips' },
-    { to: '/driver/book', label: 'Book for passenger' },
     { to: '/driver/passengers/new', label: 'Add passenger' },
     { to: '/driver/schedule', label: 'Schedule' },
     { to: '/driver/qr-code', label: 'My QR code' },
