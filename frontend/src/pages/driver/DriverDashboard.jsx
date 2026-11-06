@@ -445,7 +445,7 @@ export default function DriverDashboard() {
         </div>
       )}
 
-      {(dashboardView === 'profile' || dashboardView === 'jobs') && profile && (
+      {dashboardView === 'profile' && profile && (
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
             <div>
