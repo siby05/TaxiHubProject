@@ -416,6 +416,9 @@ export default function DriverDashboard() {
         <div><h1 style={{ margin: 0 }}>Driver dashboard</h1><p className="muted" style={{ margin: '5px 0 0' }}>Your rides and earnings at a glance</p></div>
         <span role="status" style={{ borderRadius: 999, padding: '9px 15px', fontWeight: 700, background: profile?.isAvailable ? '#dcfce7' : '#f1f5f9', color: profile?.isAvailable ? '#166534' : '#475569' }}>{profile?.isAvailable ? '● Available for bookings' : '● Not accepting new bookings'}</span>
       </div>
+      <div style={{ marginBottom: 18 }}>
+        <Link className="btn" to="/driver/book">Book for passenger</Link>
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 145px), 1fr))', gap: 10, marginBottom: 16 }}>
         {[["New requests", tripCounts.attention, 'attention'], ["Active rides", tripCounts.active, 'active'], ["Completed", tripCounts.completed, 'completed']].map(([label, count, filter]) => (
           <button key={filter} type="button" onClick={() => setDashboardView(filter === 'attention' ? 'requests' : filter === 'active' ? 'jobs' : 'history')} aria-pressed={(filter === 'attention' ? dashboardView === 'requests' : filter === 'active' ? dashboardView === 'jobs' : dashboardView === 'history')} style={{ textAlign: 'left', padding: 16, minHeight: 84, borderRadius: 14, border: tripFilter === filter ? '2px solid #b48b44' : '1px solid #dce3ea', background: 'var(--surface, #fff)', color: 'inherit', cursor: 'pointer' }}>
@@ -428,7 +431,7 @@ export default function DriverDashboard() {
           <button key={view} type="button" onClick={() => setDashboardView(view)} aria-current={dashboardView === view ? 'page' : undefined} style={{ minWidth: 0, padding: '12px 2px', fontSize: '0.78rem', borderRadius: 12, border: '1px solid #dce5df', background: dashboardView === view ? '#e2f1e9' : '#fff', color: dashboardView === view ? '#145b3d' : '#334155', fontWeight: dashboardView === view ? 750 : 500 }}>{label}{view === 'requests' && tripCounts.attention > 0 ? ` (${tripCounts.attention})` : ''}</button>
         ))}
       </nav>
-      {dashboardView === 'profile' && <div className="card"><h3>Driver tools</h3><div className="btn-grid"><Link className="btn secondary" to="/driver/settings">Settings</Link><Link className="btn secondary" to="/driver/schedule">Schedule</Link><Link className="btn secondary" to="/driver/documents">Documents</Link><Link className="btn secondary" to="/driver/qr-code">My QR code</Link><Link className="btn secondary" to="/driver/book">Book for passenger</Link></div></div>}
+      {dashboardView === 'profile' && <div className="card"><h3>Driver tools</h3><div className="btn-grid"><Link className="btn secondary" to="/driver/settings">Settings</Link><Link className="btn secondary" to="/driver/schedule">Schedule</Link><Link className="btn secondary" to="/driver/documents">Documents</Link><Link className="btn secondary" to="/driver/qr-code">My QR code</Link></div></div>}
       {dashboardView === 'earnings' && <div className="card"><h3>Earnings and reports</h3><p className="muted">Trip fares exclude card processing charges. GST is shown separately.</p><div className="btn-grid"><Link className="btn secondary" to="/driver/reports">Reports</Link><Link className="btn secondary" to="/driver/expenses">Expenses</Link></div></div>}
       {tracking && (
         <div className="card" style={{ background: gpsError ? '#fef3c7' : '#ecfdf5' }}>
