@@ -39,7 +39,7 @@ const expenseRoutes = require('./routes/expenses');
 const { setIo } = require('./utils/notify');
 const { startReminderScheduler } = require('./utils/reminders');
 const { startBackupScheduler } = require('./utils/backup');
-const { startRetentionScheduler } = require('./utils/retention');
+const { startTripStorageScheduler } = require('./utils/retention');
 const { startKeepAwake } = require('./utils/keepAwake');
 const { loadSettings } = require('./config/platformSettings');
 const { verifyEmailConfig, emailStatus } = require('./services/emailService');
@@ -163,6 +163,7 @@ async function initialize() {
     verifyEmailConfig();
     startReminderScheduler();
     startBackupScheduler();
+    startTripStorageScheduler();
     startKeepAwake();
     console.log('[startup] EasyRide API ready');
   } catch (err) {
