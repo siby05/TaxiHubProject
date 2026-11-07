@@ -116,7 +116,7 @@ export default function DriverDashboard() {
   }
   const [alert, setAlert] = useState('');
   const [availError, setAvailError] = useState('');
-  const [showAllTrips, setShowAllTrips] = useState(false);
+  const [showAllTrips, setShowAllTrips] = useState(true);
   const [tripFilter, setTripFilter] = useState('attention');
   const [notifPermission, setNotifPermission] = useState(notificationPermission());
   // Cancelling is the one trip-lifecycle action with no data-derived way

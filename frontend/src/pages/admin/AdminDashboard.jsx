@@ -984,7 +984,7 @@ export default function AdminDashboard() {
           <p className="muted">
             Complaints are always kept for 2 years (NZ Transport Agency requirement) and removed automatically
             after that - not configurable here. Trip records are kept forever unless the database runs short of
-            space: old finished trips are only deleted while storage is over the clean-up level below. Earnings are
+            space: at the storage limit below, the oldest eligible finished trip is deleted at each hourly check. Earnings are
             never lost - driver earnings, weekly fees, tax reports and revenue totals are kept in a summary before
             any trip is deleted. Trips with a complaint or an unpaid fare are never deleted.
           </p>
@@ -994,18 +994,8 @@ export default function AdminDashboard() {
                 : 'Database size can\'t be measured in this mode - trips are never deleted.'}
           </p>
           <form onSubmit={saveSettings}>
-            <div>
-              <label>Old trips can be deleted after (days)</label>
-              <input type="number" step="1" min="0" placeholder="Leave blank to keep forever"
-                value={settings.tripRetentionDays ?? ''}
-                onChange={(e) => setSettings((s) => ({ ...s, tripRetentionDays: e.target.value === '' ? null : Number(e.target.value) }))} />
-            </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginTop: 8 }}>
-              <span className="muted">Only when the database is over</span>
-              <input type="number" step="1" min="10" max="100" style={{ maxWidth: 80 }} aria-label="Clean-up threshold (%)"
-                value={settings.dbCleanupAtPercent ?? 80}
-                onChange={(e) => setSettings((s) => ({ ...s, dbCleanupAtPercent: e.target.value }))} />
-              <span className="muted">% of</span>
+              <span className="muted">Database storage limit</span>
               <input type="number" step="1" min="1" style={{ maxWidth: 100 }} aria-label="Database storage limit (MB)"
                 value={settings.dbStorageLimitMb ?? 512}
                 onChange={(e) => setSettings((s) => ({ ...s, dbStorageLimitMb: e.target.value }))} />
