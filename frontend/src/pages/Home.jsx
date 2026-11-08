@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import AddressAutocomplete from '../components/AddressAutocomplete';
 import { nzWallTimeToISO, todayNz } from '../utils/nzTime';
@@ -33,25 +33,28 @@ function BookingPanel(){
   const [params]=useSearchParams();
   const qrDriver=params.get('qrDriver');
   const [mode,setMode]=useState('ride');
+  const [paymentMethod,setPaymentMethod]=useState('cash');
+  const quoteRequest=useRef(0);
   const [pickup,setPickup]=useState(null),[drop,setDrop]=useState(null);
   const [pickupDate,setPickupDate]=useState(''),[pickupTime,setPickupTime]=useState('');
-  const [datePickerOpen,setDatePickerOpen]=useState(false),[quote,setQuote]=useState(null);
+  const [quote,setQuote]=useState(null);
   const [error,setError]=useState(''),[loading,setLoading]=useState(false);
   const scheduledFor=pickupDate&&pickupTime?nzWallTimeToISO(pickupDate,pickupTime):null;
   const scheduleLabel=pickupDate&&pickupTime
     ? new Date(pickupDate+'T12:00:00').toLocaleDateString('en-NZ',{day:'numeric',month:'short',year:'numeric'})+' at '+pickupTime
     : 'Select date & time';
-  useEffect(()=>{setQuote(null);setError('');},[pickup,drop,pickupDate,pickupTime,mode]);
+  useEffect(()=>{quoteRequest.current+=1;setQuote(null);setError('');setLoading(false);},[pickup,drop,pickupDate,pickupTime,mode,paymentMethod]);
   async function getQuote(e){
     e.preventDefault();
     if(!pickup||!drop){setError('Choose both addresses from the location suggestions.');return;}
-    if((pickupDate&&!pickupTime)||(!pickupDate&&pickupTime)){setDatePickerOpen(true);setError('Select both a date and time, or clear them to request the earliest pickup.');return;}
+    if((pickupDate&&!pickupTime)||(!pickupDate&&pickupTime)){setError('Select both a date and time, or clear them to request the earliest pickup.');return;}
+    const request=++quoteRequest.current;
     setError('');setLoading(true);setQuote(null);
-    try{const {data}=await client.post('/booking/homepage-quote',{pickupLat:pickup.lat,pickupLng:pickup.lng,dropLat:drop.lat,dropLng:drop.lng,scheduledFor});setQuote(data);}
-    catch(err){setError(err.response?.data?.error||'Unable to calculate a fare. Please try again.');}
-    finally{setLoading(false);}
+    try{const {data}=await client.post('/booking/homepage-quote',{pickupLat:pickup.lat,pickupLng:pickup.lng,dropLat:drop.lat,dropLng:drop.lng,scheduledFor,paymentMethod});if(request===quoteRequest.current)setQuote(data);}
+    catch(err){if(request===quoteRequest.current)setError(err.response?.data?.error||'Unable to calculate a fare. Please try again.');}
+    finally{if(request===quoteRequest.current)setLoading(false);}
   }
-  function continueBooking(){sessionStorage.setItem('easyride-home-quote',JSON.stringify({pickup,drop,scheduledFor}));navigate(qrDriver ? `/book-direct/${encodeURIComponent(qrDriver)}` : '/register');}
+  function continueBooking(){sessionStorage.setItem('easyride-home-quote',JSON.stringify({pickup,drop,scheduledFor,paymentMethod}));navigate(qrDriver ? `/book-direct/${encodeURIComponent(qrDriver)}` : '/register');}
   return <form className="er-booking" id="book-ride" onSubmit={getQuote}>
     {qrDriver && <div role="status" style={{ padding: "10px 14px", borderRadius: 8, background: "#fff7df", color: "#24354a", marginBottom: 10 }}>
       You scanned a driver QR code. <Link to={`/book-direct/${encodeURIComponent(qrDriver)}`}>Book this driver directly</Link> or check your fare below.
@@ -64,18 +67,27 @@ function BookingPanel(){
       <AddressAutocomplete label="Pickup Location" placeholder="Enter pickup location" onSelect={setPickup} required allowLocate compactLocate />
       <AddressAutocomplete label="Drop-off Location" placeholder="Enter destination" onSelect={setDrop} required/>
       <div className="er-date">
-        <label id="er-date-label">Date &amp; Time <span>(optional)</span></label>
-        <button type="button" className="er-date-trigger" aria-labelledby="er-date-label er-schedule-display" aria-expanded={datePickerOpen} aria-controls="er-date-controls" onClick={()=>setDatePickerOpen(v=>!v)}>
-          <Icon.calendar/><span id="er-schedule-display">{scheduleLabel}</span><span className="er-date-chevron" aria-hidden="true">{datePickerOpen?'▴':'▾'}</span>
-        </button>
-        {datePickerOpen&&<div id="er-date-controls" className="er-date-controls">
-          <div><label htmlFor="er-pickup-datetime">Pickup date &amp; time</label><input id="er-pickup-datetime" type="datetime-local" value={pickupDate&&pickupTime?`${pickupDate}T${pickupTime}`:''} min={`${todayNz()}T00:00`} onChange={e=>{const [date='',time='']=e.target.value.split('T');setPickupDate(date);setPickupTime(time);}}/></div>
-          <div className="er-date-actions"><button type="button" onClick={()=>{setPickupDate('');setPickupTime('');setDatePickerOpen(false);}}>Book as soon as possible</button><button type="button" onClick={()=>setDatePickerOpen(false)}>Done</button></div>
-        </div>}
+        <label id="er-date-label" htmlFor="er-pickup-datetime">Date &amp; Time <span>(optional)</span></label>
+        <div className="er-date-trigger" style={{position:'relative'}}>
+          <Icon.calendar/><span id="er-schedule-display">{scheduleLabel}</span><span className="er-date-chevron" aria-hidden="true">▾</span>
+          <input id="er-pickup-datetime" type="datetime-local" aria-labelledby="er-date-label" aria-describedby="er-schedule-display"
+            value={pickupDate&&pickupTime?`${pickupDate}T${pickupTime}`:''} min={`${todayNz()}T00:00`}
+            style={{position:'absolute',inset:0,width:'100%',height:'100%',margin:0,opacity:0,cursor:'pointer'}}
+            onClick={e=>{try{e.currentTarget.showPicker?.();}catch{/* Native input remains available if showPicker is unsupported. */}}}
+            onChange={e=>{const [date='',time='']=e.target.value.split('T');setPickupDate(date);setPickupTime(time);}}/>
+        </div>
+        {scheduledFor&&<div className="er-date-actions"><button type="button" onClick={()=>{setPickupDate('');setPickupTime('');}}>Book as soon as possible</button></div>}
         <small>Leave blank for the earliest available pickup</small>
       </div>
+      <div>
+        <label htmlFor="er-payment-method">Payment</label>
+        <select id="er-payment-method" value={paymentMethod} onChange={e=>setPaymentMethod(e.target.value)}>
+          <option value="cash">Cash to driver</option>
+          <option value="card">Card (pay online)</option>
+        </select>
+      </div>
       {error&&<p className="er-error" role="alert">{error}</p>}
-      {quote&&<div className="er-fare" role="status"><strong>{'Estimated fare: NZ$'+Number(quote.estimatedFare).toFixed(2)}</strong><span>{Number(quote.distanceKm).toFixed(1)} km{quote.discountPercent>0?' · '+quote.discountPercent+'% discount':''}</span>{quote.awaitingDriverConfirmation&&<small>Driver confirmation is pending. Your trip is not yet confirmed.</small>}</div>}
+      {quote&&<div className="er-fare" role="status"><strong>{'Estimated fare: NZ$'+Number(quote.estimatedFare).toFixed(2)}</strong>{paymentMethod==='card'&&<><span>{'Card service fee (NZ cards): NZ$'+Number(quote.cardSurchargeAmount).toFixed(2)}</span><strong>{'Estimated total: NZ$'+Number(quote.total).toFixed(2)}</strong><small>Overseas card fees may be higher; the exact fee is shown before payment.</small></>}<span>{Number(quote.distanceKm).toFixed(1)} km{quote.discountPercent>0?' · '+quote.discountPercent+'% discount':''}</span>{quote.awaitingDriverConfirmation&&<small>Driver confirmation is pending. Your trip is not yet confirmed.</small>}</div>}
       {quote?<button type="button" className="er-book-button" onClick={continueBooking}>Continue to Booking <span aria-hidden="true">→</span></button>:<button className="er-book-button" disabled={loading}>{loading?'Calculating fare…':'Get a Quote & Book'} <span aria-hidden="true">→</span></button>}
       <div className="er-booking-secure"><Icon.shield/> Secure booking · Fare displayed before confirmation</div>
     </div>

@@ -32,7 +32,7 @@ export default function PassengerDashboard() {
   const [drop, setDrop] = useState(initialHomeQuote?.drop || null);
   const [stops, setStops] = useState([]);
   const [scheduledFor, setScheduledFor] = useState(initialHomeQuote?.scheduledFor || null);
-  const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [paymentMethod, setPaymentMethod] = useState(initialHomeQuote?.paymentMethod === 'card' ? 'card' : 'cash');
   const [previousDrivers, setPreviousDrivers] = useState([]);
   const [driverCount, setDriverCount] = useState(null);
   const [preferredDriverId, setPreferredDriverId] = useState('');
