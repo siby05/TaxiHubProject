@@ -37,7 +37,7 @@ function BookingPanel(){
   const quoteRequest=useRef(0);
   const [pickup,setPickup]=useState(null),[drop,setDrop]=useState(null);
   const [pickupDate,setPickupDate]=useState(''),[pickupTime,setPickupTime]=useState('');
-  const [datePickerOpen,setDatePickerOpen]=useState(false),[quote,setQuote]=useState(null);
+  const [quote,setQuote]=useState(null);
   const [error,setError]=useState(''),[loading,setLoading]=useState(false);
   const scheduledFor=pickupDate&&pickupTime?nzWallTimeToISO(pickupDate,pickupTime):null;
   const scheduleLabel=pickupDate&&pickupTime
@@ -47,7 +47,7 @@ function BookingPanel(){
   async function getQuote(e){
     e.preventDefault();
     if(!pickup||!drop){setError('Choose both addresses from the location suggestions.');return;}
-    if((pickupDate&&!pickupTime)||(!pickupDate&&pickupTime)){setDatePickerOpen(true);setError('Select both a date and time, or clear them to request the earliest pickup.');return;}
+    if((pickupDate&&!pickupTime)||(!pickupDate&&pickupTime)){setError('Select both a date and time, or clear them to request the earliest pickup.');return;}
     const request=++quoteRequest.current;
     setError('');setLoading(true);setQuote(null);
     try{const {data}=await client.post('/booking/homepage-quote',{pickupLat:pickup.lat,pickupLng:pickup.lng,dropLat:drop.lat,dropLng:drop.lng,scheduledFor,paymentMethod});if(request===quoteRequest.current)setQuote(data);}
@@ -67,14 +67,16 @@ function BookingPanel(){
       <AddressAutocomplete label="Pickup Location" placeholder="Enter pickup location" onSelect={setPickup} required allowLocate compactLocate />
       <AddressAutocomplete label="Drop-off Location" placeholder="Enter destination" onSelect={setDrop} required/>
       <div className="er-date">
-        <label id="er-date-label">Date &amp; Time <span>(optional)</span></label>
-        <button type="button" className="er-date-trigger" aria-labelledby="er-date-label er-schedule-display" aria-expanded={datePickerOpen} aria-controls="er-date-controls" onClick={()=>setDatePickerOpen(v=>!v)}>
-          <Icon.calendar/><span id="er-schedule-display">{scheduleLabel}</span><span className="er-date-chevron" aria-hidden="true">{datePickerOpen?'▴':'▾'}</span>
-        </button>
-        {datePickerOpen&&<div id="er-date-controls" className="er-date-controls">
-          <div><label htmlFor="er-pickup-datetime">Pickup date &amp; time</label><input id="er-pickup-datetime" type="datetime-local" value={pickupDate&&pickupTime?`${pickupDate}T${pickupTime}`:''} min={`${todayNz()}T00:00`} onChange={e=>{const [date='',time='']=e.target.value.split('T');setPickupDate(date);setPickupTime(time);}}/></div>
-          <div className="er-date-actions"><button type="button" onClick={()=>{setPickupDate('');setPickupTime('');setDatePickerOpen(false);}}>Book as soon as possible</button><button type="button" onClick={()=>setDatePickerOpen(false)}>Done</button></div>
-        </div>}
+        <label id="er-date-label" htmlFor="er-pickup-datetime">Date &amp; Time <span>(optional)</span></label>
+        <div className="er-date-trigger" style={{position:'relative'}}>
+          <Icon.calendar/><span id="er-schedule-display">{scheduleLabel}</span><span className="er-date-chevron" aria-hidden="true">▾</span>
+          <input id="er-pickup-datetime" type="datetime-local" aria-labelledby="er-date-label" aria-describedby="er-schedule-display"
+            value={pickupDate&&pickupTime?`${pickupDate}T${pickupTime}`:''} min={`${todayNz()}T00:00`}
+            style={{position:'absolute',inset:0,width:'100%',height:'100%',margin:0,opacity:0,cursor:'pointer'}}
+            onClick={e=>{try{e.currentTarget.showPicker?.();}catch{/* Native input remains available if showPicker is unsupported. */}}}
+            onChange={e=>{const [date='',time='']=e.target.value.split('T');setPickupDate(date);setPickupTime(time);}}/>
+        </div>
+        {scheduledFor&&<div className="er-date-actions"><button type="button" onClick={()=>{setPickupDate('');setPickupTime('');}}>Book as soon as possible</button></div>}
         <small>Leave blank for the earliest available pickup</small>
       </div>
       <div>
