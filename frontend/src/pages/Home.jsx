@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import AddressAutocomplete from '../components/AddressAutocomplete';
 import { nzWallTimeToISO, todayNz } from '../utils/nzTime';
@@ -33,6 +33,8 @@ function BookingPanel(){
   const [params]=useSearchParams();
   const qrDriver=params.get('qrDriver');
   const [mode,setMode]=useState('ride');
+  const [paymentMethod,setPaymentMethod]=useState('cash');
+  const quoteRequest=useRef(0);
   const [pickup,setPickup]=useState(null),[drop,setDrop]=useState(null);
   const [pickupDate,setPickupDate]=useState(''),[pickupTime,setPickupTime]=useState('');
   const [datePickerOpen,setDatePickerOpen]=useState(false),[quote,setQuote]=useState(null);
@@ -41,17 +43,18 @@ function BookingPanel(){
   const scheduleLabel=pickupDate&&pickupTime
     ? new Date(pickupDate+'T12:00:00').toLocaleDateString('en-NZ',{day:'numeric',month:'short',year:'numeric'})+' at '+pickupTime
     : 'Select date & time';
-  useEffect(()=>{setQuote(null);setError('');},[pickup,drop,pickupDate,pickupTime,mode]);
+  useEffect(()=>{quoteRequest.current+=1;setQuote(null);setError('');setLoading(false);},[pickup,drop,pickupDate,pickupTime,mode,paymentMethod]);
   async function getQuote(e){
     e.preventDefault();
     if(!pickup||!drop){setError('Choose both addresses from the location suggestions.');return;}
     if((pickupDate&&!pickupTime)||(!pickupDate&&pickupTime)){setDatePickerOpen(true);setError('Select both a date and time, or clear them to request the earliest pickup.');return;}
+    const request=++quoteRequest.current;
     setError('');setLoading(true);setQuote(null);
-    try{const {data}=await client.post('/booking/homepage-quote',{pickupLat:pickup.lat,pickupLng:pickup.lng,dropLat:drop.lat,dropLng:drop.lng,scheduledFor});setQuote(data);}
-    catch(err){setError(err.response?.data?.error||'Unable to calculate a fare. Please try again.');}
-    finally{setLoading(false);}
+    try{const {data}=await client.post('/booking/homepage-quote',{pickupLat:pickup.lat,pickupLng:pickup.lng,dropLat:drop.lat,dropLng:drop.lng,scheduledFor,paymentMethod});if(request===quoteRequest.current)setQuote(data);}
+    catch(err){if(request===quoteRequest.current)setError(err.response?.data?.error||'Unable to calculate a fare. Please try again.');}
+    finally{if(request===quoteRequest.current)setLoading(false);}
   }
-  function continueBooking(){sessionStorage.setItem('easyride-home-quote',JSON.stringify({pickup,drop,scheduledFor}));navigate(qrDriver ? `/book-direct/${encodeURIComponent(qrDriver)}` : '/register');}
+  function continueBooking(){sessionStorage.setItem('easyride-home-quote',JSON.stringify({pickup,drop,scheduledFor,paymentMethod}));navigate(qrDriver ? `/book-direct/${encodeURIComponent(qrDriver)}` : '/register');}
   return <form className="er-booking" id="book-ride" onSubmit={getQuote}>
     {qrDriver && <div role="status" style={{ padding: "10px 14px", borderRadius: 8, background: "#fff7df", color: "#24354a", marginBottom: 10 }}>
       You scanned a driver QR code. <Link to={`/book-direct/${encodeURIComponent(qrDriver)}`}>Book this driver directly</Link> or check your fare below.
@@ -74,8 +77,95 @@ function BookingPanel(){
         </div>}
         <small>Leave blank for the earliest available pickup</small>
       </div>
+      <div>
+        <label htmlFor="er-payment-method">Payment</label>
+        <select id="er-payment-method" value={paymentMethod} onChange={e=>setPaymentMethod(e.target.value)}>
+          <option value="cash">Cash to driver</option>
+          <option value="card">Card (pay online)</option>
+        </select>
+      </div>
       {error&&<p className="er-error" role="alert">{error}</p>}
-      {quote&&<div className="er-fare" role="status"><strong>{'Estimated fare: NZ$'+Number(quote.estimatedFare).toFixed(2)}</strong><span>{Number(quote.distanceKm).toFixed(1)} km{quote.discountPercent>0?' · '+quote.discountPercent+'% discount':''}</span>{quote.awaitingDriverConfirmation&&<small>Driver confirmation is pending. Your trip is not yet confirmed.</small>}</div>}
+      {quote&&<div className="er-fare" role="status"><strong>{'Estimated fare: NZ$'+Number(quote.estimatedFare).toFixed(2)}</strong>{paymentMethod==='card'&&<><span>{'Card service fee (NZ cards): NZ$'+Number(quote.cardSurchargeAmount).toFixed(2)}</span><strong>{'Estimated total: NZ$'+Number(quote.total).toFixed(2)}</strong><small>Overseas card fees may be higher; the exact fee is shown before payment.</small></>}<span>{Number(quote.distanceKm).toFixed(1)} km{quote.discountPercent>0?' · '+quote.discountPercent+'% discount':''}</span>{quote.awaitingDriverConfirmation&&<small>Driver confirmation is pending. Your trip is not yet confirmed.</small>}</div>}
+      {quote?<button type="button" className="er-book-button" onClick={continueBooking}>Continue to Booking <span aria-hidden="true">→</span></button>:<button className="er-book-button" disabled={loading}>{loading?'Calculating fare…':'Get a Quote & Book'} <span aria-hidden="true">→</span></button>}
+      <div className="er-booking-secure"><Icon.shield/> Secure booking · Fare displayed before confirmation</div>
+    </div>
+  </form>;
+}
+function Offers(){
+  const [offers,setOffers]=useState(null);
+  useEffect(()=>{client.get('/booking/promotions').then(r=>setOffers(r.data)).catch(()=>{});},[]);
+  const {promo,returnTrip,routeDiscounts=[]}=offers||{};
+  const active=!!promo||routeDiscounts.length>0||!!returnTrip?.openings?.length;
+  return <section className="er-offers" id="offers"><div className="er-offer-intro"><svg className="er-percent" viewBox="0 0 100 100" role="img" aria-label="Discounts"><path d="M50 5 C55 5 56 13 62 14 C68 15 73 8 78 11 C83 14 80 22 85 27 C90 32 98 28 99 34 C100 40 92 44 92 50 C92 56 100 60 99 66 C98 72 90 68 85 73 C80 78 83 86 78 89 C73 92 68 85 62 86 C56 87 55 95 50 95 C45 95 44 87 38 86 C32 85 27 92 22 89 C17 86 20 78 15 73 C10 68 2 72 1 66 C0 60 8 56 8 50 C8 44 0 40 1 34 C2 28 10 32 15 27 C20 22 17 14 22 11 C27 8 32 15 38 14 C44 13 45 5 50 5 Z" fill="#ffbb11"/><text x="50" y="63" textAnchor="middle" fontSize="40" fontWeight="900" fill="#fff">%</text></svg><div><h2>{active?'Special Discounts Available!':'Special Offers & Discounts'}</h2><p>{active?'Configured discounts are included automatically in fare estimates.':'Special fares will be shown when configured by EasyRide.'}</p></div></div><div className="er-offer-box"><span className="er-present">🎁</span><div>{promo&&<p><strong>{promo.percent}% off</strong><small>{promo.startDate} to {promo.endDate}</small></p>}{routeDiscounts.map(r=><p key={r.direction}><strong>{r.percent}% route discount</strong><small>{ROUTES[r.direction]||r.direction}</small></p>)}{returnTrip?.openings?.length>0&&<p><strong>{returnTrip.percent}% same-day return</strong><small>For qualifying trips</small></p>}{!active&&<p><strong>Discount details</strong><small>Will be shown here once configured</small></p>}</div></div></section>;
+}
+function Services(){return <section id="services" className="er-services er-container">
+  <div className="er-heading"><span>OUR SERVICES</span><h2>Travel Your Way</h2><p>From airport runs to local trips, we've got you covered.</p></div>
+  <div className="er-service-grid">{SERVICES.map(s=><article className="er-card" key={s.title}>
+    <img src={s.img} alt={s.alt} loading="lazy"/>
+    <div className="er-card-inner"><div className="er-card-head"><span className="er-card-icon">{s.icon}</span><div><h3>{s.title}</h3><p>{s.desc}</p></div></div><ul>{s.points.map(point=><li key={point}><span>✓</span>{point}</li>)}</ul><Link to={s.link}>Learn More <span>→</span></Link></div>
+  </article>)}</div>
+  <div className="er-benefits"><div><Icon.shield/><span><strong>Trusted Service</strong><small>Local and reliable</small></span></div><div><Icon.car/><span><strong>Clean &amp; Comfortable</strong><small>Well-maintained vehicles</small></span></div><div><Icon.user/><span><strong>Friendly Drivers</strong><small>Professional and courteous</small></span></div><div><Icon.clock/><span><strong>Flexible Bookings</strong><small>For your convenience</small></span></div></div>
+</section>;}
+function Testimonials(){
+  const [reviews,setReviews]=useState([]);
+  useEffect(()=>{client.get('/feedback/testimonials').then(r=>setReviews((r.data||[]).filter(f=>f.message&&f.rating))).catch(()=>{});},[]);
+  if(!reviews.length)return null;
+  return <section className="er-reviews" id="testimonials"><div className="er-container"><div className="er-heading"><span>WHAT OUR CUSTOMERS SAY</span><h2>Trusted by the New Plymouth Community</h2></div><div className="er-review-grid">{reviews.map((r,i)=><blockquote key={i}><div className="er-stars" aria-label={r.rating+' out of five stars'}>{'★'.repeat(Math.min(5,Math.max(0,Number(r.rating))))}</div><p>“{r.message}”</p><footer>— {r.name||'EasyRide passenger'}</footer></blockquote>)}</div></div></section>;
+}
+export default function Home(){return <main className="er-home">
+  <section className="er-hero"><div className="er-container er-hero-inner"><div className="er-hero-copy">
+    <span className="er-kicker">TAXI &amp; PRIVATE TRANSFERS</span>
+    <h1>Your Local Ride<br/>in New Plymouth</h1>
+    <p>Airport transfers, local trips and private transport<br className="er-wide-only"/> — safe, comfortable and on time.</p>
+    <div className="er-points"><div><Icon.shield/><span><strong>Safe &amp; Reliable</strong><small>Your safety first</small></span></div><div><Icon.clock/><span><strong>On Time</strong><small>When confirmed</small></span></div><div><Icon.user/><span><strong>Local Service</strong><small>Proudly New Plymouth</small></span></div></div>
+  </div><BookingPanel/></div></section>
+  <div className="er-container er-offers-wrap"><Offers/></div>
+  <Services/>
+  <section className="er-why"><div className="er-container"><span className="er-kicker">WHY CHOOSE EASYRIDE</span><h2>More Than Just a Taxi</h2><p>We're a local New Plymouth service focused on reliability,<br className="er-wide-only"/> comfort and great customer care.</p><div className="er-why-benefits"><div><Icon.star/><span><strong>Local &amp; Trusted</strong><small>Proudly serving New Plymouth</small></span></div><div><Icon.shield/><span><strong>Customer Focused</strong><small>Friendly, professional drivers</small></span></div><div><Icon.car/><span><strong>Comfortable Rides</strong><small>Clean, modern vehicles</small></span></div><div><Icon.shield/><span><strong>Safe Travel</strong><small>Your safety is our priority</small></span></div></div></div></section>
+  <Testimonials/>
+  <footer className="er-footer"><div className="er-container"><p>© {new Date().getFullYear()} EasyRide NZ · <Link to="/about">About</Link> · <Link to="/terms">Terms</Link> · <a href="mailto:easyridenz@gmail.com">Contact</a></p></div></footer>
+</main>;}
++Number(quote.cardSurchargeAmount).toFixed(2)}</span><strong>{'Estimated total: NZ.toFixed(1)} km{quote.discountPercent>0?' · '+quote.discountPercent+'% discount':''}</span>{quote.awaitingDriverConfirmation&&<small>Driver confirmation is pending. Your trip is not yet confirmed.</small>}</div>}
+      {quote?<button type="button" className="er-book-button" onClick={continueBooking}>Continue to Booking <span aria-hidden="true">→</span></button>:<button className="er-book-button" disabled={loading}>{loading?'Calculating fare…':'Get a Quote & Book'} <span aria-hidden="true">→</span></button>}
+      <div className="er-booking-secure"><Icon.shield/> Secure booking · Fare displayed before confirmation</div>
+    </div>
+  </form>;
+}
+function Offers(){
+  const [offers,setOffers]=useState(null);
+  useEffect(()=>{client.get('/booking/promotions').then(r=>setOffers(r.data)).catch(()=>{});},[]);
+  const {promo,returnTrip,routeDiscounts=[]}=offers||{};
+  const active=!!promo||routeDiscounts.length>0||!!returnTrip?.openings?.length;
+  return <section className="er-offers" id="offers"><div className="er-offer-intro"><svg className="er-percent" viewBox="0 0 100 100" role="img" aria-label="Discounts"><path d="M50 5 C55 5 56 13 62 14 C68 15 73 8 78 11 C83 14 80 22 85 27 C90 32 98 28 99 34 C100 40 92 44 92 50 C92 56 100 60 99 66 C98 72 90 68 85 73 C80 78 83 86 78 89 C73 92 68 85 62 86 C56 87 55 95 50 95 C45 95 44 87 38 86 C32 85 27 92 22 89 C17 86 20 78 15 73 C10 68 2 72 1 66 C0 60 8 56 8 50 C8 44 0 40 1 34 C2 28 10 32 15 27 C20 22 17 14 22 11 C27 8 32 15 38 14 C44 13 45 5 50 5 Z" fill="#ffbb11"/><text x="50" y="63" textAnchor="middle" fontSize="40" fontWeight="900" fill="#fff">%</text></svg><div><h2>{active?'Special Discounts Available!':'Special Offers & Discounts'}</h2><p>{active?'Configured discounts are included automatically in fare estimates.':'Special fares will be shown when configured by EasyRide.'}</p></div></div><div className="er-offer-box"><span className="er-present">🎁</span><div>{promo&&<p><strong>{promo.percent}% off</strong><small>{promo.startDate} to {promo.endDate}</small></p>}{routeDiscounts.map(r=><p key={r.direction}><strong>{r.percent}% route discount</strong><small>{ROUTES[r.direction]||r.direction}</small></p>)}{returnTrip?.openings?.length>0&&<p><strong>{returnTrip.percent}% same-day return</strong><small>For qualifying trips</small></p>}{!active&&<p><strong>Discount details</strong><small>Will be shown here once configured</small></p>}</div></div></section>;
+}
+function Services(){return <section id="services" className="er-services er-container">
+  <div className="er-heading"><span>OUR SERVICES</span><h2>Travel Your Way</h2><p>From airport runs to local trips, we've got you covered.</p></div>
+  <div className="er-service-grid">{SERVICES.map(s=><article className="er-card" key={s.title}>
+    <img src={s.img} alt={s.alt} loading="lazy"/>
+    <div className="er-card-inner"><div className="er-card-head"><span className="er-card-icon">{s.icon}</span><div><h3>{s.title}</h3><p>{s.desc}</p></div></div><ul>{s.points.map(point=><li key={point}><span>✓</span>{point}</li>)}</ul><Link to={s.link}>Learn More <span>→</span></Link></div>
+  </article>)}</div>
+  <div className="er-benefits"><div><Icon.shield/><span><strong>Trusted Service</strong><small>Local and reliable</small></span></div><div><Icon.car/><span><strong>Clean &amp; Comfortable</strong><small>Well-maintained vehicles</small></span></div><div><Icon.user/><span><strong>Friendly Drivers</strong><small>Professional and courteous</small></span></div><div><Icon.clock/><span><strong>Flexible Bookings</strong><small>For your convenience</small></span></div></div>
+</section>;}
+function Testimonials(){
+  const [reviews,setReviews]=useState([]);
+  useEffect(()=>{client.get('/feedback/testimonials').then(r=>setReviews((r.data||[]).filter(f=>f.message&&f.rating))).catch(()=>{});},[]);
+  if(!reviews.length)return null;
+  return <section className="er-reviews" id="testimonials"><div className="er-container"><div className="er-heading"><span>WHAT OUR CUSTOMERS SAY</span><h2>Trusted by the New Plymouth Community</h2></div><div className="er-review-grid">{reviews.map((r,i)=><blockquote key={i}><div className="er-stars" aria-label={r.rating+' out of five stars'}>{'★'.repeat(Math.min(5,Math.max(0,Number(r.rating))))}</div><p>“{r.message}”</p><footer>— {r.name||'EasyRide passenger'}</footer></blockquote>)}</div></div></section>;
+}
+export default function Home(){return <main className="er-home">
+  <section className="er-hero"><div className="er-container er-hero-inner"><div className="er-hero-copy">
+    <span className="er-kicker">TAXI &amp; PRIVATE TRANSFERS</span>
+    <h1>Your Local Ride<br/>in New Plymouth</h1>
+    <p>Airport transfers, local trips and private transport<br className="er-wide-only"/> — safe, comfortable and on time.</p>
+    <div className="er-points"><div><Icon.shield/><span><strong>Safe &amp; Reliable</strong><small>Your safety first</small></span></div><div><Icon.clock/><span><strong>On Time</strong><small>When confirmed</small></span></div><div><Icon.user/><span><strong>Local Service</strong><small>Proudly New Plymouth</small></span></div></div>
+  </div><BookingPanel/></div></section>
+  <div className="er-container er-offers-wrap"><Offers/></div>
+  <Services/>
+  <section className="er-why"><div className="er-container"><span className="er-kicker">WHY CHOOSE EASYRIDE</span><h2>More Than Just a Taxi</h2><p>We're a local New Plymouth service focused on reliability,<br className="er-wide-only"/> comfort and great customer care.</p><div className="er-why-benefits"><div><Icon.star/><span><strong>Local &amp; Trusted</strong><small>Proudly serving New Plymouth</small></span></div><div><Icon.shield/><span><strong>Customer Focused</strong><small>Friendly, professional drivers</small></span></div><div><Icon.car/><span><strong>Comfortable Rides</strong><small>Clean, modern vehicles</small></span></div><div><Icon.shield/><span><strong>Safe Travel</strong><small>Your safety is our priority</small></span></div></div></div></section>
+  <Testimonials/>
+  <footer className="er-footer"><div className="er-container"><p>© {new Date().getFullYear()} EasyRide NZ · <Link to="/about">About</Link> · <Link to="/terms">Terms</Link> · <a href="mailto:easyridenz@gmail.com">Contact</a></p></div></footer>
+</main>;}
++Number(quote.total).toFixed(2)}</strong><small>Overseas card fees may be higher; the exact fee is shown before payment.</small></>}<span>{Number(quote.distanceKm).toFixed(1)} km{quote.discountPercent>0?' · '+quote.discountPercent+'% discount':''}</span>{quote.awaitingDriverConfirmation&&<small>Driver confirmation is pending. Your trip is not yet confirmed.</small>}</div>}
       {quote?<button type="button" className="er-book-button" onClick={continueBooking}>Continue to Booking <span aria-hidden="true">→</span></button>:<button className="er-book-button" disabled={loading}>{loading?'Calculating fare…':'Get a Quote & Book'} <span aria-hidden="true">→</span></button>}
       <div className="er-booking-secure"><Icon.shield/> Secure booking · Fare displayed before confirmation</div>
     </div>
