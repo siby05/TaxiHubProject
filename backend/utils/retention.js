@@ -30,7 +30,7 @@ async function getStorageUsage() {
   try {
     const mongoose = require('mongoose');
     const stats = await mongoose.connection.db.stats();
-    const usedMb = Math.round((((stats.dataSize || 0) + (stats.indexSize || 0)) / (1024 * 1024)) * 10) / 10;
+    const usedMb = ((stats.dataSize || 0) + (stats.indexSize || 0)) / (1024 * 1024);
     const limitMb = Number(getSettings().dbStorageLimitMb) || 512;
     return { usedMb, limitMb, percent: Math.round((usedMb / limitMb) * 1000) / 10 };
   } catch (err) {
@@ -39,42 +39,48 @@ async function getStorageUsage() {
   }
 }
 
-// Optional, admin-configured housekeeping for trip records - only for
-// when database space actually runs short. Both conditions are needed:
-// tripRetentionDays set (null/0 = never delete; how old a finished trip
-// must be before it may go) AND the database at or over dbCleanupAtPercent
-// of dbStorageLimitMb. Below that, every trip is kept, however old.
-//
-// Only ever touches finished trips: cancelled ones, and completed ones
-// that are paid (a cash trip still marked payment-pending is money owed,
-// so it stays). Skips any trip a complaint still references, so a
-// complaint can't outlive the trip evidence it's about. Completed trips'
-// fares are folded into the earnings archive first (utils/earnings.js) -
-// driver earnings, weekly commission, tax reports and admin revenue all
-// keep their totals after the trip rows are gone.
-async function cleanupOldTrips() {
-  const { tripRetentionDays, dbCleanupAtPercent } = getSettings();
-  if (!tripRetentionDays) return 0;
+// Retain all trips until measured usage reaches the configured database limit.
+// Remove only the oldest eligible finished trip per check, then measure again
+// next time. Unknown usage never authorizes deletion. Serialize local runs.
+let tripCleanupRunning = false;
+async function cleanupOldTrips({ readUsage = getStorageUsage } = {}) {
+  if (tripCleanupRunning) return 0;
+  tripCleanupRunning = true;
+  try {
+    const usage = await readUsage();
+    if (!usage || !Number.isFinite(usage.usedMb) || !Number.isFinite(usage.limitMb)
+      || usage.limitMb <= 0 || usage.usedMb < usage.limitMb) return 0;
 
-  const usage = await getStorageUsage();
-  if (!usage || usage.percent < (Number(dbCleanupAtPercent) || 80)) return 0;
+    const finished = await Booking.find({ status: { $in: ['completed', 'cancelled'] } });
+    const complaints = await Complaint.find({});
+    const referencedIds = new Set(complaints.map((c) => String(c.bookingId?._id || c.bookingId)));
+    const time = (b) => new Date(b.completedAt || b.cancelledAt || b.createdAt).getTime();
+    const oldest = finished
+      .filter((b) => (b.status === 'cancelled' || b.paymentStatus === 'paid')
+        && !referencedIds.has(String(b._id)) && Number.isFinite(time(b)))
+      .sort((a, b) => time(a) - time(b) || String(a._id).localeCompare(String(b._id)))[0];
+    if (!oldest) return 0;
 
-  const cutoff = new Date(Date.now() - tripRetentionDays * 24 * 60 * 60 * 1000);
-  const finished = await Booking.find({ status: { $in: ['completed', 'cancelled'] } });
-  const old = finished.filter((b) => new Date(b.completedAt || b.cancelledAt || b.createdAt) < cutoff
-    && (b.status === 'cancelled' || b.paymentStatus === 'paid'));
-  if (old.length === 0) return 0;
+    // If archiving fails (including a full database rejecting that write),
+    // keep the trip and report the failure rather than losing its earnings.
+    await archiveCompletedTrips([oldest]);
+    const result = await Booking.deleteMany({ _id: oldest._id, status: oldest.status,
+      ...(oldest.status === 'completed' ? { paymentStatus: 'paid' } : {}) });
+    console.log(`[retention] database at limit - removed ${result.deletedCount} oldest eligible trip (earnings archived)`);
+    return result.deletedCount;
+  } finally {
+    tripCleanupRunning = false;
+  }
+}
 
-  const complaints = await Complaint.find({});
-  const referencedIds = new Set(complaints.map((c) => String(c.bookingId?._id || c.bookingId)));
-  const deletable = old.filter((b) => !referencedIds.has(String(b._id)));
-  if (deletable.length === 0) return 0;
-
-  // Archive first - if this throws, nothing is deleted.
-  await archiveCompletedTrips(deletable);
-  const result = await Booking.deleteMany({ _id: { $in: deletable.map((b) => b._id) } });
-  console.log(`[retention] database at ${usage.percent}% of ${usage.limitMb} MB - removed ${result.deletedCount} trip record(s) older than ${tripRetentionDays} days (earnings kept in the archive)`);
-  return result.deletedCount;
+// Only trip storage cleanup is scheduled here; other record policies retain
+// their existing scheduling behavior.
+function startTripStorageScheduler(pollIntervalMs = 60 * 60 * 1000) {
+  const run = () => cleanupOldTrips().catch((err) => console.error('[retention] trip storage check failed:', err.message));
+  run();
+  const timer = setInterval(run, pollIntervalMs);
+  timer.unref?.();
+  return timer;
 }
 
 // In-app notifications are ephemeral by nature (the bell shows the recent
@@ -113,4 +119,4 @@ function startRetentionScheduler(pollIntervalMs = 24 * 60 * 60 * 1000) {
   return setInterval(run, pollIntervalMs);
 }
 
-module.exports = { getStorageUsage, cleanupOldComplaints, cleanupOldTrips, cleanupOldNotifications, cleanupOldTripLocations, TRIP_LOCATION_RETENTION_DAYS, startRetentionScheduler };
+module.exports = { startTripStorageScheduler, getStorageUsage, cleanupOldComplaints, cleanupOldTrips, cleanupOldNotifications, cleanupOldTripLocations, TRIP_LOCATION_RETENTION_DAYS, startRetentionScheduler };
