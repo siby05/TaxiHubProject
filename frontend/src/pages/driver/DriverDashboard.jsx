@@ -263,10 +263,14 @@ export default function DriverDashboard() {
   const fareText = (n) => (n == null || n === '' ? '' : Number(n).toFixed(2));
 
   function openComplete(b) {
+    if (b.paymentStatus === 'paid' && b.paymentMethod === 'card' && b.paidVia !== 'card-in-person') {
+      complete(b._id, b.actualFare ?? b.estimatedFare, 'card', !b.passengerHasEmail);
+      return;
+    }
     setFareDialog({
-      mode: 'complete', booking: b, fare: fareText(b.estimatedFare), sendWhatsApp: false, error: '',
-      // 'cash-paid' | 'cash-later' | 'card' - starts on how it was booked.
-      completePayment: b.paymentMethod === 'card' ? 'card' : 'cash-paid',
+      mode: 'complete', booking: b, fare: fareText(b.estimatedFare), sendWhatsApp: !b.passengerHasEmail, error: '',
+      // Completion records payment received in cash or by card in person.
+      completePayment: b.paymentMethod === 'card' ? 'card-paid' : 'cash-paid',
     });
   }
 
@@ -286,6 +290,7 @@ export default function DriverDashboard() {
       return;
     }
     if (mode === 'complete') {
+      if (booking.paymentStatus !== 'paid' && !window.confirm('Has payment been received? Confirm to complete this trip and mark it as paid.')) return;
       setFareDialog(null);
       await complete(booking._id, amount, completePayment, sendWhatsApp);
       return;
@@ -748,21 +753,14 @@ export default function DriverDashboard() {
                   {[
                     ['cash-paid', 'Paid in cash'],
                     ['card-paid', 'Paid by card (EFTPOS / other app)'],
-                    ['cash-later', 'Cash - pay later'],
-                    ['card', 'Card - pay online (passenger gets a payment link)'],
-                  ].map(([value, label]) => {
-                    const off = value === 'card' && fb.paymentMethod !== 'card' && profile?.acceptsOnlinePayment === false;
-                    return (
-                      <label key={value} style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 'normal', opacity: off ? 0.5 : 1 }}>
-                        <input type="radio" name="complete-payment" checked={fareDialog.completePayment === value} disabled={off}
-                          style={{ width: 'auto' }} onChange={() => set({ completePayment: value })} />
-                        {label}
-                      </label>
-                    );
-                  })}
-                  {fb.paymentMethod !== 'card' && profile?.acceptsOnlinePayment === false && (
-                    <span className="muted" style={{ fontSize: '0.85rem' }}>Card is off - online payment is turned off in your Settings.</span>
-                  )}
+                  ].map(([value, label]) => (
+                    <label key={value} style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 'normal' }}>
+                      <input type="radio" name="complete-payment" checked={fareDialog.completePayment === value}
+                        style={{ width: 'auto' }} onChange={() => set({ completePayment: value })} />
+                      {label}
+                    </label>
+                  ))}
+                  <span className="muted" style={{ fontSize: '0.85rem' }}>Confirm payment received to complete and mark this trip as paid.</span>
                   {completeCardFee && (
                     <span className="muted" style={{ fontSize: '0.85rem' }}>
                       Card fee ${completeCardFee.cardFee.toFixed(2)} - the passenger {fareDialog.completePayment === 'card-paid' ? 'pays' : 'will pay'} ${completeCardFee.total.toFixed(2)} in total.
@@ -807,7 +805,7 @@ export default function DriverDashboard() {
               <div className="booking-actions trip-actions">
                 <button className="btn secondary" onClick={() => setFareDialog(null)}>Cancel</button>
                 <button className="btn" disabled={saving || (cardPaid && mode === 'edit')} onClick={saveFareDialog}>
-                  {mode === 'complete' ? 'Complete trip' : saving ? 'Saving...' : 'Save changes'}
+                  {mode === 'complete' ? 'Complete & mark as paid' : saving ? 'Saving...' : 'Save changes'}
                 </button>
               </div>
             </div>
