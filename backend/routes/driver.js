@@ -61,6 +61,20 @@ router.put('/profile', auth, roleMiddleware(['driver']), async (req, res) => {
   res.json(await getDriverProfile(req.user.id) || updated);
 });
 
+// Driver-managed bank transfer destination. Never change payment status here.
+router.put('/bank-transfer', auth, roleMiddleware(['driver']), async (req, res) => {
+  const driver = await Driver.findOne({ userId: req.user.id });
+  if (!driver) return res.status(404).json({ error: 'Driver profile not found' });
+  const name = String(req.body?.accountName || '').trim();
+  const number = String(req.body?.accountNumber || '').trim();
+  const enabled = req.body?.enabled === true;
+  if (name.length > 100 || (name && !/^[\p{L}\p{M} .'-]+$/u.test(name))) return res.status(400).json({ error: 'Invalid account name' });
+  if (number && !/^\d{2}-\d{4}-\d{7}-\d{2,3}$/.test(number)) return res.status(400).json({ error: 'Use NZ bank format XX-XXXX-XXXXXXX-XXX' });
+  if (enabled && (!name || !number)) return res.status(400).json({ error: 'Account name and number required' });
+  const updated = await Driver.findByIdAndUpdate(driver._id, { bankTransfer: { enabled, accountName: name, accountNumber: number } });
+  res.json({ bankTransfer: updated.bankTransfer });
+});
+
 // GET /api/driver/documents - the driver's own view of each compliance
 // document: whether it's still pending review, verified, or rejected (with
 // the admin's reason so they know what to fix).
