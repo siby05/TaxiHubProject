@@ -547,6 +547,40 @@ function buildInvoiceText(booking, passenger, driver, driverName) {
     `EasyRide${settings.adminEmail ? ` - ${settings.adminEmail}` : ''}${settings.adminMobile ? ` - ${settings.adminMobile}` : ''}`;
 }
 
+function buildTripReminder(booking, whenLabel, { recipientName, passengerName, role = 'passenger' } = {}) {
+  const name = String(recipientName || '').trim();
+  const passenger = String(passengerName || (role === 'passenger' ? name : '') || 'Passenger');
+  const heading = `Trip reminder — ${whenLabel}`;
+  const intro = role === 'driver' ? 'Here are the details of your upcoming passenger pickup.' : 'Here are the details of your upcoming EasyRide trip.';
+  const rows = [
+    ['Passenger', passenger],
+    ['Booking reference', booking.bookingId || 'Not available'],
+    ['Pickup date & time (New Zealand)', pickupTimeText(booking)],
+    ['Pickup location', booking.pickupAddress || 'Not available'],
+    ...(booking.stops || []).map((stop, i) => [`Stop ${i + 1}`, stop.address || 'Not available']),
+    ['Destination', booking.dropAddress || 'Not available'],
+  ];
+  const notice = booking.status === 'pending'
+    ? 'This booking is awaiting driver confirmation. Your ride is not yet confirmed. Please check the app for updates.'
+    : role === 'driver' ? 'Please review the pickup time and location before setting off.' : 'Please be ready at the pickup location at the scheduled time.';
+  const url = appUrl(role === 'driver' ? '/driver' : '/passenger');
+  const greeting = name ? `Hi ${name},` : 'Hello,';
+  const text = [greeting, '', intro, '', ...rows.map(([label, value]) => `${label}: ${value}`), '', notice, '', `View booking: ${url}`, '', 'Thank you for choosing EasyRide.'].join('\n');
+  const html = `<div style="background:#f3f6f9;padding:20px 12px;font-family:Arial,sans-serif;color:#142942;">
+    <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #dce3ea;border-radius:12px;overflow:hidden;">
+      <div style="background:#0b2942;color:#fff;padding:22px 24px;border-bottom:4px solid #ffca28;"><strong style="font-size:22px;">EasyRide</strong><h1 style="font-size:20px;line-height:1.4;margin:12px 0 0;">${esc(heading)}</h1></div>
+      <div style="padding:24px;line-height:1.6;">
+        <p style="margin:0 0 12px;">${esc(greeting)}</p><p style="margin:0 0 20px;">${esc(intro)}</p>
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;table-layout:fixed;">${rows.map(([label, value]) => `<tr><td style="padding:12px 0;border-bottom:1px solid #e5eaf0;overflow-wrap:anywhere;word-break:break-word;"><span style="display:block;font-size:12px;color:#64748b;">${esc(label)}</span><strong style="display:block;font-size:15px;font-weight:600;">${esc(value)}</strong></td></tr>`).join('')}</table>
+        <p style="margin:20px 0;">${esc(notice)}</p>
+        <p style="margin:0 0 20px;"><a href="${esc(url)}" style="display:inline-block;background:#0b2942;color:#fff;padding:12px 20px;border-radius:7px;text-decoration:none;">View booking</a></p>
+        <p style="margin:0;color:#64748b;">Thank you for choosing EasyRide.</p>
+      </div>
+    </div>
+  </div>`;
+  return { subject: `EasyRide trip reminder: ${whenLabel} (${booking.bookingId})`, text, html };
+}
+
 const emailService = {
   sendVerificationEmail: (to, name) =>
     send(to, 'Welcome to EasyRide - verify your email', `Hi ${name}, welcome to EasyRide! Your account is ready to use.`),
@@ -683,8 +717,10 @@ You'll get another email as soon as a driver accepts. Track it here: ${appUrl('/
   sendEscalationAlert: (complaint) =>
     send(adminInbox(), `ESCALATED: ${complaint.complaintId}`, `Complaint ${complaint.complaintId} has been escalated to authorities.${complaintLink('/admin/complaints')}`),
 
-  sendTripReminder: (to, booking, whenLabel) =>
-    send(to, `Reminder: trip ${whenLabel} (${booking.bookingId})`, `Your trip from ${booking.pickupAddress} to ${booking.dropAddress} is scheduled for ${formatNzDateTime(booking.scheduledFor)}.`),
+  sendTripReminder: (to, booking, whenLabel, context) => {
+    const reminder = buildTripReminder(booking, whenLabel, context);
+    return send(to, reminder.subject, reminder.text, undefined, reminder.html);
+  },
 
   // utils/backup.js's weekly/monthly data export - three CSV attachments
   // (passengers, trips, complaints) to whatever the admin has set as
@@ -711,4 +747,4 @@ You'll get another email as soon as a driver accepts. Track it here: ${appUrl('/
     ),
 };
 
-module.exports = { emailService, buildReceiptPage, buildRespondPage, buildRespondResultPage, receiptTestimonialInvitation, verifyEmailConfig, emailStatus: status };
+module.exports = { buildTripReminder, emailService, buildReceiptPage, buildRespondPage, buildRespondResultPage, receiptTestimonialInvitation, verifyEmailConfig, emailStatus: status };
