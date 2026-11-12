@@ -1438,11 +1438,20 @@ router.put('/:id/complete', auth, roleMiddleware(['driver']), async (req, res) =
     }
     const booking = await Booking.findById(req.params.id);
     if (!booking) return res.status(404).json({ error: 'Booking not found' });
+    const owner = await Driver.findOne({ userId: req.user.id });
+    if (!owner || String(booking.driverId) !== String(owner._id)) return res.status(403).json({ error: 'Not your trip' });
+    if (!['accepted', 'in-progress', 'completed'].includes(booking.status)) return res.status(400).json({ error: 'Only accepted or in-progress trips can be completed' });
     // Guards against double-incrementing the driver's totalTrips/
     // totalEarnings below if Complete is ever hit twice for the same trip.
     if (booking.status === 'completed') return res.status(400).json({ error: 'Trip already completed' });
 
     const alreadyPaid = booking.paymentStatus === 'paid';
+    if (!alreadyPaid && typeof req.body.paymentPending !== 'boolean') {
+      return res.status(400).json({ error: 'Confirm whether payment has been received or is pending' });
+    }
+    if (!alreadyPaid && paymentPending && req.body.paidInPerson === true) {
+      return res.status(400).json({ error: 'Payment cannot be both received and pending' });
+    }
     const paymentMethod = alreadyPaid ? booking.paymentMethod : (req.body.paymentMethod || booking.paymentMethod);
     const paidInPerson = paymentMethod === 'card' && req.body.paidInPerson === true;
     if (paymentMethod === 'card' && !paidInPerson && booking.paymentMethod !== 'card') {
@@ -1451,9 +1460,10 @@ router.put('/:id/complete', auth, roleMiddleware(['driver']), async (req, res) =
         return res.status(400).json({ error: 'Online payment is turned off in your settings - choose cash, or turn it on first' });
       }
     }
-    const finalFare = actualFare || booking.estimatedFare;
+    const paidOnline = alreadyPaid && booking.paymentMethod === 'card' && booking.paidVia !== 'card-in-person';
+    const finalFare = paidOnline ? (booking.actualFare ?? booking.estimatedFare) : (actualFare || booking.estimatedFare);
 
-    const updated = await Booking.findByIdAndUpdate(req.params.id, {
+    const updated = await Booking.findOneAndUpdate({ _id: booking._id, status: booking.status, paymentStatus: booking.paymentStatus }, {
       status: 'completed',
       actualFare: finalFare,
       completedAt: new Date(),
@@ -1469,6 +1479,7 @@ router.put('/:id/complete', auth, roleMiddleware(['driver']), async (req, res) =
             : { paymentStatus: paymentPending ? 'unpaid' : 'paid', paidVia: paymentPending ? null : 'cash', cardSurchargeAmount: 0 }),
       }),
     });
+    if (!updated) return res.status(409).json({ error: 'Trip or payment changed. Refresh and try again.' });
 
     // The trip is complete as soon as that write lands - answer the driver
     // now and do everything else (running totals, receipt PDF + email,
