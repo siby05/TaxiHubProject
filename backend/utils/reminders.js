@@ -56,7 +56,11 @@ async function checkReminders() {
         if (!recipient || sentTo.has(role)) continue;
         sentTo.add(role);
         const label = r.flag === 'reminderDayEmailSent' ? nzDayLabel : r.label;
-        await emailService.sendTripReminder(recipient.email, booking, label);
+        await emailService.sendTripReminder(recipient.email, booking, label, {
+          recipientName: recipient.name,
+          passengerName: passenger?.name,
+          role,
+        });
         notifyUser(recipient._id, {
           type: 'trip-reminder',
           title: `Trip reminder - ${label}`,
