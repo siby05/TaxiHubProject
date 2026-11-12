@@ -186,7 +186,25 @@ function isRetryable(err) {
 // Most callers fire-and-forget this; runBackup() is the one exception that
 // needs to know about a real failure, so it's told via the return value
 // instead of a thrown error.
+// Give plain-text notifications a readable HTML alternative without changing
+// their wording, security tokens, attachments or delivery behavior.
+function buildStandardEmail(subject, text) {
+  const renderLine = (line) => line.split(/(https?:\/\/[^\s<>]+)/g).map((part) =>
+    /^https?:\/\//.test(part)
+      ? `<a href="${esc(part)}" style="color:#075985;overflow-wrap:anywhere;word-break:break-word;">${esc(part)}</a>`
+      : esc(part)).join('');
+  const paragraphs = String(text || '').split(/\n\s*\n/).map((paragraph) =>
+    `<p style="margin:0 0 18px;line-height:1.65;overflow-wrap:anywhere;">${paragraph.split('\n').map(renderLine).join('<br>')}</p>`).join('');
+  return `<div style="background:#f3f6f9;padding:20px 12px;font-family:Arial,sans-serif;color:#142942;">
+    <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #dce3ea;border-radius:12px;overflow:hidden;">
+      <div style="background:#0b2942;color:#fff;padding:22px 24px;border-bottom:4px solid #ffca28;"><strong style="font-size:22px;">EasyRide</strong></div>
+      <div style="padding:24px;"><h1 style="font-size:20px;line-height:1.4;margin:0 0 20px;">${esc(subject)}</h1>${paragraphs}</div>
+    </div>
+  </div>`;
+}
+
 async function send(to, subject, text, attachments, html) {
+  if (!html && text) html = buildStandardEmail(subject, text);
   // Passengers registered without an email carry a generated placeholder
   // (utils/users.js) so the unique-email login model still holds - it is
   // not a mailbox. Dropping those here, once, keeps every caller simple
@@ -550,22 +568,24 @@ function buildInvoiceText(booking, passenger, driver, driverName) {
 function buildTripReminder(booking, whenLabel, { recipientName, passengerName, role = 'passenger' } = {}) {
   const name = String(recipientName || '').trim();
   const passenger = String(passengerName || (role === 'passenger' ? name : '') || 'Passenger');
-  const heading = `Trip reminder — ${whenLabel}`;
-  const intro = role === 'driver' ? 'Here are the details of your upcoming passenger pickup.' : 'Here are the details of your upcoming EasyRide trip.';
+  const heading = `${role === 'driver' ? 'Pickup' : 'Trip'} reminder — ${whenLabel}`;
+  const intro = role === 'driver' ? 'You have an upcoming passenger pickup. Please review the details below.' : 'Here are the details of your upcoming EasyRide trip.';
   const rows = [
     ['Passenger', passenger],
     ['Booking reference', booking.bookingId || 'Not available'],
-    ['Pickup date & time (New Zealand)', pickupTimeText(booking)],
+    ['Pickup date', booking.scheduledFor ? new Date(booking.scheduledFor).toLocaleDateString('en-NZ', { timeZone: 'Pacific/Auckland', day: 'numeric', month: 'long', year: 'numeric' }) : 'As soon as possible'],
+    ['Pickup time', booking.scheduledFor ? new Date(booking.scheduledFor).toLocaleTimeString('en-NZ', { timeZone: 'Pacific/Auckland', hour: 'numeric', minute: '2-digit', hour12: true }) + ' — New Zealand time' : 'Earliest available pickup'],
     ['Pickup location', booking.pickupAddress || 'Not available'],
     ...(booking.stops || []).map((stop, i) => [`Stop ${i + 1}`, stop.address || 'Not available']),
     ['Destination', booking.dropAddress || 'Not available'],
   ];
   const notice = booking.status === 'pending'
     ? 'This booking is awaiting driver confirmation. Your ride is not yet confirmed. Please check the app for updates.'
-    : role === 'driver' ? 'Please review the pickup time and location before setting off.' : 'Please be ready at the pickup location at the scheduled time.';
+    : role === 'driver' ? 'Please plan your journey to reach the pickup location on time.' : 'Please be ready at the pickup location at the scheduled time.';
   const url = appUrl(role === 'driver' ? '/driver' : '/passenger');
   const greeting = name ? `Hi ${name},` : 'Hello,';
-  const text = [greeting, '', intro, '', ...rows.map(([label, value]) => `${label}: ${value}`), '', notice, '', `View booking: ${url}`, '', 'Thank you for choosing EasyRide.'].join('\n');
+  const thanks = role === 'driver' ? 'Thank you for driving with EasyRide.' : 'Thank you for choosing EasyRide.';
+  const text = [greeting, '', intro, '', ...rows.map(([label, value]) => `${label}: ${value}`), '', notice, '', `View booking: ${url}`, '', thanks].join('\n');
   const html = `<div style="background:#f3f6f9;padding:20px 12px;font-family:Arial,sans-serif;color:#142942;">
     <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #dce3ea;border-radius:12px;overflow:hidden;">
       <div style="background:#0b2942;color:#fff;padding:22px 24px;border-bottom:4px solid #ffca28;"><strong style="font-size:22px;">EasyRide</strong><h1 style="font-size:20px;line-height:1.4;margin:12px 0 0;">${esc(heading)}</h1></div>
@@ -574,11 +594,11 @@ function buildTripReminder(booking, whenLabel, { recipientName, passengerName, r
         <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;table-layout:fixed;">${rows.map(([label, value]) => `<tr><td style="padding:12px 0;border-bottom:1px solid #e5eaf0;overflow-wrap:anywhere;word-break:break-word;"><span style="display:block;font-size:12px;color:#64748b;">${esc(label)}</span><strong style="display:block;font-size:15px;font-weight:600;">${esc(value)}</strong></td></tr>`).join('')}</table>
         <p style="margin:20px 0;">${esc(notice)}</p>
         <p style="margin:0 0 20px;"><a href="${esc(url)}" style="display:inline-block;background:#0b2942;color:#fff;padding:12px 20px;border-radius:7px;text-decoration:none;">View booking</a></p>
-        <p style="margin:0;color:#64748b;">Thank you for choosing EasyRide.</p>
+        <p style="margin:0;color:#64748b;">${esc(thanks)}</p>
       </div>
     </div>
   </div>`;
-  return { subject: `EasyRide trip reminder: ${whenLabel} (${booking.bookingId})`, text, html };
+  return { subject: `EasyRide ${role === 'driver' ? 'pickup' : 'trip'} reminder: ${whenLabel} (${booking.bookingId})`, text, html };
 }
 
 const emailService = {
@@ -747,4 +767,4 @@ You'll get another email as soon as a driver accepts. Track it here: ${appUrl('/
     ),
 };
 
-module.exports = { buildTripReminder, emailService, buildReceiptPage, buildRespondPage, buildRespondResultPage, receiptTestimonialInvitation, verifyEmailConfig, emailStatus: status };
+module.exports = { buildStandardEmail, buildTripReminder, emailService, buildReceiptPage, buildRespondPage, buildRespondResultPage, receiptTestimonialInvitation, verifyEmailConfig, emailStatus: status };
