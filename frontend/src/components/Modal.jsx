@@ -10,11 +10,11 @@ export default function Modal({ title, onClose, children, footer }) {
       onClick={onClose}
     >
       <div
-        className="card"
+        className="card app-modal"
         style={{ maxWidth: 640, width: '100%', maxHeight: '85vh', overflowY: 'auto', background: 'var(--surface)' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <div className="modal-heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <h2 style={{ margin: 0 }}>{title}</h2>
           <button className="btn secondary" onClick={onClose}>Close</button>
         </div>
