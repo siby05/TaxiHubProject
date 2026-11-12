@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import client, { API_URL } from '../../api/client';
 import { useBookingStore } from '../../store/bookingStore';
@@ -38,6 +38,8 @@ export default function DriverDashboard() {
   // The "Complete trip" / "Edit trip" dialog: { mode: 'complete' | 'edit',
   // booking, fare, paymentPending, error, saving } or null when closed.
   const [fareDialog, setFareDialog] = useState(null);
+  const completingIds = useRef(new Set());
+  const [completing, setCompleting] = useState({});
   // "Edit trip" before it starts (route and time) - the trip being edited,
   // or null. Completed trips use the fare dialog above instead.
   const [tripEdit, setTripEdit] = useState(null);
@@ -269,8 +271,8 @@ export default function DriverDashboard() {
     }
     setFareDialog({
       mode: 'complete', booking: b, fare: fareText(b.estimatedFare), sendWhatsApp: !b.passengerHasEmail, error: '',
-      // Completion records payment received in cash or by card in person.
-      completePayment: b.paymentMethod === 'card' ? 'card-paid' : 'cash-paid',
+      // Require an explicit received/pending choice for unpaid trips.
+      completePayment: b.paymentStatus === 'paid' ? (b.paymentMethod === 'card' ? 'card-paid' : 'cash-paid') : '',
     });
   }
 
@@ -290,9 +292,14 @@ export default function DriverDashboard() {
       return;
     }
     if (mode === 'complete') {
-      if (booking.paymentStatus !== 'paid' && !window.confirm('Has payment been received? Confirm to complete this trip and mark it as paid.')) return;
-      setFareDialog(null);
-      await complete(booking._id, amount, completePayment, sendWhatsApp);
+      if (!completePayment) {
+        setFareDialog((d) => ({ ...d, error: 'Choose whether payment has been received or is still pending.' }));
+        return;
+      }
+      setFareDialog((d) => ({ ...d, saving: true, error: '' }));
+      const saved = await complete(booking._id, amount, completePayment, sendWhatsApp);
+      if (saved) setFareDialog(null);
+      else setFareDialog((d) => d && ({ ...d, saving: false, error: 'Could not complete the trip. Check the message above and retry.' }));
       return;
     }
     setFareDialog((d) => ({ ...d, saving: true, error: '' }));
@@ -315,34 +322,36 @@ export default function DriverDashboard() {
   // payment: 'cash-paid' | 'card-paid' (EFTPOS / other app) | 'cash-later'
   // | 'card' (pay online) - see the Complete trip box.
   async function complete(id, actualFare, payment, sendWhatsApp) {
+    if (completingIds.current.has(id)) return false;
+    completingIds.current.add(id);
+    setCompleting((m) => ({ ...m, [id]: true }));
     const booking = bookings.find((b) => b._id === id);
     const alreadyPaid = booking?.paymentStatus === 'paid';
-    const paymentMethod = payment === 'card' || payment === 'card-paid' ? 'card' : 'cash';
+    const paymentMethod = ['card', 'card-paid'].includes(payment) ? 'card' : 'cash';
     const paidInPerson = payment === 'card-paid';
-    const paymentPending = !alreadyPaid && payment === 'cash-later';
-    if (booking && sendWhatsApp) {
-      const finalBooking = { ...booking, actualFare: actualFare || booking.estimatedFare };
-      const cardOwing = !alreadyPaid && payment === 'card';
-      const payLink = cardOwing ? `${window.location.origin}/pay/${id}` : null;
-      const receipt = (alreadyPaid || payment === 'cash-paid' || payment === 'card-paid') ? receiptUrl(booking) : null;
-      // Opened before the API call so it counts as part of the tap (popup
-      // blockers reject a window opened after an await). One message: the
-      // receipt link, with the pay link folded in if a card fare is owing,
-      // or a note if a cash fare is left pending.
-      const text = receipt
-        ? receiptMessage(finalBooking, profile?.userId?.name, receipt, payLink)
-          + (paymentPending ? '\n\nPayment is still pending - please pay at your convenience. Thank you!' : '')
-        : paymentReminderMessage(finalBooking, profile?.userId?.name, payLink);
-      const link = waLink(booking.passengerId?.mobile, text);
-      if (link) openWhatsApp(link);
-    }
-
+    const paymentPending = !alreadyPaid && ['cash-later', 'card'].includes(payment);
     try {
-      await client.put(`/booking/${id}/complete`, { actualFare, paymentPending, ...(!alreadyPaid && { paymentMethod, paidInPerson }) });
+      const { data: updated } = await client.put(`/booking/${id}/complete`, {
+        actualFare, paymentPending, ...(!alreadyPaid && { paymentMethod, paidInPerson }),
+      });
+      // Never send a paid receipt before the server has saved payment status.
+      if (sendWhatsApp && updated.paymentStatus === 'paid') {
+        const finalBooking = { ...booking, ...updated };
+        const receipt = receiptUrl(finalBooking);
+        const link = receipt && waLink(booking?.passengerId?.mobile,
+          receiptMessage(finalBooking, profile?.userId?.name, receipt, null));
+        if (link) openWhatsApp(link);
+      }
+      load();
+      return true;
     } catch (err) {
       setAlert(err.response?.data?.error || 'Could not complete this trip');
+      load();
+      return false;
+    } finally {
+      completingIds.current.delete(id);
+      setCompleting((m) => ({ ...m, [id]: false }));
     }
-    load();
   }
 
   // "Mark as paid" asks how it was paid: cash, or card taken in person
@@ -549,7 +558,7 @@ export default function DriverDashboard() {
                     )}
                     <a className="btn secondary" target="_blank" rel="noreferrer" href={directionsLink(b)}>📍 Directions</a>
                     {/* Complete gets its own full-width row; payment actions pair up below it. */}
-                    <button className="btn full" onClick={() => openComplete(b)}>Complete</button>
+                    <button className="btn full" disabled={!!completing[b._id]} onClick={() => openComplete(b)}>{completing[b._id] ? 'Completing...' : 'Complete'}</button>
                   </div>
                   {cardOwing && (
                     <div className="booking-actions trip-actions">
@@ -749,10 +758,12 @@ export default function DriverDashboard() {
                 <p className="muted" style={{ margin: 0 }}>Paid online by card.</p>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <label style={{ marginBottom: 0 }}>Payment</label>
+                  <label style={{ marginBottom: 0 }}>Has payment been received?</label>
                   {[
-                    ['cash-paid', 'Paid in cash'],
-                    ['card-paid', 'Paid by card (EFTPOS / other app)'],
+                    ['cash-paid', 'Yes — cash received'],
+                    ['card-paid', 'Yes — paid by card (EFTPOS / other app)'],
+                    ['cash-later', 'Not paid yet — cash payment pending'],
+                    ['card', 'Not paid yet — online/card payment pending'],
                   ].map(([value, label]) => (
                     <label key={value} style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 'normal' }}>
                       <input type="radio" name="complete-payment" checked={fareDialog.completePayment === value}
@@ -760,7 +771,7 @@ export default function DriverDashboard() {
                       {label}
                     </label>
                   ))}
-                  <span className="muted" style={{ fontSize: '0.85rem' }}>Confirm payment received to complete and mark this trip as paid.</span>
+                  <span className="muted" style={{ fontSize: '0.85rem' }}>You can complete the trip with payment pending and mark it paid later.</span>
                   {completeCardFee && (
                     <span className="muted" style={{ fontSize: '0.85rem' }}>
                       Card fee ${completeCardFee.cardFee.toFixed(2)} - the passenger {fareDialog.completePayment === 'card-paid' ? 'pays' : 'will pay'} ${completeCardFee.total.toFixed(2)} in total.
@@ -790,7 +801,7 @@ export default function DriverDashboard() {
                 <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 'normal' }}>
                   <input type="checkbox" checked={!!fareDialog.sendWhatsApp} style={{ width: 'auto' }}
                     onChange={(e) => set({ sendWhatsApp: e.target.checked })} />
-                  <span><WhatsAppIcon /> Send receipt on WhatsApp</span>
+                  <span><WhatsAppIcon /> Send receipt on WhatsApp once paid</span>
                 </label>
                 <p className="muted" style={{ margin: '4px 0 0 26px', fontSize: '0.85rem' }}>
                   {fb.passengerHasEmail
@@ -804,8 +815,8 @@ export default function DriverDashboard() {
             <div className="booking-row" style={{ border: 'none', paddingBottom: 0 }}>
               <div className="booking-actions trip-actions">
                 <button className="btn secondary" onClick={() => setFareDialog(null)}>Cancel</button>
-                <button className="btn" disabled={saving || (cardPaid && mode === 'edit')} onClick={saveFareDialog}>
-                  {mode === 'complete' ? 'Complete & mark as paid' : saving ? 'Saving...' : 'Save changes'}
+                <button className="btn" disabled={saving || (cardPaid && mode === 'edit') || (mode === 'complete' && !fareDialog.completePayment && !cardPaid)} onClick={saveFareDialog}>
+                  {saving ? 'Saving...' : mode === 'complete' ? 'Complete trip' : 'Save changes'}
                 </button>
               </div>
             </div>
