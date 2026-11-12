@@ -433,7 +433,8 @@ export default function DriverSchedule() {
             disabled={month >= lastMonth} onClick={() => setMonth(addMonths(month, 1))}>›</button>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 4 }}>
+        <div className="schedule-calendar-scroll" role="region" aria-label="Monthly schedule — scroll horizontally on small screens" tabIndex={0}>
+        <div className="schedule-calendar-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 4 }}>
           {WEEK_COLUMNS.map((d) => (
             <div key={d} className="muted" style={{ textAlign: 'center', fontSize: '0.75rem', fontWeight: 600 }}>
               {DAY_NAMES[d].slice(0, 3)}
@@ -443,6 +444,8 @@ export default function DriverSchedule() {
             <CalendarCell key={date || `blank-${i}`} date={date} today={today}
               entry={date && entryFor(date)} onOpen={setOpenDate} />
           ))}
+        </div>
+
         </div>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', marginTop: 12, fontSize: '0.8rem' }}>

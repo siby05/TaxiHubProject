@@ -431,7 +431,7 @@ export default function DriverDashboard() {
           </button>
         ))}
       </div>
-      <nav aria-label="Driver dashboard sections" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 5, marginBottom: 18, position: 'sticky', top: 0, zIndex: 5, background: 'var(--background, #fff)', padding: '8px 0' }}>
+      <nav className="driver-dashboard-nav" aria-label="Driver dashboard sections" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 5, marginBottom: 18, position: 'sticky', top: 0, zIndex: 5, background: 'var(--background, #fff)', padding: '8px 0' }}>
         {[[ 'jobs', 'My Jobs' ], [ 'requests', 'Job Pool' ], [ 'history', 'History' ], [ 'earnings', 'Earnings' ], [ 'profile', 'Profile' ]].map(([view, label]) => (
           <button key={view} type="button" onClick={() => setDashboardView(view)} aria-current={dashboardView === view ? 'page' : undefined} style={{ minWidth: 0, padding: '12px 2px', fontSize: '0.78rem', borderRadius: 12, border: '1px solid #dce5df', background: dashboardView === view ? '#e2f1e9' : '#fff', color: dashboardView === view ? '#145b3d' : '#334155', fontWeight: dashboardView === view ? 750 : 500 }}>{label}{view === 'requests' && tripCounts.attention > 0 ? ` (${tripCounts.attention})` : ''}</button>
         ))}

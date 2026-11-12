@@ -362,7 +362,7 @@ td.num-cell { text-align: right; white-space: nowrap; }
 .booking-row .trip-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-auto-rows: 46px;
+  grid-auto-rows: minmax(46px, auto);
   gap: 8px;
   margin-top: 12px;
   max-width: 560px;
@@ -375,9 +375,11 @@ td.num-cell { text-align: right; white-space: nowrap; }
   padding: 0 10px;
   gap: 6px;
   font-size: 0.875rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
+  padding-top: 10px;
+  padding-bottom: 10px;
 }
 .trip-actions > .btn svg { flex-shrink: 0; }
 @media (max-width: 370px) {
@@ -684,3 +686,30 @@ a:focus-visible,.btn:focus-visible{outline:2px solid #d4a315;outline-offset:3px}
 .admin-trip-date-filters>div label{display:block;margin-bottom:4px}
 .admin-trip-date-filters input,.admin-trip-date-filters select{width:100%;min-width:0}
 @media(max-width:480px){.admin-trip-date-filters>div{flex-basis:100%}}
+
+/* Let action labels wrap at spaces without clipping or splitting words. */
+.btn{min-width:0;max-width:100%;word-break:normal;overflow-wrap:normal;hyphens:none}
+.btn>svg{flex-shrink:0}
+.modal-heading{flex-wrap:wrap;gap:12px}
+.modal-heading h2{flex:1 1 140px;min-width:0}
+.modal-heading>.btn{flex:0 0 auto}
+@media(max-width:640px){
+  .btn-grid,.btn-grid.compact{grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr))}
+  .btn-grid>.btn:last-child:nth-child(odd){grid-column:auto}
+  .btn-grid>.btn:only-child{grid-column:1 / -1}
+  .btn-grid>.btn{height:100%;line-height:1.35}
+  .booking-row .booking-actions:not(.trip-actions)>.btn{flex:1 1 145px}
+  .driver-dashboard-nav{grid-template-columns:repeat(5,minmax(max-content,1fr))!important;overflow-x:auto;scrollbar-width:thin}
+  .driver-dashboard-nav>button{white-space:nowrap;padding:12px 10px!important;min-height:44px}
+}
+
+.schedule-calendar-scroll{max-width:100%;overflow-x:auto}
+.schedule-calendar-grid{min-width:420px}
+.schedule-calendar-scroll:focus-visible{outline:2px solid #d4a315;outline-offset:3px}
+
+@media(max-width:640px){
+  .booking-row .trip-actions{grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr))}
+}
+@media(max-width:480px){
+  .app-modal .booking-row .trip-actions{grid-template-columns:minmax(0,1fr)}
+}
