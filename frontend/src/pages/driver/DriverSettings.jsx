@@ -16,6 +16,9 @@ export default function DriverSettings() {
   const [newRate, setNewRate] = useState('');
   const [rateMsg, setRateMsg] = useState('');
   const [stripeStatus, setStripeStatus] = useState(null);
+  const [bank, setBank] = useState({ enabled: false, accountName: '', accountNumber: '' });
+  const [bankMessage, setBankMessage] = useState('');
+  const [bankSaving, setBankSaving] = useState(false);
   const [onboarding, setOnboarding] = useState(false);
   const [stripeError, setStripeError] = useState('');
   const [searchParams, setSearchParams] = useSearchParams();
@@ -44,6 +47,7 @@ export default function DriverSettings() {
   function load() {
     client.get('/driver/profile').then((r) => {
       setProfile(r.data);
+      setBank({ enabled: !!r.data.bankTransfer?.enabled, accountName: r.data.bankTransfer?.accountName || '', accountNumber: r.data.bankTransfer?.accountNumber || '' });
       setForm({
         name: r.data.userId?.name || '', email: r.data.userId?.email || '', mobile: r.data.userId?.mobile || '',
         vehicleNumber: r.data.vehicleNumber || '', vehicleBrand: r.data.vehicleBrand || '', vehicleModel: r.data.vehicleModel || '',
@@ -156,6 +160,31 @@ export default function DriverSettings() {
           )}
         </div>
       )}
+
+      <div className="card" style={{ maxWidth: 440 }}>
+        <h3 style={{ marginTop: 0 }}>Bank transfer details</h3>
+        <p className="muted">Configure the account passengers will use for bank transfers. Only confirm a payment after checking your bank statement.</p>
+        <form onSubmit={async (e) => {
+          e.preventDefault(); setBankSaving(true); setBankMessage('');
+          try {
+            const { data } = await client.put('/driver/bank-transfer', bank);
+            setBank(data.bankTransfer);
+            setBankMessage('Bank details saved.');
+          } catch (err) { setBankMessage(err.response?.data?.error || 'Could not save bank details'); }
+          finally { setBankSaving(false); }
+        }}>
+          <label>Account holder</label>
+          <input value={bank.accountName} onChange={(e) => setBank((b) => ({ ...b, accountName: e.target.value }))} maxLength={100} />
+          <label>NZ bank account number</label>
+          <input value={bank.accountNumber} onChange={(e) => setBank((b) => ({ ...b, accountNumber: e.target.value }))} placeholder="XX-XXXX-XXXXXXX-XXX" inputMode="numeric" />
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input type="checkbox" style={{ width: 'auto' }} checked={bank.enabled} onChange={(e) => setBank((b) => ({ ...b, enabled: e.target.checked }))} />
+            Enable bank transfer instructions
+          </label>
+          <button className="btn" disabled={bankSaving}>{bankSaving ? 'Saving…' : 'Save bank details'}</button>
+          {bankMessage && <p role="status">{bankMessage}</p>}
+        </form>
+      </div>
 
       <div className="card" style={{ maxWidth: 400 }}>
         <h3 style={{ marginTop: 0 }}>Payments</h3>
