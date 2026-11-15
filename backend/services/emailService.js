@@ -435,7 +435,7 @@ function buildInvoiceHtml(booking, passenger, driver, driverName, { forPrint = f
       </tr>
     </table>
 
-    <p style="font-size:12px;color:#64748b;line-height:1.5;">All amounts in NZD. ${enabled ? 'GST is included in the fare and card fee; it is not added again.' : 'GST not charged.'}${enabled && booking.tipAmount > 0 ? ' Voluntary driver tips are excluded from GST.' : ''}</p>
+    <p style="font-size:12px;color:#64748b;line-height:1.5;">All amounts in NZD. ${enabled ? 'GST is included in the fare and card fee; it is not added again.' : ''}${enabled && booking.tipAmount > 0 ? ' Voluntary driver tips are excluded from GST.' : ''}</p>
     <div style="margin-top:32px;padding-top:20px;border-top:1px solid #e2e8f0;color:#64748b;font-size:12px;line-height:1.6;">
       <div style="font-weight:700;color:#0f172a;margin-bottom:4px;">EasyRide</div>
       ${gstNumber ? `<div>GST number: ${esc(gstNumber)}</div>` : ''}
@@ -566,7 +566,7 @@ function buildInvoiceText(booking, passenger, driver, driverName) {
     `${driverName ? `Driver: ${driverName}\n` : ''}${vLabel ? `Vehicle: ${vLabel}\n` : ''}` +
     `Payment: ${paymentLabel(booking)}, ${booking.paymentStatus === 'paid' ? 'paid' : 'unpaid'}\n` +
     `Fare: ${fare.toFixed(2)}${booking.tipAmount > 0 ? `\nDriver tip: ${booking.tipAmount.toFixed(2)}` : ''}${booking.cardSurchargeAmount > 0 ? `\nCard fee: $${booking.cardSurchargeAmount.toFixed(2)}` : ''}\n` +
-    `${enabled ? `Subtotal (excl. GST): $${subtotal.toFixed(2)}\nGST (${rate}%, included): $${gst.toFixed(2)}\n` : ''}Total (NZD): $${total.toFixed(2)}\n${enabled ? 'GST is already included in the fare and card fee.' : 'GST not charged.'}${enabled && booking.tipAmount > 0 ? ' Voluntary tips excluded.' : ''}\n${gstNumber ? `GST number: ${gstNumber}\n` : ''}\n` +
+    `${enabled ? `Subtotal (excl. GST): $${subtotal.toFixed(2)}\nGST (${rate}%, included): $${gst.toFixed(2)}\n` : ''}Total (NZD): $${total.toFixed(2)}\n${enabled ? 'GST is already included in the fare and card fee.' : ''}${enabled && booking.tipAmount > 0 ? ' Voluntary tips excluded.' : ''}\n${gstNumber ? `GST number: ${gstNumber}\n` : ''}\n` +
     `EasyRide${settings.adminEmail ? ` - ${settings.adminEmail}` : ''}${settings.adminMobile ? ` - ${settings.adminMobile}` : ''}`;
 }
 
