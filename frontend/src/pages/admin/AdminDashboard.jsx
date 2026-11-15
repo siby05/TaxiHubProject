@@ -940,7 +940,20 @@ export default function AdminDashboard() {
 
       {tab === 'settings' && settings && (
         <div className="card" style={{ maxWidth: 480 }}>
-          <h3>Admin contact &amp; data backups</h3>
+          <h3>GST &amp; receipts</h3>
+          <p className="muted">Fares and card fees already include GST. This only changes the tax breakdown, not the amount charged. Rate changes apply to new bookings; existing trips keep their saved rate (older trips use 15%).</p>
+          <form onSubmit={saveSettings}>
+            <div><label htmlFor="receipt-gst-rate">GST rate (%)</label>
+              <input id="receipt-gst-rate" type="number" min="0" max="100" step="0.01" required value={settings.receiptGstRatePercent ?? 15}
+                onChange={(e) => setSettings((s) => ({ ...s, receiptGstRatePercent: e.target.value }))} /></div>
+            <div><label htmlFor="receipt-gst-number">Supplier GST number</label>
+              <input id="receipt-gst-number" value={settings.gstNumber || ''} placeholder="Enter your registered GST number"
+                onChange={(e) => setSettings((s) => ({ ...s, gstNumber: e.target.value }))} />
+              <p className="muted">Enter the GST number of the supplier issuing EasyRide receipts. Leave blank until confirmed.</p></div>
+            {settingsMsg && <p className="muted">{settingsMsg}</p>}
+            <button className="btn">Save GST settings</button>
+          </form>
+          <h3 style={{ marginTop: 28 }}>Admin contact &amp; data backups</h3>
           <p className="muted">
             Serious-complaint alerts and scheduled backups go to this address. A CSV export of passengers, drivers,
             trips and complaints is emailed here automatically on the schedule below. Both fields also power the "Contact
