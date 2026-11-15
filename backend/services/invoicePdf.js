@@ -28,8 +28,8 @@ const BORDER = '#e2e8f0';
 function buildInvoicePdf(booking, passenger, driver, driverName) {
   return new Promise((resolve, reject) => {
     const settings = getSettings();
-    const { fare, total, subtotal, gst, rate } = receiptAmounts(booking);
-    const gstNumber = booking.receiptGstNumber ?? settings.gstNumber ?? '';
+    const { fare, total, subtotal, gst, rate, enabled } = receiptAmounts(booking);
+    const gstNumber = enabled ? (booking.receiptGstNumber ?? settings.gstNumber ?? '') : '';
     const vehicleMake = [driver?.vehicleBrand, driver?.vehicleModel].filter(Boolean).join(' ');
     const vehicleType = vehicleMake ? `${vehicleMake} (${driver.vehicleType})` : driver?.vehicleType;
     const vehicleLabel = [vehicleType, driver?.vehicleNumber].filter(Boolean).join(' · ');
@@ -123,15 +123,17 @@ function buildInvoicePdf(booking, passenger, driver, driverName) {
     amount('Fare', fare);
     if (booking.tipAmount > 0) amount('Driver tip', booking.tipAmount);
     if (booking.cardSurchargeAmount > 0) amount('Card fee', booking.cardSurchargeAmount);
-    amount('Subtotal (excl. GST)', subtotal);
-    amount(`GST (${rate}%, included)`, gst);
+    if (enabled) {
+      amount('Subtotal (excl. GST)', subtotal);
+      amount(`GST (${rate}%, included)`, gst);
+    }
     y += 6;
     amount('Total (NZD)', total, { bold: true, size: 15, color: PRIMARY });
 
     ensureSpace(55);
     y += 6;
     doc.font('Regular').fontSize(8.5).fillColor(MUTED);
-    const taxNote = 'GST is already included in the fare and card fee.' + (booking.tipAmount > 0 ? ' Voluntary tips excluded.' : '');
+    const taxNote = enabled ? 'GST is already included in the fare and card fee.' + (booking.tipAmount > 0 ? ' Voluntary tips excluded.' : '') : 'GST not charged.';
     doc.text(taxNote, left, y, { width });
     y += doc.heightOfString(taxNote, { width }) + 8;
 
