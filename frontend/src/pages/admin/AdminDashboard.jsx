@@ -719,7 +719,7 @@ export default function AdminDashboard() {
           <div className="admin-settings-layout">
             <nav className="admin-settings-nav" aria-label="Settings categories">
               {ADMIN_SETTINGS_SECTIONS.map((section) => (
-                <button key={section.id} type="button" aria-pressed={settingsSection === section.id}
+                <button key={section.id} type="button" disabled={settingsSaving} aria-pressed={settingsSection === section.id}
                   aria-controls="admin-settings-content"
                   onClick={() => { setSettingsSection(section.id); setSettingsMsg(''); }}>
                   <strong>{section.label}</strong><span>{section.description}</span>
@@ -760,7 +760,7 @@ export default function AdminDashboard() {
 
       {settingsSection === 'pricing' && settings && (
         <div className="card admin-settings-card">
-          <h3>Fare floors</h3>
+          <h3>Base fares &amp; distance rates</h3>
           <p className="muted">
             Every trip is quoted at the <strong>highest</strong> of: the driver's per-km rate, the minimum fare
             below, and (if the trip's distance falls inside one) the matching range price. This stops a short or
