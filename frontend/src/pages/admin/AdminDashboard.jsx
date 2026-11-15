@@ -941,8 +941,13 @@ export default function AdminDashboard() {
       {tab === 'settings' && settings && (
         <div className="card" style={{ maxWidth: 480 }}>
           <h3>GST &amp; receipts</h3>
-          <p className="muted">Fares and card fees already include GST. This only changes the tax breakdown, not the amount charged. Rate changes apply to new bookings; existing trips keep their saved rate (older trips use 15%).</p>
+          <p className="muted">GST is off by default. Enable only when GST applies to your business. When enabled, the fare and card fee already include GST; it is not added again. Changes apply to new bookings, while older trips keep their original tax treatment.</p>
           <form onSubmit={saveSettings}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input type="checkbox" style={{ width: 'auto' }} checked={settings.receiptGstEnabled === true}
+                onChange={(e) => setSettings((s) => ({ ...s, receiptGstEnabled: e.target.checked }))} />
+              Include GST in receipts
+            </label>
             <div><label htmlFor="receipt-gst-rate">GST rate (%)</label>
               <input id="receipt-gst-rate" type="number" min="0" max="100" step="0.01" required value={settings.receiptGstRatePercent ?? 15}
                 onChange={(e) => setSettings((s) => ({ ...s, receiptGstRatePercent: e.target.value }))} /></div>
