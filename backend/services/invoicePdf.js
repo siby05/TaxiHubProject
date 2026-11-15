@@ -133,9 +133,11 @@ function buildInvoicePdf(booking, passenger, driver, driverName) {
     ensureSpace(55);
     y += 6;
     doc.font('Regular').fontSize(8.5).fillColor(MUTED);
-    const taxNote = enabled ? 'GST is already included in the fare and card fee.' + (booking.tipAmount > 0 ? ' Voluntary tips excluded.' : '') : 'GST not charged.';
-    doc.text(taxNote, left, y, { width });
-    y += doc.heightOfString(taxNote, { width }) + 8;
+    const taxNote = enabled ? 'GST is already included in the fare and card fee.' + (booking.tipAmount > 0 ? ' Voluntary tips excluded.' : '') : '';
+    if (taxNote) {
+      doc.text(taxNote, left, y, { width });
+      y += doc.heightOfString(taxNote, { width }) + 8;
+    }
 
     // Footer
     ensureSpace(125);
