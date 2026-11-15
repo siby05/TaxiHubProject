@@ -30,6 +30,9 @@ let settings = {
   outstandingFeeLimit: 50,
   // Fare floor: no trip is ever quoted below this, regardless of distance.
   minimumFare: 8,
+  receiptGstEnabled: false,
+  receiptGstRatePercent: 15,
+  gstNumber: '',
   globalRatePerKm: null, // optional global $/km override; driver rates when unset
   // Optional flat prices for distance bands, e.g. "any trip up to 5km is
   // $12 flat" - an alternative floor alongside minimumFare, for markets
@@ -149,6 +152,13 @@ function getSettings() {
 }
 
 function updateSettings(patch) {
+  if (patch.receiptGstEnabled !== undefined && typeof patch.receiptGstEnabled !== 'boolean') throw new Error('GST enabled must be true or false');
+  if (patch.receiptGstRatePercent !== undefined && (!Number.isFinite(patch.receiptGstRatePercent) || patch.receiptGstRatePercent < 0 || patch.receiptGstRatePercent > 100)) {
+    throw new Error('GST rate must be a number between 0 and 100');
+  }
+  if (patch.gstNumber !== undefined && (typeof patch.gstNumber !== 'string' || (patch.gstNumber !== '' && !/^\d{8,9}$/.test(patch.gstNumber.replace(/[ -]/g, ''))))) {
+    throw new Error('GST number must contain 8 or 9 digits, or be blank');
+  }
   if (patch.commissionType && !['per-trip-percent', 'weekly-flat'].includes(patch.commissionType)) {
     throw new Error('commissionType must be "per-trip-percent" or "weekly-flat"');
   }

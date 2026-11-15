@@ -8,6 +8,8 @@ import { waLink } from '../../utils/whatsapp';
 import { trackLink } from '../../utils/maps';
 import { formatNzDate, formatNzDateTime } from '../../utils/nzTime';
 
+import { ADMIN_SETTINGS_SECTIONS, adminSettingsPatch } from '../../utils/adminSettings';
+
 const DOC_STATUS_CLASS = { verified: 'approved', rejected: 'rejected', pending: 'pending' };
 
 // When the scheduler (backend utils/backup.js) will next send a backup:
@@ -28,6 +30,8 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
   const [drivers, setDrivers] = useState([]);
   const [tab, setTab] = useState('drivers');
+  const [settingsSection, setSettingsSection] = useState('pricing');
+  const [settingsSaving, setSettingsSaving] = useState(false);
   const [driverView, setDriverView] = useState('list');
   const [form, setForm] = useState({
     name: '', email: '', mobile: '', licenseNumber: '', vehicleType: 'Economy', vehicleNumber: '', ratePerKm: 1.8,
@@ -254,15 +258,21 @@ export default function AdminDashboard() {
     }
   }
 
-  async function saveSettings(e) {
+  async function saveSettings(e, sectionId) {
     e.preventDefault();
+    if (settingsSaving) return;
     setSettingsMsg('');
+    setSettingsSaving(true);
     try {
-      const { data } = await client.put('/admin/settings', settings);
-      setSettings(data);
-      setSettingsMsg('Saved.');
+      const patch = adminSettingsPatch(settings, sectionId);
+      const { data } = await client.put('/admin/settings', patch);
+      // Saving one category must not discard unsaved edits in other categories.
+      setSettings((previous) => ({ ...previous, ...adminSettingsPatch(data, sectionId) }));
+      setSettingsMsg('Changes saved.');
     } catch (err) {
       setSettingsMsg(err.response?.data?.error || 'Could not save settings');
+    } finally {
+      setSettingsSaving(false);
     }
   }
 
@@ -700,11 +710,31 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {tab === 'settings' && settings && (
-        <div className="card" style={{ maxWidth: 480 }}>
+      {tab === 'settings' && (
+        <section className="admin-settings" aria-label="Admin settings">
+          <header className="admin-settings-header">
+            <h2>Settings</h2>
+            <p className="muted">Choose a category, update the details and save that category. Other settings stay unchanged.</p>
+          </header>
+          <div className="admin-settings-layout">
+            <nav className="admin-settings-nav" aria-label="Settings categories">
+              {ADMIN_SETTINGS_SECTIONS.map((section) => (
+                <button key={section.id} type="button" disabled={settingsSaving} aria-pressed={settingsSection === section.id}
+                  aria-controls="admin-settings-content"
+                  onClick={() => { setSettingsSection(section.id); setSettingsMsg(''); }}>
+                  <strong>{section.label}</strong><span>{section.description}</span>
+                </button>
+              ))}
+            </nav>
+            <div id="admin-settings-content" className="admin-settings-content">
+              <h2>{ADMIN_SETTINGS_SECTIONS.find((section) => section.id === settingsSection)?.label}</h2>
+              {settingsMsg && <p className="admin-settings-message" role="status">{settingsMsg}</p>}
+              {!settings && settingsSection !== 'account' && <p role="status">Loading settings...</p>}
+      {settingsSection === 'fees' && settings && (
+        <div className="card admin-settings-card">
           <h3>Booking fee / platform access fee</h3>
           <p className="muted">Choose how drivers pay to use the platform: a % commission per completed trip, or a fixed weekly access fee.</p>
-          <form onSubmit={saveSettings}>
+          <form onSubmit={(e) => saveSettings(e, 'fees')}>
             <div>
               <label>Model</label>
               <select value={settings.commissionType} onChange={(e) => setSettings((s) => ({ ...s, commissionType: e.target.value }))}>
@@ -722,29 +752,21 @@ export default function AdminDashboard() {
               <input type="number" step="1" min="0" value={settings.outstandingFeeLimit} onChange={(e) => setSettings((s) => ({ ...s, outstandingFeeLimit: e.target.value }))} />
               <p className="muted" style={{ marginTop: 4 }}>A driver whose unpaid balance exceeds this is blocked from going online (auto-disabled if it happens mid-session). Override per driver from their report page.</p>
             </div>
-            <div style={{marginTop:18}}>
-              <h4>Route-specific discounts</h4><p className="muted">Discount individual directions, independent of the existing date promotion and return-trip offers. The highest eligible discount applies; percentages never stack.</p>
-              {[[ 'np-akl','New Plymouth → Auckland'],['akl-np','Auckland → New Plymouth'],['np-pmr','New Plymouth → Palmerston North'],['pmr-np','Palmerston North → New Plymouth']].map(([direction,label]) => {
-                const r = (settings.routeDiscounts || []).find((d) => d.direction === direction) || {direction,enabled:false,percent:10};
-                const change = (patch) => setSettings((prev) => ({...prev,routeDiscounts:[...(prev.routeDiscounts||[]).filter((d)=>d.direction!==direction),{...r,...patch}]}));
-                return <div key={direction} style={{display:'flex',alignItems:'center',gap:10,marginBottom:9,flexWrap:'wrap'}}><label style={{display:'flex',alignItems:'center',gap:6,flex:1,minWidth:220}}><input type="checkbox" style={{width:'auto'}} checked={!!r.enabled} onChange={(e)=>change({enabled:e.target.checked})}/>{label}</label><input aria-label={`${label} discount percent`} type="number" min="1" max="99" step="1" style={{width:75}} value={r.percent} onChange={(e)=>change({percent:e.target.value})}/><span>% off</span></div>;
-              })}
-            </div>
-            {settingsMsg && <p className="muted">{settingsMsg}</p>}
-            <button className="btn">Save</button>
+            
+            <button className="btn" disabled={settingsSaving}>{settingsSaving ? 'Saving...' : 'Save driver fees'}</button>
           </form>
         </div>
       )}
 
-      {tab === 'settings' && settings && (
-        <div className="card" style={{ maxWidth: 480 }}>
-          <h3>Fare floors</h3>
+      {settingsSection === 'pricing' && settings && (
+        <div className="card admin-settings-card">
+          <h3>Base fares &amp; distance rates</h3>
           <p className="muted">
             Every trip is quoted at the <strong>highest</strong> of: the driver's per-km rate, the minimum fare
             below, and (if the trip's distance falls inside one) the matching range price. This stops a short or
             low per-km trip from underpricing the ride.
           </p>
-          <form onSubmit={saveSettings}>
+          <form onSubmit={(e) => saveSettings(e, 'pricing')}>
             <div>
               <label>Minimum fare ($)</label>
               <input type="number" step="0.5" min="0" value={settings.minimumFare}
@@ -799,19 +821,19 @@ export default function AdminDashboard() {
                 onClick={() => setSettings((s) => ({ ...s, fareRanges: [...s.fareRanges, { maxKm: '', price: '' }] }))}>Add range</button>
             </div>
 
-            {settingsMsg && <p className="muted">{settingsMsg}</p>}
-            <button className="btn" style={{ marginTop: 12 }}>Save</button>
+            
+            <button className="btn" disabled={settingsSaving}>{settingsSaving ? 'Saving...' : 'Save pricing'}</button>
           </form>
         </div>
       )}
 
-      {tab === 'settings' && settings && (
-        <div className="card" style={{ maxWidth: 480 }}>
+      {settingsSection === 'discounts' && settings && (
+        <div className="card admin-settings-card">
           <h3>Discounts</h3>
           <p className="muted">
-            Two separate discounts. A trip never gets both - if both apply, the bigger one is used.
+            Promotions, return trips and route discounts are managed here. The highest eligible discount applies; discounts do not stack.
           </p>
-          <form onSubmit={saveSettings}>
+          <form onSubmit={(e) => saveSettings(e, 'discounts')}>
             <div>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <input type="checkbox" style={{ width: 'auto' }} checked={!!settings.promoDiscount?.enabled}
@@ -865,30 +887,38 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {settingsMsg && <p className="muted">{settingsMsg}</p>}
-            <button className="btn" style={{ marginTop: 12 }}>Save</button>
+            <div style={{marginTop:18}}>
+              <h4>Route-specific discounts</h4><p className="muted">Discount individual directions, independent of the existing date promotion and return-trip offers. The highest eligible discount applies; percentages never stack.</p>
+              {[[ 'np-akl','New Plymouth → Auckland'],['akl-np','Auckland → New Plymouth'],['np-pmr','New Plymouth → Palmerston North'],['pmr-np','Palmerston North → New Plymouth']].map(([direction,label]) => {
+                const r = (settings.routeDiscounts || []).find((d) => d.direction === direction) || {direction,enabled:false,percent:10};
+                const change = (patch) => setSettings((prev) => ({...prev,routeDiscounts:[...(prev.routeDiscounts||[]).filter((d)=>d.direction!==direction),{...r,...patch}]}));
+                return <div key={direction} style={{display:'flex',alignItems:'center',gap:10,marginBottom:9,flexWrap:'wrap'}}><label style={{display:'flex',alignItems:'center',gap:6,flex:1,minWidth:220}}><input type="checkbox" style={{width:'auto'}} checked={!!r.enabled} onChange={(e)=>change({enabled:e.target.checked})}/>{label}</label><input aria-label={`${label} discount percent`} type="number" min="1" max="99" step="1" style={{width:75}} value={r.percent} onChange={(e)=>change({percent:e.target.value})}/><span>% off</span></div>;
+              })}
+            </div>
+            
+            <button className="btn" disabled={settingsSaving}>{settingsSaving ? 'Saving...' : 'Save discounts'}</button>
           </form>
         </div>
       )}
 
-      {tab === 'settings' && settings && (
-        <div className="card" style={{ maxWidth: 480 }}>
+      {settingsSection === 'bookings' && settings && (
+        <div className="card admin-settings-card">
           <h3>Driver sign-up</h3>
           <p className="muted">Turn off to hide "Drive with us" from the site and stop new applications - existing drivers are unaffected.</p>
-          <form onSubmit={saveSettings}>
+          <form onSubmit={(e) => saveSettings(e, 'bookings')}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <input type="checkbox" style={{ width: 'auto' }} checked={settings.driverSignupEnabled !== false}
                 onChange={(e) => setSettings((s) => ({ ...s, driverSignupEnabled: e.target.checked }))} />
               Accepting new driver applications
             </label>
-            {settingsMsg && <p className="muted">{settingsMsg}</p>}
-            <button className="btn" style={{ marginTop: 12 }}>Save</button>
+            
+            <button className="btn" disabled={settingsSaving}>{settingsSaving ? 'Saving...' : 'Save booking options'}</button>
           </form>
         </div>
       )}
 
-      {tab === 'settings' && (
-        <div className="card" style={{ maxWidth: 480 }}>
+      {settingsSection === 'account' && (
+        <div className="card admin-settings-card">
           <h3>My account</h3>
           <p className="muted">Your own admin login. Changing email or password requires your current password.</p>
           <form onSubmit={saveAccount}>
@@ -902,51 +932,74 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {tab === 'settings' && settings && (
-        <div className="card" style={{ maxWidth: 480 }}>
+      {settingsSection === 'bookings' && settings && (
+        <div className="card admin-settings-card">
           <h3>Vehicle selection</h3>
           <p className="muted">Turn off to hide the vehicle-type selector on the booking form - every booking then broadcasts to any available driver regardless of vehicle type.</p>
-          <form onSubmit={saveSettings}>
+          <form onSubmit={(e) => saveSettings(e, 'bookings')}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <input type="checkbox" style={{ width: 'auto' }} checked={settings.vehicleSelectionEnabled !== false}
                 onChange={(e) => setSettings((s) => ({ ...s, vehicleSelectionEnabled: e.target.checked }))} />
               Passengers can choose a vehicle type when booking
             </label>
-            {settingsMsg && <p className="muted">{settingsMsg}</p>}
-            <button className="btn" style={{ marginTop: 12 }}>Save</button>
+            
+            <button className="btn" disabled={settingsSaving}>{settingsSaving ? 'Saving...' : 'Save booking options'}</button>
           </form>
         </div>
       )}
 
-      {tab === 'settings' && settings && (
-        <div className="card" style={{ maxWidth: 480 }}>
+      {settingsSection === 'account' && settings && (
+        <div className="card admin-settings-card">
           <h3>Temporary password visibility</h3>
           <p className="muted">
             Controls whether the one-time temporary password is shown on screen right after a new driver is
             created (Add driver tab). Turn off if the screen is shared - you'll still need another way to get the
             password to the driver.
           </p>
-          <form onSubmit={saveSettings}>
+          <form onSubmit={(e) => saveSettings(e, 'account')}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <input type="checkbox" style={{ width: 'auto' }} checked={settings.tempPasswordVisible !== false}
                 onChange={(e) => setSettings((s) => ({ ...s, tempPasswordVisible: e.target.checked }))} />
               Show temporary password after creating a driver
             </label>
-            {settingsMsg && <p className="muted">{settingsMsg}</p>}
-            <button className="btn" style={{ marginTop: 12 }}>Save</button>
+            
+            <button className="btn" disabled={settingsSaving}>{settingsSaving ? 'Saving...' : 'Save security settings'}</button>
           </form>
         </div>
       )}
 
-      {tab === 'settings' && settings && (
-        <div className="card" style={{ maxWidth: 480 }}>
-          <h3>Admin contact &amp; data backups</h3>
+      {settingsSection === 'gst' && settings && (
+        <div className="card admin-settings-card">
+          <h3>GST &amp; receipts</h3>
+          <p className="muted">GST is off by default. Enable only when GST applies to your business. When enabled, the fare and card fee already include GST; it is not added again. Changes apply to new bookings, while older trips keep their original tax treatment.</p>
+          <form onSubmit={(e) => saveSettings(e, 'gst')}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input type="checkbox" style={{ width: 'auto' }} checked={settings.receiptGstEnabled === true}
+                onChange={(e) => setSettings((s) => ({ ...s, receiptGstEnabled: e.target.checked }))} />
+              Include GST in receipts
+            </label>
+            <div><label htmlFor="receipt-gst-rate">GST rate (%)</label>
+              <input id="receipt-gst-rate" type="number" min="0" max="100" step="0.01" required value={settings.receiptGstRatePercent ?? 15}
+                onChange={(e) => setSettings((s) => ({ ...s, receiptGstRatePercent: e.target.value }))} /></div>
+            <div><label htmlFor="receipt-gst-number">Supplier GST number</label>
+              <input id="receipt-gst-number" value={settings.gstNumber || ''} placeholder="Enter your registered GST number"
+                onChange={(e) => setSettings((s) => ({ ...s, gstNumber: e.target.value }))} />
+              <p className="muted">Enter the GST number of the supplier issuing EasyRide receipts. Leave blank until confirmed.</p></div>
+            
+            <button className="btn" disabled={settingsSaving}>{settingsSaving ? 'Saving...' : 'Save GST settings'}</button>
+          </form>
+        </div>
+      )}
+
+      {settingsSection === 'contact' && settings && (
+        <div className="card admin-settings-card">
+          <h3>Contact details &amp; backups</h3>
           <p className="muted">
             Serious-complaint alerts and scheduled backups go to this address. A CSV export of passengers, drivers,
             trips and complaints is emailed here automatically on the schedule below. Both fields also power the "Contact
             admin" links shown to a passenger when no driver is available.
           </p>
-          <form onSubmit={saveSettings}>
+          <form onSubmit={(e) => saveSettings(e, 'contact')}>
             <div>
               <label>Admin email</label>
               <input type="email" value={settings.adminEmail || ''} onChange={(e) => setSettings((s) => ({ ...s, adminEmail: e.target.value }))} required />
@@ -959,8 +1012,8 @@ export default function AdminDashboard() {
                 <option value="monthly">Monthly</option>
               </select>
             </div>
-            {settingsMsg && <p className="muted">{settingsMsg}</p>}
-            <button className="btn" style={{ marginTop: 12 }}>Save</button>
+            
+            <button className="btn" disabled={settingsSaving}>{settingsSaving ? 'Saving...' : 'Save contact & backups'}</button>
           </form>
           <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
             <p className="muted" style={{ marginTop: 0 }}>
@@ -978,8 +1031,8 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {tab === 'settings' && settings && (
-        <div className="card" style={{ maxWidth: 480 }}>
+      {settingsSection === 'storage' && settings && (
+        <div className="card admin-settings-card">
           <h3>Data retention</h3>
           <p className="muted">
             Complaints are always kept for 2 years (NZ Transport Agency requirement) and removed automatically
@@ -993,7 +1046,7 @@ export default function AdminDashboard() {
               : storage ? <>Database size: <strong>{storage.usedMb} MB of {storage.limitMb} MB ({storage.percent}%)</strong></>
                 : 'Database size can\'t be measured in this mode - trips are never deleted.'}
           </p>
-          <form onSubmit={saveSettings}>
+          <form onSubmit={(e) => saveSettings(e, 'storage')}>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginTop: 8 }}>
               <span className="muted">Database storage limit</span>
               <input type="number" step="1" min="1" style={{ maxWidth: 100 }} aria-label="Database storage limit (MB)"
@@ -1001,10 +1054,16 @@ export default function AdminDashboard() {
                 onChange={(e) => setSettings((s) => ({ ...s, dbStorageLimitMb: e.target.value }))} />
               <span className="muted">MB</span>
             </div>
-            {settingsMsg && <p className="muted">{settingsMsg}</p>}
-            <button className="btn" style={{ marginTop: 12 }}>Save</button>
+            
+            <button className="btn" disabled={settingsSaving}>{settingsSaving ? 'Saving...' : 'Save storage settings'}</button>
           </form>
         </div>
+      )}
+
+
+            </div>
+          </div>
+        </section>
       )}
 
       {tab === 'feedback' && (
