@@ -45,6 +45,10 @@ const Booking = createModel('Booking', {
 });
 
 Booking.pre(async (doc, collection) => {
+  // Freeze receipt tax metadata at booking; subsequent admin changes apply to new trips.
+  const settings = require('../config/platformSettings').getSettings();
+  doc.receiptGstRatePercent = settings.receiptGstRatePercent ?? 15;
+  doc.receiptGstNumber = settings.gstNumber || '';
   if (!doc.bookingId) {
     const count = collection.docs.length;
     const dateStr = nzDateStamp();
