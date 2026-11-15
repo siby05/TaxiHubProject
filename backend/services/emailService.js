@@ -8,6 +8,7 @@
 const dns = require('dns');
 const { promisify } = require('util');
 const { getSettings } = require('../config/platformSettings');
+const { receiptAmounts } = require('../utils/receiptGst');
 const { formatNzDateTime, formatNzDate } = require('../utils/nzTime');
 
 // "14 Oct 2026, 9:30 am" for a scheduled trip, else as soon as possible.
@@ -365,8 +366,8 @@ function invoiceRow(label, value) {
 // queries, and a clearly totalled fare breakdown.
 function buildInvoiceHtml(booking, passenger, driver, driverName, { forPrint = false } = {}) {
   const settings = getSettings();
-  const fare = booking.actualFare ?? booking.estimatedFare;
-  const total = fare + (booking.tipAmount || 0) + (booking.cardSurchargeAmount || 0);
+  const { fare, total, subtotal, gst, rate } = receiptAmounts(booking);
+  const gstNumber = booking.receiptGstNumber ?? settings.gstNumber ?? '';
   const vLabel = vehicleLabel(driver);
   const stopsRows = (booking.stops || []).map((s, i) => invoiceRow(`Stop ${i + 1}`, s.address)).join('');
 
@@ -426,14 +427,18 @@ function buildInvoiceHtml(booking, passenger, driver, driverName, { forPrint = f
       </tr>
       ${booking.tipAmount > 0 ? `<tr><td style="padding:4px 0;color:#64748b;font-size:13px;">Driver tip</td><td style="text-align:right;">${booking.tipAmount.toFixed(2)}</td></tr>` : ''}
       ${booking.cardSurchargeAmount > 0 ? `<tr><td style="padding:4px 0;color:#64748b;font-size:13px;">Card fee</td><td style="padding:4px 0;color:#0f172a;font-size:13px;text-align:right;">$${booking.cardSurchargeAmount.toFixed(2)}</td></tr>` : ''}
+      <tr><td style="padding:6px 0;color:#64748b;font-size:13px;">Subtotal (excl. GST)</td><td style="text-align:right;font-size:13px;">$${subtotal.toFixed(2)}</td></tr>
+      <tr><td style="padding:6px 0;color:#64748b;font-size:13px;">GST (${rate}%, included)</td><td style="text-align:right;font-size:13px;">$${gst.toFixed(2)}</td></tr>
       <tr>
         <td style="padding:12px 0 0;color:#0f172a;font-size:16px;font-weight:700;">Total</td>
         <td style="padding:12px 0 0;color:#0EA5E9;font-size:16px;font-weight:700;text-align:right;">$${total.toFixed(2)}</td>
       </tr>
     </table>
 
+    <p style="font-size:12px;color:#64748b;line-height:1.5;">All amounts in NZD. GST is included in the fare and card fee; it is not added again.${booking.tipAmount > 0 ? ' Voluntary driver tips are excluded from GST.' : ''}</p>
     <div style="margin-top:32px;padding-top:20px;border-top:1px solid #e2e8f0;color:#64748b;font-size:12px;line-height:1.6;">
       <div style="font-weight:700;color:#0f172a;margin-bottom:4px;">EasyRide</div>
+      ${gstNumber ? `<div>GST number: ${esc(gstNumber)}</div>` : ''}
       ${settings.adminEmail ? `<div>Email: <a href="mailto:${esc(settings.adminEmail)}" style="color:#0EA5E9;text-decoration:none;">${esc(settings.adminEmail)}</a></div>` : ''}
       ${settings.adminMobile ? `<div>Phone: ${esc(settings.adminMobile)}</div>` : ''}
       ${siteUrl() ? `<div>Website: <a href="${esc(siteUrl())}" style="color:#0EA5E9;text-decoration:none;">${esc(siteLabel())}</a></div>` : ''}
@@ -552,8 +557,8 @@ function buildReceiptPage(booking, passenger, driver, driverName, pdfUrl) {
 // included alongside the HTML for mail clients that prefer/require text.
 function buildInvoiceText(booking, passenger, driver, driverName) {
   const settings = getSettings();
-  const fare = booking.actualFare ?? booking.estimatedFare;
-  const total = fare + (booking.tipAmount || 0) + (booking.cardSurchargeAmount || 0);
+  const { fare, total, subtotal, gst, rate } = receiptAmounts(booking);
+  const gstNumber = booking.receiptGstNumber ?? settings.gstNumber ?? '';
   const vLabel = vehicleLabel(driver);
   return `Invoice for trip ${booking.bookingId}\n` +
     `${passenger?.name ? `Billed to: ${passenger.name}${passenger.address ? `, ${passenger.address}` : ''}\n` : ''}` +
@@ -561,7 +566,7 @@ function buildInvoiceText(booking, passenger, driver, driverName) {
     `${driverName ? `Driver: ${driverName}\n` : ''}${vLabel ? `Vehicle: ${vLabel}\n` : ''}` +
     `Payment: ${paymentLabel(booking)}, ${booking.paymentStatus === 'paid' ? 'paid' : 'unpaid'}\n` +
     `Fare: ${fare.toFixed(2)}${booking.tipAmount > 0 ? `\nDriver tip: ${booking.tipAmount.toFixed(2)}` : ''}${booking.cardSurchargeAmount > 0 ? `\nCard fee: $${booking.cardSurchargeAmount.toFixed(2)}` : ''}\n` +
-    `Total: ${total.toFixed(2)}\n\n` +
+    `Subtotal (excl. GST): $${subtotal.toFixed(2)}\nGST (${rate}%, included): $${gst.toFixed(2)}\nTotal (NZD): $${total.toFixed(2)}\nGST is already included in the fare and card fee.${booking.tipAmount > 0 ? ' Voluntary tips excluded.' : ''}\n${gstNumber ? `GST number: ${gstNumber}\n` : ''}\n` +
     `EasyRide${settings.adminEmail ? ` - ${settings.adminEmail}` : ''}${settings.adminMobile ? ` - ${settings.adminMobile}` : ''}`;
 }
 
@@ -767,4 +772,4 @@ You'll get another email as soon as a driver accepts. Track it here: ${appUrl('/
     ),
 };
 
-module.exports = { buildStandardEmail, buildTripReminder, emailService, buildReceiptPage, buildRespondPage, buildRespondResultPage, receiptTestimonialInvitation, verifyEmailConfig, emailStatus: status };
+module.exports = { buildInvoiceHtml, buildInvoiceText, buildStandardEmail, buildTripReminder, emailService, buildReceiptPage, buildRespondPage, buildRespondResultPage, receiptTestimonialInvitation, verifyEmailConfig, emailStatus: status };
