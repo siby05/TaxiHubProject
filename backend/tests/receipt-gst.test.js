@@ -70,7 +70,9 @@ test('GST disabled and legacy receipts do not claim GST or show a GST number', (
     const html = buildInvoiceHtml(booking, null, null);
     const text = buildInvoiceText(booking, null, null);
     for (const output of [html, text]) {
-      assert.ok(output.includes('GST not charged'));
+      assert.ok(!output.includes('GST not charged'));
+      assert.ok(!output.includes('GST not registered'));
+      assert.ok(!output.includes('Subtotal (excl. GST)'));
       assert.ok(!output.includes('GST number:'));
       assert.ok(!output.includes('GST (15%'));
     }
