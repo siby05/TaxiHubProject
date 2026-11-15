@@ -546,7 +546,7 @@ router.get('/settings', async (req, res) => {
 // PUT /api/admin/settings - update commission/fee policy
 router.put('/settings', async (req, res) => {
   const {
-    commissionType, commissionPercent, weeklyFlatFee, outstandingFeeLimit, minimumFare, globalRatePerKm, fareRanges, receiptGstRatePercent, gstNumber,
+    commissionType, commissionPercent, weeklyFlatFee, outstandingFeeLimit, minimumFare, globalRatePerKm, fareRanges, receiptGstEnabled, receiptGstRatePercent, gstNumber,
     longDistanceThresholdKm, longDistanceRatePerKm, driverSignupEnabled, vehicleSelectionEnabled, tempPasswordVisible, adminEmail, adminMobile, backupFrequency, tripRetentionDays,
     promoDiscount, returnTripDiscount, routeDiscounts, dbStorageLimitMb, dbCleanupAtPercent,
   } = req.body;
@@ -555,6 +555,7 @@ router.put('/settings', async (req, res) => {
       return res.status(400).json({ error: 'adminEmail must be a valid email address' });
     }
     const updated = await updateSettingsConfirmed({
+      ...(receiptGstEnabled !== undefined && { receiptGstEnabled }),
       ...(receiptGstRatePercent !== undefined && { receiptGstRatePercent: receiptGstRatePercent === '' || receiptGstRatePercent === null ? NaN : Number(receiptGstRatePercent) }),
       ...(gstNumber !== undefined && { gstNumber }),
       ...(commissionType && { commissionType }),
