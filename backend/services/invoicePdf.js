@@ -1,6 +1,7 @@
 const path = require('path');
 const PDFDocument = require('pdfkit');
 const { getSettings } = require('../config/platformSettings');
+const { receiptAmounts } = require('../utils/receiptGst');
 const { formatNzDate } = require('../utils/nzTime');
 const { siteUrl, siteLabel } = require('../utils/siteUrl');
 
@@ -27,8 +28,8 @@ const BORDER = '#e2e8f0';
 function buildInvoicePdf(booking, passenger, driver, driverName) {
   return new Promise((resolve, reject) => {
     const settings = getSettings();
-    const fare = booking.actualFare ?? booking.estimatedFare;
-    const total = fare + (booking.tipAmount || 0) + (booking.cardSurchargeAmount || 0);
+    const { fare, total, subtotal, gst, rate } = receiptAmounts(booking);
+    const gstNumber = booking.receiptGstNumber ?? settings.gstNumber ?? '';
     const vehicleMake = [driver?.vehicleBrand, driver?.vehicleModel].filter(Boolean).join(' ');
     const vehicleType = vehicleMake ? `${vehicleMake} (${driver.vehicleType})` : driver?.vehicleType;
     const vehicleLabel = [vehicleType, driver?.vehicleNumber].filter(Boolean).join(' · ');
@@ -64,6 +65,9 @@ function buildInvoicePdf(booking, passenger, driver, driverName) {
 
     // Title row
     let y = 130;
+    function ensureSpace(height) {
+      if (y + height > doc.page.height - 48) { doc.addPage(); y = 48; }
+    }
     doc.font('Bold').fontSize(20).fillColor(INK).text('Invoice', left, y);
     doc.font('Regular').fontSize(10.5).fillColor(MUTED).text(formatNzDate(booking.completedAt || booking.requestedAt), left, y + 6, { width, align: 'right' });
     y += 28;
@@ -89,6 +93,7 @@ function buildInvoicePdf(booking, passenger, driver, driverName) {
       const text = String(value);
       doc.font('Regular').fontSize(10.5);
       const h = Math.max(doc.heightOfString(text, { width: valueW }), 14);
+      ensureSpace(h + 16);
       doc.fillColor(MUTED).text(label, left, y + 8, { width: labelW });
       doc.fillColor(INK).text(text, left + labelW, y + 8, { width: valueW, align: 'right' });
       y += h + 16;
@@ -109,6 +114,7 @@ function buildInvoicePdf(booking, passenger, driver, driverName) {
     doc.moveTo(left, y).lineTo(right, y).lineWidth(2).strokeColor(NAVY).stroke();
     y += 14;
     function amount(label, value, { bold = false, size = 10.5, color = INK } = {}) {
+      ensureSpace(size + 10);
       doc.font(bold ? 'Bold' : 'Regular').fontSize(size);
       doc.fillColor(bold ? INK : MUTED).text(label, left, y, { width: labelW });
       doc.fillColor(color).text(`$${value.toFixed(2)}`, left + labelW, y, { width: valueW, align: 'right' });
@@ -117,16 +123,27 @@ function buildInvoicePdf(booking, passenger, driver, driverName) {
     amount('Fare', fare);
     if (booking.tipAmount > 0) amount('Driver tip', booking.tipAmount);
     if (booking.cardSurchargeAmount > 0) amount('Card fee', booking.cardSurchargeAmount);
+    amount('Subtotal (excl. GST)', subtotal);
+    amount(`GST (${rate}%, included)`, gst);
     y += 6;
-    amount('Total', total, { bold: true, size: 15, color: PRIMARY });
+    amount('Total (NZD)', total, { bold: true, size: 15, color: PRIMARY });
+
+    ensureSpace(55);
+    y += 6;
+    doc.font('Regular').fontSize(8.5).fillColor(MUTED);
+    const taxNote = 'GST is already included in the fare and card fee.' + (booking.tipAmount > 0 ? ' Voluntary tips excluded.' : '');
+    doc.text(taxNote, left, y, { width });
+    y += doc.heightOfString(taxNote, { width }) + 8;
 
     // Footer
+    ensureSpace(125);
     y += 28;
     doc.moveTo(left, y).lineTo(right, y).lineWidth(0.75).strokeColor(BORDER).stroke();
     y += 18;
     doc.font('Bold').fontSize(10.5).fillColor(INK).text('EasyRide', left, y);
     y += 16;
     doc.font('Regular').fontSize(9.5).fillColor(MUTED);
+    if (gstNumber) { doc.text(`GST number: ${gstNumber}`, left, y); y += 14; }
     if (settings.adminEmail) { doc.text(`Email: ${settings.adminEmail}`, left, y); y += 14; }
     if (settings.adminMobile) { doc.text(`Phone: ${settings.adminMobile}`, left, y); y += 14; }
     const site = siteUrl();
