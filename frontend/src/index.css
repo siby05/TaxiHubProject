@@ -713,3 +713,27 @@ a:focus-visible,.btn:focus-visible{outline:2px solid #d4a315;outline-offset:3px}
 @media(max-width:480px){
   .app-modal .booking-row .trip-actions{grid-template-columns:minmax(0,1fr)}
 }
+
+/* Categorised admin settings: readable forms on phones and a sidebar on desktop. */
+.admin-settings-header h2{margin:0 0 8px}
+.admin-settings-layout{display:grid;grid-template-columns:240px minmax(0,1fr);gap:24px;align-items:start}
+.admin-settings-nav{display:grid;gap:8px}
+.admin-settings-nav button{text-align:left;padding:14px;border:1px solid var(--border);border-radius:10px;background:#fff;color:var(--text);font:inherit;cursor:pointer;min-width:0}
+.admin-settings-nav button[aria-pressed="true"]{background:#0b2942;color:#fff;border-color:#0b2942}
+.admin-settings-nav strong,.admin-settings-nav span{display:block}
+.admin-settings-nav span{font-size:.78rem;line-height:1.4;margin-top:5px;opacity:.8}
+.admin-settings-nav button:focus-visible{outline:2px solid #d4a315;outline-offset:2px}
+.admin-settings-content{min-width:0}
+.admin-settings-content>h2{margin:0 0 16px;font-size:1.2rem}
+.admin-settings-card{width:100%;max-width:760px}
+.admin-settings-card h3{margin-top:0}
+.admin-settings-card form>div>label{display:block;margin-bottom:5px}
+.admin-settings-message{padding:12px 16px;border:1px solid var(--border);border-radius:9px;background:#fff}
+@media(max-width:760px){
+  .admin-settings-layout{grid-template-columns:minmax(0,1fr);gap:18px}
+  .admin-settings-nav{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .admin-settings-nav button{padding:12px;min-height:54px;line-height:1.3}
+  .admin-settings-nav span{display:none}
+  .admin-settings-nav strong{font-size:.84rem;word-break:normal}
+  .admin-settings-card .btn{max-width:100%}
+}
