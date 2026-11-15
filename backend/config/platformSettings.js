@@ -30,6 +30,7 @@ let settings = {
   outstandingFeeLimit: 50,
   // Fare floor: no trip is ever quoted below this, regardless of distance.
   minimumFare: 8,
+  receiptGstEnabled: false,
   receiptGstRatePercent: 15,
   gstNumber: '',
   globalRatePerKm: null, // optional global $/km override; driver rates when unset
@@ -151,6 +152,7 @@ function getSettings() {
 }
 
 function updateSettings(patch) {
+  if (patch.receiptGstEnabled !== undefined && typeof patch.receiptGstEnabled !== 'boolean') throw new Error('GST enabled must be true or false');
   if (patch.receiptGstRatePercent !== undefined && (!Number.isFinite(patch.receiptGstRatePercent) || patch.receiptGstRatePercent < 0 || patch.receiptGstRatePercent > 100)) {
     throw new Error('GST rate must be a number between 0 and 100');
   }
