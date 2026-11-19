@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Driver = require('../models/Driver');
 const Expense = require('../models/Expense');
+const { RECURRING_VALUE_FIELDS, recurringValuesFor } = require('../utils/recurringExpenseValues');
 const { driverEarnings, tripCountOf } = require('../utils/earnings');
 const { auth, roleMiddleware } = require('../middleware/auth');
 const { EXPENSE_CATEGORIES, isValidExpenseCategory } = require('../config/expenseCategories');
@@ -133,32 +134,32 @@ function nextDueDate(tpl) {
 
 // Adds any copies of the driver's repeating expenses that have come due.
 // Run before every list, so nothing needs a background job.
-async function addDueRepeats(driverId, expenses) {
-  const today = nzToday();
+async function addDueRepeats(driverId, expenses, today = nzToday()) {
   for (const tpl of expenses.filter(isRepeating)) {
     const through = handledThrough(tpl);
     if (through >= today) continue;
     const existing = new Set(expenses.filter((e) => String(e.recurringFromId) === String(tpl._id)).map((e) => e.date));
     existing.add(tpl.date);
     let copies = 0;
+    let handled = through;
+    let capped = false;
     for (const date of dueDates(tpl)) {
-      if (date > today || copies >= MAX_COPIES_PER_RUN) break;
-      if (date <= through || existing.has(date)) continue;
+      if (date > today) break;
+      if (date <= through) continue;
+      if (existing.has(date)) { handled = date; continue; }
+      if (copies >= MAX_COPIES_PER_RUN) { capped = true; break; }
       await Expense.create({
         driverId,
         date,
-        category: tpl.category,
-        amount: tpl.amount,
-        gstIncluded: tpl.gstIncluded,
-        supplier: tpl.supplier,
+        ...recurringValuesFor(tpl, date),
         reference: '',
-        notes: tpl.notes,
         repeat: 'none',
         recurringFromId: tpl._id,
       });
       copies += 1;
+      handled = date;
     }
-    await Expense.findByIdAndUpdate(tpl._id, { repeatThrough: today });
+    await Expense.findByIdAndUpdate(tpl._id, { repeatThrough: capped ? handled : today });
   }
 }
 
@@ -230,6 +231,7 @@ router.get('/', driverOnly, async (req, res) => {
       const copies = allExpenses.filter((e) => String(e.recurringFromId) === String(tpl._id));
       return {
         ...tpl,
+        ...recurringValuesFor(tpl, nzToday()),
         copyCount: copies.length,
         lastCopyDate: copies.reduce((max, e) => (e.date > max ? e.date : max), '') || null,
         nextDate: nextDueDate(tpl),
@@ -321,7 +323,7 @@ router.delete('/categories/:key', driverOnly, async (req, res) => {
     if (!driver) return;
     const own = driver.expenseCategories || [];
     if (!own.some((c) => c.key === req.params.key)) return res.status(404).json({ error: 'Category not found' });
-    const inUse = await Expense.findOne({ driverId: driver._id, category: req.params.key });
+    const inUse = (await Expense.find({ driverId: driver._id })).some((e) => e.category === req.params.key || (e.repeatValueVersions || []).some((v) => v.category === req.params.key));
     if (inUse) return res.status(400).json({ error: 'This category has expenses - move or delete them first' });
     await Driver.findByIdAndUpdate(driver._id, { expenseCategories: own.filter((c) => c.key !== req.params.key) });
     res.json({ ok: true });
@@ -345,6 +347,12 @@ router.put('/:id/repeat', driverOnly, async (req, res) => {
     if (current.recurringFromId) return res.status(400).json({ error: 'Change the repeat on the original expense, not a copy' });
     const { repeat } = req.body;
     if (!REPEAT_OPTIONS.includes(repeat)) return res.status(400).json({ error: 'Choose how often it repeats' });
+    // Finish old due dates before changing or stopping the schedule.
+    if (isRepeating(current)) {
+      await addDueRepeats(driver._id, await Expense.find({ driverId: driver._id }), addDaysTo(nzToday(), -1));
+      const settled = await Expense.findById(current._id);
+      if (nextDueDate(settled) < nzToday()) return res.status(409).json({ error: 'Older repeats are still being added. Refresh expenses and try again.' });
+    }
 
     if (repeat === 'none') {
       const updated = await Expense.findByIdAndUpdate(current._id, { repeat: 'none', repeatThrough: null, repeatFrom: null }, { new: true });
@@ -380,6 +388,17 @@ router.put('/:id', driverOnly, async (req, res) => {
     if (!current) return res.status(404).json({ error: 'Expense not found' });
     const { error, value } = parseExpense(req.body, driver);
     if (error) return res.status(400).json({ error });
+    if (isRepeating(current)) {
+      if (value.date !== current.date || value.reference !== (current.reference || '')) {
+        return res.status(400).json({ error: 'The original paid date and reference stay unchanged. Edit future recurring values only.' });
+      }
+      const today = nzToday();
+      const previous = recurringValuesFor(current, today);
+      if (RECURRING_VALUE_FIELDS.every((key) => previous[key] === value[key])) return res.json({ ...current, ...previous });
+      const version = { effectiveFrom: today, ...Object.fromEntries(RECURRING_VALUE_FIELDS.map((key) => [key, value[key]])) };
+      const updated = await Expense.findByIdAndUpdate(current._id, { $push: { repeatValueVersions: version } });
+      return res.json({ ...updated, ...recurringValuesFor(updated, today) });
+    }
     // A copy added by a repeating expense can't start repeating itself -
     // that's set on the original. Changing how or from when an expense
     // repeats restarts it from today: copies already added are kept, and

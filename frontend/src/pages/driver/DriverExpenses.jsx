@@ -144,6 +144,7 @@ export default function DriverExpenses() {
   }
 
   function startEdit(e) {
+    if (isRepeating(e)) e = (data?.repeating || []).find((tpl) => tpl._id === e._id) || e;
     setEditingId(e._id);
     setEditingCopy(!!e.recurringFromId);
     setEditingRepeating(isRepeating(e) ? REPEAT_LABELS[e.repeat] : null);
@@ -307,9 +308,9 @@ ${data.expenses.slice().sort((a, b) => a.date.localeCompare(b.date)).map((e) => 
 
       {/* 1. Entry */}
       <form className="card" onSubmit={save} style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-        <h3 style={{ margin: 0 }}>{editingId ? 'Edit expense' : 'Add an expense'}</h3>
+        <h3 style={{ margin: 0 }}>{editingRepeating ? 'Change future recurring values' : editingId ? 'Edit expense' : 'Add an expense'}</h3>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <div style={{ flex: '1 1 140px' }}><label>Date paid</label><input type="date" value={form.date} max={nzToday()} onChange={(e) => update('date', e.target.value)} required /></div>
+          <div style={{ flex: '1 1 140px' }}><label>{editingRepeating ? 'Original date paid' : 'Date paid'}</label><input type="date" disabled={!!editingRepeating} value={form.date} max={nzToday()} onChange={(e) => update('date', e.target.value)} required /></div>
           <div style={{ flex: '1 1 120px' }}><label>Amount (NZD)</label><input type="number" inputMode="decimal" min="0.01" step="0.01" value={form.amount} onChange={(e) => update('amount', e.target.value)} placeholder="0.00" required /></div>
           <div style={{ flex: '2 1 220px' }}>
             <label>Category</label>
@@ -358,7 +359,7 @@ ${data.expenses.slice().sort((a, b) => a.date.localeCompare(b.date)).map((e) => 
           </p>
         ) : editingRepeating ? (
           <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
-            ↻ Repeats {editingRepeating}. Stop it or change its interval in the Repeating tab below.
+            ↻ Repeats {editingRepeating}. Changes apply from today (New Zealand time) to new occurrences only. The original expense and all entries already recorded stay unchanged. Use the Repeating tab to change its interval.
           </p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -390,12 +391,12 @@ ${data.expenses.slice().sort((a, b) => a.date.localeCompare(b.date)).map((e) => 
         )}
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 160px' }}><label>Supplier (optional)</label><input value={form.supplier} maxLength={100} onChange={(e) => update('supplier', e.target.value)} placeholder="e.g. Tyre Pro, NZTA" /></div>
-          <div style={{ flex: '1 1 120px' }}><label>Receipt / invoice no. (optional)</label><input value={form.reference} maxLength={60} onChange={(e) => update('reference', e.target.value)} /></div>
+          <div style={{ flex: '1 1 120px' }}><label>Receipt / invoice no. (optional)</label><input value={form.reference} disabled={!!editingRepeating} maxLength={60} onChange={(e) => update('reference', e.target.value)} /></div>
           <div style={{ flex: '2 1 220px' }}><label>Notes (optional)</label><input value={form.notes} maxLength={500} onChange={(e) => update('notes', e.target.value)} placeholder="e.g. 4 x front tyres, 1,000 km RUC" /></div>
         </div>
         {formError && <p className="error-text" style={{ margin: 0 }}>{formError}</p>}
         <div className="btn-grid" style={{ marginTop: 0 }}>
-          <button className="btn" type="submit" disabled={saving || !data}>{saving ? 'Saving...' : editingId ? 'Save changes' : 'Add expense'}</button>
+          <button className="btn" type="submit" disabled={saving || !data}>{saving ? 'Saving...' : editingRepeating ? 'Save future values' : editingId ? 'Save changes' : 'Add expense'}</button>
           {editingId && <button className="btn secondary" type="button" onClick={cancelEdit}>Cancel</button>}
         </div>
       </form>
@@ -417,7 +418,7 @@ ${data.expenses.slice().sort((a, b) => a.date.localeCompare(b.date)).map((e) => 
             <div>
               <p className="muted" style={{ marginTop: 0, fontSize: '0.85rem' }}>
                 Expenses that are added again automatically. Stop one when you no longer pay it, or change how often it's paid -
-                copies already added stay in your records.
+                copies already added stay in your records. Change future values to update the amount, category or supplier from today without rewriting recorded entries.
               </p>
               {repeatError && <p className="error-text">{repeatError}</p>}
               {(data.repeating || []).length === 0 && (
@@ -437,6 +438,7 @@ ${data.expenses.slice().sort((a, b) => a.date.localeCompare(b.date)).map((e) => 
                       {e.nextDate && <div className="muted" style={{ fontSize: '0.85rem' }}>Next: {formatNzDate(`${e.nextDate}T12:00:00`)}</div>}
                     </div>
                     <div className="btn-grid">
+                      <button type="button" className="btn secondary" onClick={() => startEdit(e)}>Change future values</button>
                       <button type="button" className="btn secondary" onClick={() => (intervalEdit?.id === e._id ? setIntervalEdit(null) : startIntervalEdit(e))}>Change interval</button>
                       <button type="button" className="btn danger" onClick={() => stopRepeat(e)}>Stop repeating</button>
                     </div>
